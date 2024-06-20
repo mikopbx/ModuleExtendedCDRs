@@ -71,12 +71,12 @@ class ConnectorDB extends WorkerBase
      */
     public function updateSettings(int $newCdrOffset=0):void
     {
-        $minOffset = HistoryParser::getMinCdrId();
         $settings  = ModuleExportRecords::findFirst();
         if(!$settings){
             $settings = new ModuleExportRecords();
         }
         if($newCdrOffset > 0){
+            $minOffset = HistoryParser::getMinCdrId();
             $settings->cdrOffset = max($newCdrOffset,$minOffset);
             $settings->save();
         }
@@ -228,9 +228,11 @@ class ConnectorDB extends WorkerBase
         }
         $this->lastSyncTime = time();
         $oldOffset = $this->cdrOffset;
-        $this->logger->writeInfo('New offset...'. $oldOffset);
+        $this->logger->writeInfo('Start offset...'. $oldOffset);
 
         $cdrData = HistoryParser::getHistoryData($this->cdrOffset);
+        $this->logger->writeInfo("New offset $this->cdrOffset, ".'count ...'. count($cdrData));
+
         $arrKeys = (new CallHistory())->toArray();
         unset($arrKeys['id']);
         foreach ($cdrData as $cdr){
@@ -257,6 +259,7 @@ class ConnectorDB extends WorkerBase
             }
         }
         if($oldOffset !== $this->cdrOffset){
+            $this->logger->writeInfo(" $$oldOffset !== $this->cdrOffset ");
             $this->updateSettings($this->cdrOffset);
         }
     }

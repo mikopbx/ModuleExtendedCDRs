@@ -21,17 +21,74 @@ namespace Modules\ModuleExportRecords\Lib;
 
 use MikoPBX\Common\Models\Extensions;
 use MikoPBX\Common\Providers\CDRDatabaseProvider;
+use MikoPBX\Core\System\BeanstalkClient;
+use MikoPBX\Core\System\SystemMessages;
+use MikoPBX\Core\System\Util;
+use MikoPBX\Core\Workers\WorkerCdr;
 use Modules\ModuleExportRecords\bin\ConnectorDB;
 use Modules\ModuleExportRecords\Models\CallHistory;
+use Phalcon\Di;
 
 class HistoryParser
 {
-    public const LIMIT_CDR = 200;
+    public const LIMIT_CDR = 100;
+
+    /**
+     * Retrieves all completed temporary CDRs.
+     * @param array $filter  An array of filter parameters.
+     * @return array An array of CDR data.
+     */
+    public static function getCdr(array $filter = []): array
+    {
+        if (empty($filter)) {
+            $filter = [
+                'work_completed<>1 AND endtime<>""',
+                'miko_tmp_db' => true,
+                'limit' => 2000
+            ];
+        }
+        $filter['miko_result_in_file'] = true;
+        if(!isset($filter['order'])){
+            $filter['order'] = 'answer';
+        }
+        if (!isset($filter['columns'])) {
+            $filter['columns'] = 'id,start,answer,src_num,dst_num,dst_chan,endtime,linkedid,recordingfile,dialstatus,UNIQUEID';
+        }
+
+        $client = new BeanstalkClient(WorkerCdr::SELECT_CDR_TUBE);
+        $filename = '';
+        try {
+            [$result, $message] = $client->sendRequest(json_encode($filter), 30);
+            if ($result!==false){
+                $filename = json_decode($message, true, 512, JSON_THROW_ON_ERROR);
+            }
+        } catch (\Throwable $e) {
+            $filename = '';
+        }
+        $result_data = [];
+        if (is_string($filename) && file_exists($filename)) {
+            try {
+                $result_data = json_decode(file_get_contents($filename), true, 512, JSON_THROW_ON_ERROR);
+            } catch (\Throwable $e) {
+                SystemMessages::sysLogMsg('HistoryParser:SELECT_CDR_TUBE', 'Error parse response.');
+            }
+
+            $di = Di::getDefault();
+            if($di !== null){
+                $findPath = Util::which('find');
+                $downloadCacheDir = $di->getShared('config')->path('www.downloadCacheDir');
+                shell_exec("$findPath -L $downloadCacheDir -samefile  $filename -delete");
+            }
+            unlink($filename);
+        }
+
+        return $result_data;
+    }
+
 
     /**
      * Заполнение кэш истории звонков. Кто последний говорил с клиентом.
      * @param int $offset
-     * @param string $referenceDate
      * @return void
      */
     public static function getHistoryData(int &$offset = 1):array
@@ -59,18 +116,25 @@ class HistoryParser
                 'id'  => $offset,
                 'linkedid' => '',
             ],
+            'order'   => 'id ASC',
             'group'   => 'linkedid',
             'columns' => 'linkedid',
             'limit'   => self::LIMIT_CDR,
             'add_pack_query' => $add_query,
         ];
 
-        $cdrData = CDRDatabaseProvider::getCdr($filter);
+        $cdrData = self::getCdr($filter);
         $resultRows = [];
         if(count($cdrData)>0){
             $newOffset = 0;
+            $minNewOffset = 0;
             foreach ($cdrData as $cdr){
-                $newOffset = (int)$cdr['id'];
+                if($minNewOffset === 0 ){
+                    $minNewOffset = (int)$cdr['id'];
+                }else{
+                    $minNewOffset = min((int)$cdr['id'], $minNewOffset);
+                }
+                $newOffset = max((int)$cdr['id'], $newOffset);
                 $cdr['srcIndex'] = ConnectorDB::getPhoneIndex($cdr['src_num']);
                 $cdr['dstIndex'] = ConnectorDB::getPhoneIndex($cdr['dst_num']);
                 if(!isset($resultRows[$cdr['linkedid']])){
@@ -105,7 +169,7 @@ class HistoryParser
                 }
                 $resultRows[$cdr['linkedid']]['rows'][] = $cdr;
             }
-            $offset = min($offset + self::LIMIT_CDR, $newOffset);
+            $offset = min($minNewOffset + self::LIMIT_CDR, $newOffset);
         }
 
         foreach ($resultRows as $index => $cdr){
