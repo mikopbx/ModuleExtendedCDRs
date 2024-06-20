@@ -26,7 +26,7 @@ use Modules\ModuleExportRecords\Models\CallHistory;
 
 class HistoryParser
 {
-    public const LIMIT_CDR = 450;
+    public const LIMIT_CDR = 200;
 
     /**
      * Заполнение кэш истории звонков. Кто последний говорил с клиентом.
@@ -34,7 +34,7 @@ class HistoryParser
      * @param string $referenceDate
      * @return void
      */
-    public static function getHistoryData(int &$offset = 1, string $referenceDate = '2000-00-00 00:00:00.0'):array
+    public static function getHistoryData(int &$offset = 1):array
     {
         $filter = [
             "type = :extType:",
@@ -54,11 +54,10 @@ class HistoryParser
             'order'   => 'start,id',
         ];
         $filter                        = [
-            'id>:id:',
-            // 'id>:id: AND start>:referenceDate:',
+            'id>:id: AND linkedid <> :linkedid:',
             'bind'    => [
                 'id'  => $offset,
-                // 'referenceDate' => $referenceDate
+                'linkedid' => '',
             ],
             'group'   => 'linkedid',
             'columns' => 'linkedid',
@@ -138,50 +137,21 @@ class HistoryParser
     }
 
     /**
-     * Является ли вызов Не отвеченным.
-     * @param $cdr
-     * @param $resultRows
-     * @param $clientField
-     * @return bool
+     * Возвращает минимальное значение ID
+     * @return int
      */
-    private static  function isNoAnswerCdr($cdr, $resultRows, $clientField):bool
+    public static function getMinCdrId():int
     {
-        $cdrNum    = ConnectorDB::getPhoneIndex($cdr["{$clientField}_num"]);
-        $clientNum = ConnectorDB::getPhoneIndex($resultRows[$cdr['linkedid']]['number']);
-        return empty($cdr['answer']) || $cdr['billsec'] === '0' || $cdrNum !== $clientNum;
-    }
-
-    /**
-     * Заполнение первой строка CDR.
-     * @param $cdr
-     * @param $srcInner
-     * @param $resultRows
-     * @return void
-     */
-    private static  function fillFirstCdr($cdr, $srcInner, &$resultRows):void
-    {
-        if(!isset($resultRows[$cdr['linkedid']])){
-            $outCall = false;
-
-            if(stripos( $cdr['src_chan'], 'local/') !== false && stripos( $cdr['dst_chan'], 'pjsip/sip') !== false){
-                // Автодиалер звонки.
-                $srcInner = true;
-            }
-            if($srcInner){
-                // Исходящий вызов;
-                $number  = $cdr['dst_num'];
-                $outCall = true;
-            }else{
-                $number = $cdr['src_num'];
-            }
-            // Это первая строка нового звонка.
-            $resultRows[$cdr['linkedid']] = [
-                'date'   => $cdr['start'],
-                'number' => $number,
-                'out'    => $outCall,
-                'linkedid'=> $cdr['linkedid'],
-            ];
+        $filter = [
+            'columns' => 'id',
+            'limit'   => 1,
+            'order' => 'id ASC'
+        ];
+        $cdrData = CDRDatabaseProvider::getCdr($filter);
+        $id = (int)($cdrData[0]['id']??0);
+        if($id > 0){
+            $id--;
         }
+        return $id;
     }
-
 }

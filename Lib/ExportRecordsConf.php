@@ -83,6 +83,6 @@ class ExportRecordsConf extends ConfigClass
     public function createCronTasks(array &$tasks): void
     {
         $busyboxPath= Util::which('busybox');
-        $tasks[]    = "*/1 * * * * $busyboxPath find /storage/usbdisk*/mikopbx/tmp/*/ -mmin +5 -type f -delete> /dev/null 2>&1".PHP_EOL;
+        $tasks[]    = "*/1 * * * * $busyboxPath find /storage/usbdisk*/mikopbx/tmp/ModuleExportRecords/ -mmin +5 -type f -delete> /dev/null 2>&1".PHP_EOL;
     }
 }

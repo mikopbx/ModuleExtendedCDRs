@@ -41,6 +41,8 @@ class ConnectorDB extends WorkerBase
     public string $referenceDate = '';
     public bool $disableIvr = true;
 
+    private int $lastSyncTime = 0;
+
     /**
      * Старт работы листнера.
      *
@@ -69,12 +71,13 @@ class ConnectorDB extends WorkerBase
      */
     public function updateSettings(int $newCdrOffset=0):void
     {
-        $settings = ModuleExportRecords::findFirst();
+        $minOffset = HistoryParser::getMinCdrId();
+        $settings  = ModuleExportRecords::findFirst();
         if(!$settings){
             $settings = new ModuleExportRecords();
         }
         if($newCdrOffset > 0){
-            $settings->cdrOffset = $newCdrOffset;
+            $settings->cdrOffset = max($newCdrOffset,$minOffset);
             $settings->save();
         }
         if(empty($settings->referenceDate) || (empty($settings->cdrOffset) && $settings->referenceDate !== '0') ){
@@ -220,7 +223,13 @@ class ConnectorDB extends WorkerBase
      */
     public function syncCdrData():void
     {
+        if(time() - $this->lastSyncTime < 10){
+            return;
+        }
+        $this->lastSyncTime = time();
         $oldOffset = $this->cdrOffset;
+        $this->logger->writeInfo('New offset...'. $oldOffset);
+
         $cdrData = HistoryParser::getHistoryData($this->cdrOffset);
         $arrKeys = (new CallHistory())->toArray();
         unset($arrKeys['id']);

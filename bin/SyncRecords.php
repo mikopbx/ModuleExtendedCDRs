@@ -62,7 +62,6 @@ class SyncRecords extends WorkerBase
         $this->logger->writeInfo('Starting...');
 
         $this->updateSettings();
-
         $beanstalk      = new BeanstalkClient(self::class);
         $beanstalk->subscribe(self::class, [$this, 'onEvents']);
         $beanstalk->subscribe($this->makePingTubeName(self::class), [$this, 'pingCallBack']);
@@ -221,8 +220,14 @@ class SyncRecords extends WorkerBase
      */
     public function syncCdrData():void
     {
+        sleep(2);
         $oldOffset = $this->cdrOffset;
-        $cdrData = HistoryParser::getHistoryData($this->cdrOffset, $this->referenceDate);
+        $oldOffset = max(HistoryParser::getMinCdrId(), $oldOffset);
+        $this->logger->writeInfo('New offset...'. $oldOffset);
+
+        $cdrData = HistoryParser::getHistoryData($this->cdrOffset);
+
+
         foreach ($cdrData as $cdr){
             if(!file_exists($cdr['recordingfile'])){
                 continue;
