@@ -31,7 +31,7 @@ use Phalcon\Di;
 
 class HistoryParser
 {
-    public const LIMIT_CDR = 100;
+    public const LIMIT_CDR = 500;
 
     /**
      * Retrieves all completed temporary CDRs.
@@ -169,7 +169,8 @@ class HistoryParser
                 }
                 $resultRows[$cdr['linkedid']]['rows'][] = $cdr;
             }
-            $offset = min($minNewOffset + self::LIMIT_CDR, $newOffset);
+            $offset = min($offset + self::LIMIT_CDR, $newOffset);
+            $offset = max($offset, $minNewOffset);
         }
 
         foreach ($resultRows as $index => $cdr){
