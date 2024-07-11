@@ -7,7 +7,7 @@
   "lic_product_id": 191,
   "lic_feature_id": 55,
   "wiki_links": {
-    "ru": {"https://wiki.mikopbx.ru/module-extended-c-d-rs": "https://docs.mikopbx.com/mikopbx/modules/miko/module-extended-cdr"},
-    "en": {"https://wiki.mikopbx.ru/module-extended-c-d-rs": "https://docs.mikopbx.com/mikopbx/v/english/modules/module-extended-cdr"}
+    "ru": {"https://wiki.mikopbx.com/module-extended-c-d-rs": "https://docs.mikopbx.com/mikopbx/modules/miko/module-extended-cdr"},
+    "en": {"https://wiki.mikopbx.com/module-extended-c-d-rs": "https://docs.mikopbx.com/mikopbx/v/english/modules/module-extended-cdr"}
   }
 }
