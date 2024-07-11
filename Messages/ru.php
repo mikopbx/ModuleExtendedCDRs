@@ -11,7 +11,7 @@ return [
 	'repModuleExtendedCDRs'         => 'Расширенная история вызовов - %repesent%',
 	'mo_ModuleModuleExtendedCDRs'   => 'Расширенная история вызовов ',
     'BreadcrumbModuleExtendedCDRs'  => 'Расширенная история вызовов',
-    'SubHeaderModuleExtendedCDRs'   => 'Детальная истрия звонков с расширенными отборами',
+    'SubHeaderModuleExtendedCDRs'   => 'Детальная история звонков с расширенными отборами',
     'repModuleExtendedCDRs_FindCallsPlaceholder'   => 'Найти ...',
     'repModuleExtendedCDRs_TitleOutgoingCals'      => 'Исходящие',
     'repModuleExtendedCDRs_TitleIncomingCals'      => 'Входящие',
