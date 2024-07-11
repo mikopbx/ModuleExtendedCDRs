@@ -639,17 +639,18 @@ class ModuleExportRecordsController extends BaseController
                 'columns' => 'user_id'
             ];
             $uIds = array_column(GroupMembers::find($filter)->toArray(), 'user_id');
-            $filter = [
-                // AND userid IN ({users:array})
-                'type=:type: AND userid IN ({userid:array})',
-                'bind' => [
-                    'type'    => Extensions::TYPE_SIP,
-                    'userid'  => $uIds,
-                ],
-                'columns' => 'number,userid'
+            if(!empty($uIds)){
+                $filter = [
+                    'type=:type: AND userid IN ({userid:array})',
+                    'bind' => [
+                        'type'    => Extensions::TYPE_SIP,
+                        'userid'  => $uIds,
+                    ],
+                    'columns' => 'number,userid'
 
-            ];
-            $groupNumber = array_column(Extensions::find($filter)->toArray(), 'number');
+                ];
+                $groupNumber = array_column(Extensions::find($filter)->toArray(), 'number');
+            }
         }
 
         $additionalNumbers = [];
