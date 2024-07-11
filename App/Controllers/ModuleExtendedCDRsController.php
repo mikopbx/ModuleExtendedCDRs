@@ -5,30 +5,28 @@
  * Proprietary and confidential
  * Written by Alexey Portnov, 11 2018
  */
-namespace Modules\ModuleExportRecords\App\Controllers;
+namespace Modules\ModuleExtendedCDRs\App\Controllers;
 use MikoPBX\AdminCabinet\Controllers\BaseController;
 use MikoPBX\Common\Models\CallQueues;
 use MikoPBX\Common\Models\Extensions;
-use MikoPBX\Common\Models\PbxSettings;
-use MikoPBX\Common\Models\PbxSettingsConstants;
 use MikoPBX\Common\Models\Sip;
 use MikoPBX\Common\Providers\PBXConfModulesProvider;
 use MikoPBX\Core\System\Util;
 use MikoPBX\Modules\Config\CDRConfigInterface;
 use MikoPBX\Modules\PbxExtensionUtils;
-use Modules\ModuleExportRecords\App\Forms\ModuleExportRecordsForm;
-use Modules\ModuleExportRecords\bin\ConnectorDB;
-use Modules\ModuleExportRecords\Models\CallHistory;
-use Modules\ModuleExportRecords\Models\ExportRules;
-use Modules\ModuleExportRecords\Models\ModuleExportRecords;
+use Modules\ModuleExtendedCDRs\App\Forms\ModuleExtendedCDRsForm;
+use Modules\ModuleExtendedCDRs\bin\ConnectorDB;
+use Modules\ModuleExtendedCDRs\Models\CallHistory;
+use Modules\ModuleExtendedCDRs\Models\ExportRules;
+use Modules\ModuleExtendedCDRs\Models\ModuleExtendedCDRs;
 use MikoPBX\Common\Models\Providers;
 use Modules\ModuleUsersGroups\Models\GroupMembers;
 use Modules\ModuleUsersGroups\Models\UsersGroups;
 use DateTime;
 
-class ModuleExportRecordsController extends BaseController
+class ModuleExtendedCDRsController extends BaseController
 {
-    private $moduleUniqueID = 'ModuleExportRecords';
+    private $moduleUniqueID = 'ModuleExtendedCDRs';
     private $moduleDir;
 
     /**
@@ -121,9 +119,9 @@ class ModuleExportRecordsController extends BaseController
         $headerCollectionCSS->addCss('css/vendor/range/range.min.css', true);
         $headerCollectionCSS->addCss('css/vendor/datepicker/daterangepicker.css', true);
 
-        $settings = ModuleExportRecords::findFirst();
+        $settings = ModuleExtendedCDRs::findFirst();
         if ($settings === null) {
-            $settings = new ModuleExportRecords();
+            $settings = new ModuleExtendedCDRs();
         }
 
         $providers = Providers::find();
@@ -133,7 +131,7 @@ class ModuleExportRecordsController extends BaseController
         }
         $options['providers']=$providersList;
 
-        $this->view->form = new ModuleExportRecordsForm($settings, $options);
+        $this->view->form = new ModuleExtendedCDRsForm($settings, $options);
         $this->view->pick("{$this->moduleDir}/App/Views/index");
 
         // Список выбора очередей.
@@ -303,7 +301,7 @@ class ModuleExportRecordsController extends BaseController
         if(empty($tableName)){
             return '';
         }
-        $className = "Modules\ModuleExportRecords\Models\\$tableName";
+        $className = "Modules\ModuleExtendedCDRs\Models\\$tableName";
         if(!class_exists($className)){
             $className = '';
         }
@@ -343,9 +341,9 @@ class ModuleExportRecordsController extends BaseController
     {
         $searchPhrase = $this->request->getPost('search');
         $this->view->searchPhrase = $searchPhrase['value'];
-        $settings = ModuleExportRecords::findFirst();
+        $settings = ModuleExtendedCDRs::findFirst();
         if(!$settings){
-            $settings = new ModuleExportRecords();
+            $settings = new ModuleExtendedCDRs();
         }
         $settings->searchSettings = $searchPhrase['value']??'';
         $settings->save();
@@ -456,19 +454,19 @@ class ModuleExportRecordsController extends BaseController
         unset($providers);
 
         $statsCall = [
-            CallHistory::CALL_STATE_OK              => Util::translate('repModuleExportRecords_cdr_CALL_STATE_OK', false),
-            CallHistory::CALL_STATE_TRANSFER        => Util::translate('repModuleExportRecords_cdr_CALL_STATE_TRANSFER', false),
-            CallHistory::CALL_STATE_MISSED          => Util::translate('repModuleExportRecords_cdr_CALL_STATE_MISSED', false),
-            CallHistory::CALL_STATE_OUTGOING_FAIL   => Util::translate('repModuleExportRecords_cdr_CALL_STATE_OUTGOING_FAIL', false),
-            CallHistory::CALL_STATE_RECALL_CLIENT   => Util::translate('repModuleExportRecords_cdr_CALL_STATE_RECALL_CLIENT', false),
-            CallHistory::CALL_STATE_RECALL_USER     => Util::translate('repModuleExportRecords_cdr_CALL_STATE_RECALL_USER', false),
-            CallHistory::CALL_STATE_APPLICATION     => Util::translate('repModuleExportRecords_cdr_CALL_STATE_APPLICATION', false),
+            CallHistory::CALL_STATE_OK              => Util::translate('repModuleExtendedCDRs_cdr_CALL_STATE_OK', false),
+            CallHistory::CALL_STATE_TRANSFER        => Util::translate('repModuleExtendedCDRs_cdr_CALL_STATE_TRANSFER', false),
+            CallHistory::CALL_STATE_MISSED          => Util::translate('repModuleExtendedCDRs_cdr_CALL_STATE_MISSED', false),
+            CallHistory::CALL_STATE_OUTGOING_FAIL   => Util::translate('repModuleExtendedCDRs_cdr_CALL_STATE_OUTGOING_FAIL', false),
+            CallHistory::CALL_STATE_RECALL_CLIENT   => Util::translate('repModuleExtendedCDRs_cdr_CALL_STATE_RECALL_CLIENT', false),
+            CallHistory::CALL_STATE_RECALL_USER     => Util::translate('repModuleExtendedCDRs_cdr_CALL_STATE_RECALL_USER', false),
+            CallHistory::CALL_STATE_APPLICATION     => Util::translate('repModuleExtendedCDRs_cdr_CALL_STATE_APPLICATION', false),
         ];
         $typeCallNames = [
-            CallHistory::CALL_TYPE_INNER =>  Util::translate('repModuleExportRecords_cdr_CALL_TYPE_INNER', false),
-            CallHistory::CALL_TYPE_OUTGOING =>  Util::translate('repModuleExportRecords_cdr_CALL_TYPE_OUTGOING', false),
-            CallHistory::CALL_TYPE_INCOMING =>  Util::translate('repModuleExportRecords_cdr_CALL_TYPE_INCOMING', false),
-            CallHistory::CALL_TYPE_MISSED =>  Util::translate('repModuleExportRecords_cdr_CALL_TYPE_MISSED', false),
+            CallHistory::CALL_TYPE_INNER =>  Util::translate('repModuleExtendedCDRs_cdr_CALL_TYPE_INNER', false),
+            CallHistory::CALL_TYPE_OUTGOING =>  Util::translate('repModuleExtendedCDRs_cdr_CALL_TYPE_OUTGOING', false),
+            CallHistory::CALL_TYPE_INCOMING =>  Util::translate('repModuleExtendedCDRs_cdr_CALL_TYPE_INCOMING', false),
+            CallHistory::CALL_TYPE_MISSED =>  Util::translate('repModuleExtendedCDRs_cdr_CALL_TYPE_MISSED', false),
         ];
 
         foreach ($selectedRecords as $arrRecord) {

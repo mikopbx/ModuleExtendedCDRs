@@ -17,7 +17,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-namespace Modules\ModuleExportRecords\Lib;
+namespace Modules\ModuleExtendedCDRs\Lib;
 
 use MikoPBX\Common\Models\Extensions;
 use MikoPBX\Common\Providers\CDRDatabaseProvider;
@@ -25,8 +25,8 @@ use MikoPBX\Core\System\BeanstalkClient;
 use MikoPBX\Core\System\SystemMessages;
 use MikoPBX\Core\System\Util;
 use MikoPBX\Core\Workers\WorkerCdr;
-use Modules\ModuleExportRecords\bin\ConnectorDB;
-use Modules\ModuleExportRecords\Models\CallHistory;
+use Modules\ModuleExtendedCDRs\bin\ConnectorDB;
+use Modules\ModuleExtendedCDRs\Models\CallHistory;
 use Phalcon\Di;
 
 class HistoryParser

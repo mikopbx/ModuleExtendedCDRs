@@ -1,16 +1,15 @@
 <?php
 
-namespace Modules\ModuleExportRecords\Lib;
+namespace Modules\ModuleExtendedCDRs\Lib;
 
 
 use MikoPBX\Core\System\Processes;
-use MikoPBX\Core\System\Util;
 use MikoPBX\Core\Workers\Cron\WorkerSafeScriptsCore;
 use MikoPBX\Modules\PbxExtensionBase;
 use MikoPBX\Modules\PbxExtensionUtils;
 use MikoPBX\PBXCoreREST\Lib\PBXApiResult;
 
-class ExportRecordsMain extends PbxExtensionBase
+class ExtendedCDRsMain extends PbxExtensionBase
 {
     /**
      * Process something received over AsteriskAMI
@@ -58,7 +57,7 @@ class ExportRecordsMain extends PbxExtensionBase
         if ( ! $moduleEnabled) {
             return;
         }
-        $configClass      = new ExportRecordsConf();
+        $configClass      = new ExtendedCDRsConf();
         $workersToRestart = $configClass->getModuleWorkers();
 
         if ($restart) {

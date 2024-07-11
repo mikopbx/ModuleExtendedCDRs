@@ -17,7 +17,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-namespace Modules\ModuleExportRecords\Lib;
+namespace Modules\ModuleExtendedCDRs\Lib;
 use MikoPBX\Core\System\System;
 use MikoPBX\Core\System\Util;
 use Phalcon\Logger\Adapter\Stream;

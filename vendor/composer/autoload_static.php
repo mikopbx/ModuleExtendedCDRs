@@ -14,7 +14,7 @@ class ComposerStaticInitdb0e7f5f4867f1094b5c4c69668744f9
         'M' => 
         array (
             'Monolog\\' => 8,
-            'Modules\\ModuleExportRecords\\' => 28,
+            'Modules\\ModuleExtendedCDRs\\' => 28,
         ),
         'C' => 
         array (
@@ -31,7 +31,7 @@ class ComposerStaticInitdb0e7f5f4867f1094b5c4c69668744f9
         array (
             0 => __DIR__ . '/..' . '/monolog/monolog/src/Monolog',
         ),
-        'Modules\\ModuleExportRecords\\' => 
+        'Modules\\ModuleExtendedCDRs\\' =>
         array (
             0 => '/',
         ),

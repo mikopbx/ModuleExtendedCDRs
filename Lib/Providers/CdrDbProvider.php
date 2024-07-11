@@ -17,7 +17,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-namespace Modules\ModuleExportRecords\Lib\Providers;
+namespace Modules\ModuleExtendedCDRs\Lib\Providers;
 
 use MikoPBX\Common\Providers\DatabaseProviderBase;
 use Phalcon\Di\DiInterface;

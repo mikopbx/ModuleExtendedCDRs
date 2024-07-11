@@ -11,9 +11,9 @@
  *
  */
 
-namespace Modules\ModuleExportRecords\Models;
+namespace Modules\ModuleExtendedCDRs\Models;
 use MikoPBX\Common\Models\CallDetailRecordsBase;
-use Modules\ModuleExportRecords\Lib\Providers\CdrDbProvider;
+use Modules\ModuleExtendedCDRs\Lib\Providers\CdrDbProvider;
 
 /**
  * Class CallDetailRecords

@@ -17,21 +17,20 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-namespace Modules\ModuleExportRecords\bin;
+namespace Modules\ModuleExtendedCDRs\bin;
 
 use GuzzleHttp\Exception\GuzzleException;
 use MikoPBX\Common\Models\Extensions;
-use MikoPBX\Core\System\System;
 use MikoPBX\Core\System\Util;
 use MikoPBX\Core\Workers\WorkerBase;
 use MikoPBX\Core\System\BeanstalkClient;
 use MikoPBX\PBXCoreREST\Lib\PBXApiResult;
-use Modules\ModuleExportRecords\Lib\HistoryParser;
-use Modules\ModuleExportRecords\Lib\Logger;
+use Modules\ModuleExtendedCDRs\Lib\HistoryParser;
+use Modules\ModuleExtendedCDRs\Lib\Logger;
 use Exception;
-use Modules\ModuleExportRecords\Models\ExportResults;
-use Modules\ModuleExportRecords\Models\ExportRules;
-use Modules\ModuleExportRecords\Models\ModuleExportRecords;
+use Modules\ModuleExtendedCDRs\Models\ExportResults;
+use Modules\ModuleExtendedCDRs\Models\ExportRules;
+use Modules\ModuleExtendedCDRs\Models\ModuleExtendedCDRs;
 use GuzzleHttp\Client;
 use GuzzleHttp\HandlerStack;
 
@@ -58,7 +57,7 @@ class SyncRecords extends WorkerBase
      */
     public function start($argv):void
     {
-        $this->logger   = new Logger('ConnectorDB', 'ModuleExportRecords');
+        $this->logger   = new Logger('ConnectorDB', 'ModuleExtendedCDRs');
         $this->logger->writeInfo('Starting...');
 
         $this->updateSettings();
@@ -78,9 +77,9 @@ class SyncRecords extends WorkerBase
      */
     public function updateSettings(int $newCdrOffset=0):void
     {
-        $settings = ModuleExportRecords::findFirst();
+        $settings = ModuleExtendedCDRs::findFirst();
         if(!$settings){
-            $settings = new ModuleExportRecords();
+            $settings = new ModuleExtendedCDRs();
         }
         if($newCdrOffset > 0){
             $settings->cdrOffset = $newCdrOffset;

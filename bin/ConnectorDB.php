@@ -17,17 +17,17 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-namespace Modules\ModuleExportRecords\bin;
+namespace Modules\ModuleExtendedCDRs\bin;
 
 use MikoPBX\Core\System\Util;
 use MikoPBX\Core\Workers\WorkerBase;
 use MikoPBX\Core\System\BeanstalkClient;
-use Modules\ModuleExportRecords\Lib\HistoryParser;
-use Modules\ModuleExportRecords\Lib\Logger;
+use Modules\ModuleExtendedCDRs\Lib\HistoryParser;
+use Modules\ModuleExtendedCDRs\Lib\Logger;
 use Exception;
-use Modules\ModuleExportRecords\Lib\Providers\CdrDbProvider;
-use Modules\ModuleExportRecords\Models\CallHistory;
-use Modules\ModuleExportRecords\Models\ModuleExportRecords;
+use Modules\ModuleExtendedCDRs\Lib\Providers\CdrDbProvider;
+use Modules\ModuleExtendedCDRs\Models\CallHistory;
+use Modules\ModuleExtendedCDRs\Models\ModuleExtendedCDRs;
 use Phalcon\Db\Enum;
 use DateTime;
 
@@ -50,7 +50,7 @@ class ConnectorDB extends WorkerBase
      */
     public function start($argv):void
     {
-        $this->logger   = new Logger('ConnectorDB', 'ModuleExportRecords');
+        $this->logger   = new Logger('ConnectorDB', 'ModuleExtendedCDRs');
         $this->logger->writeInfo('Starting...');
         $this->updateSettings();
         $beanstalk      = new BeanstalkClient(self::class);
@@ -71,9 +71,9 @@ class ConnectorDB extends WorkerBase
      */
     public function updateSettings(int $newCdrOffset=0):void
     {
-        $settings  = ModuleExportRecords::findFirst();
+        $settings  = ModuleExtendedCDRs::findFirst();
         if(!$settings){
-            $settings = new ModuleExportRecords();
+            $settings = new ModuleExtendedCDRs();
         }
         if($newCdrOffset > 0){
             $minOffset = HistoryParser::getMinCdrId();
@@ -145,7 +145,7 @@ class ConnectorDB extends WorkerBase
             return '';
         }
         $dirsConfig = $this->di->getShared('config');
-        $tmoDirName = $dirsConfig->path('core.tempDir') . '/ModuleExportRecords';
+        $tmoDirName = $dirsConfig->path('core.tempDir') . '/ModuleExtendedCDRs';
         Util::mwMkdir($tmoDirName, true);
         if (file_exists($tmoDirName)) {
             $tmpDir = $tmoDirName;

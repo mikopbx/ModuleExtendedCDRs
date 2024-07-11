@@ -1,6 +1,6 @@
 {
     "name": "mikopbx/moduletemplate",
-    "description": "ModuleExportRecords",
+    "description": "ModuleExtendedCDRs",
     "require": {
         "mk-j/php_xlsxwriter": "^0.39",
         "cesargb/php-log-rotation": "2.6.0",
@@ -9,7 +9,7 @@
     ,
     "autoload": {
         "psr-4": {
-            "Modules\\ModuleExportRecords\\": "/"
+            "Modules\\ModuleExtendedCDRs\\": "/"
         }
     },
     "type": "application",
@@ -25,7 +25,7 @@
         "uc"
     ],
     "license": "GPL-3.0-or-later",
-    "homepage": "https://github.com/mikopbx/ModuleExportRecords",
+    "homepage": "https://github.com/mikopbx/ModuleExtendedCDRs",
     "support": {
         "email": "help@mikopbx.com",
         "wiki": "https://wiki.mikopbx.com",

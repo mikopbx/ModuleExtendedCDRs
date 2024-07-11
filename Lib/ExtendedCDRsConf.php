@@ -7,16 +7,16 @@
  */
 
 
-namespace Modules\ModuleExportRecords\Lib;
+namespace Modules\ModuleExtendedCDRs\Lib;
 
 use MikoPBX\Core\System\Util;
 use MikoPBX\Core\Workers\Cron\WorkerSafeScriptsCore;
 use MikoPBX\Modules\Config\ConfigClass;
 use MikoPBX\PBXCoreREST\Lib\PBXApiResult;
-use Modules\ModuleExportRecords\Lib\RestAPI\Controllers\ApiController;
-use Modules\ModuleExportRecords\bin\ConnectorDB;
+use Modules\ModuleExtendedCDRs\Lib\RestAPI\Controllers\ApiController;
+use Modules\ModuleExtendedCDRs\bin\ConnectorDB;
 
-class ExportRecordsConf extends ConfigClass
+class ExtendedCDRsConf extends ConfigClass
 {
 
     /**
@@ -47,17 +47,17 @@ class ExportRecordsConf extends ConfigClass
         $action = strtoupper($request['action']);
         switch ($action) {
             case 'CHECK':
-                $templateMain = new ExportRecordsMain();
+                $templateMain = new ExtendedCDRsMain();
                 $res          = $templateMain->checkModuleWorkProperly();
                 break;
             case 'RELOAD':
-                $templateMain = new ExportRecordsMain();
+                $templateMain = new ExtendedCDRsMain();
                 $templateMain->startAllServices(true);
                 $res->success = true;
                 break;
             default:
                 $res->success    = false;
-                $res->messages[] = 'API action not found in moduleRestAPICallback ModuleExportRecords';
+                $res->messages[] = 'API action not found in moduleRestAPICallback ModuleExtendedCDRs';
         }
 
         return $res;
@@ -70,10 +70,7 @@ class ExportRecordsConf extends ConfigClass
     public function getPBXCoreRESTAdditionalRoutes(): array
     {
         return [
-            [ApiController::class, 'downloads',         '/pbxcore/api/modules/ModuleExportRecords/downloads', 'get', '/', false],
-            [ApiController::class, 'downloadsHistory',  '/pbxcore/api/modules/ModuleExportRecords/downloads-history', 'get', '/', false],
-            [ApiController::class, 'putTest307',        '/pbxcore/api/modules/ModuleExportRecords/v1/{company}/integrations/{filename}', 'put', '/', false],
-            [ApiController::class, 'putTest201',        '/pbxcore/api/modules/ModuleExportRecords/v1/{company}/201/{filename}', 'put', '/', false],
+            [ApiController::class, 'downloads',         '/pbxcore/api/modules/ModuleExtendedCDRs/downloads', 'get', '/', false],
         ];
     }
 
@@ -83,6 +80,6 @@ class ExportRecordsConf extends ConfigClass
     public function createCronTasks(array &$tasks): void
     {
         $busyboxPath= Util::which('busybox');
-        $tasks[]    = "*/1 * * * * $busyboxPath find /storage/usbdisk*/mikopbx/tmp/ModuleExportRecords/ -mmin +5 -type f -delete> /dev/null 2>&1".PHP_EOL;
+        $tasks[]    = "*/1 * * * * $busyboxPath find /storage/usbdisk*/mikopbx/tmp/ModuleExtendedCDRs/ -mmin +5 -type f -delete> /dev/null 2>&1".PHP_EOL;
     }
 }

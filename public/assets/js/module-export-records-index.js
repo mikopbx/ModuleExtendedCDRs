@@ -9,13 +9,13 @@ function _defineProperty(obj, key, value) { if (key in obj) { Object.definePrope
  * Written by Nikolay Beketov, 11 2018
  *
  */
-var idUrl = 'module-export-records';
-var idForm = 'module-export-records-form';
-var className = 'ModuleExportRecords';
+var idUrl = 'module-extended-c-d-rs';
+var idForm = 'module-extended-cdr-form';
+var className = 'ModuleExtendedCDRs';
 var inputClassName = 'mikopbx-module-input';
 /* global globalRootUrl, globalTranslate, Form, Config */
 
-var ModuleExportRecords = {
+var ModuleExtendedCDRs = {
   $formObj: $('#' + idForm),
   $checkBoxes: $('#' + idForm + ' .ui.checkbox'),
   $dropDowns: $('#' + idForm + ' .ui.dropdown'),
@@ -65,38 +65,38 @@ var ModuleExportRecords = {
    * On page load we init some Semantic UI library
    */
   initialize: function initialize() {
-    ModuleExportRecords.initializeDateRangeSelector(); // инициализируем чекбоксы и выподающие менюшки
+    ModuleExtendedCDRs.initializeDateRangeSelector(); // инициализируем чекбоксы и выподающие менюшки
 
     window[className].$checkBoxes.checkbox();
     window[className].$dropDowns.dropdown({
-      onChange: ModuleExportRecords.applyFilter
+      onChange: ModuleExtendedCDRs.applyFilter
     });
     window.addEventListener('ModuleStatusChanged', window[className].checkStatusToggle);
     window[className].initializeForm();
     $('.menu .item').tab();
     $('#typeCall.menu a.item').on('click', function (e) {
-      ModuleExportRecords.applyFilter();
+      ModuleExtendedCDRs.applyFilter();
     });
-    $('#globalsearchButton').on('click', function (e) {
-      ModuleExportRecords.startCreateExcel();
+    $('#createExcelButton').on('click', function (e) {
+      ModuleExtendedCDRs.startCreateExcel();
     });
     $('#saveSearchSettings').on('click', function (e) {
-      ModuleExportRecords.saveSearchSettings();
+      ModuleExtendedCDRs.saveSearchSettings();
     });
-    ModuleExportRecords.$globalSearch.on('keyup', function (e) {
-      if (e.keyCode === 13 || e.keyCode === 8 || ModuleExportRecords.$globalSearch.val().length === 0) {
-        ModuleExportRecords.applyFilter();
+    ModuleExtendedCDRs.$globalSearch.on('keyup', function (e) {
+      if (e.keyCode === 13 || e.keyCode === 8 || ModuleExtendedCDRs.$globalSearch.val().length === 0) {
+        ModuleExtendedCDRs.applyFilter();
       }
     });
-    ModuleExportRecords.$formObj.keydown(function (event) {
+    ModuleExtendedCDRs.$formObj.keydown(function (event) {
       if (event.keyCode === 13) {
         event.preventDefault();
         return false;
       }
     });
-    ModuleExportRecords.$cdrTable.dataTable({
+    ModuleExtendedCDRs.$cdrTable.dataTable({
       search: {
-        search: ModuleExportRecords.getSearchText()
+        search: ModuleExtendedCDRs.getSearchText()
       },
       serverSide: true,
       processing: true,
@@ -105,7 +105,7 @@ var ModuleExportRecords = {
         targets: "_all"
       }],
       ajax: {
-        url: "".concat(globalRootUrl, "module-export-records/getHistory"),
+        url: "".concat(globalRootUrl).concat(idUrl, "/getHistory"),
         type: 'POST',
         dataSrc: function dataSrc(json) {
           $('a.item[data-tab="all-calls"] b').html(': ' + json.recordsFiltered);
@@ -128,7 +128,7 @@ var ModuleExportRecords = {
       paging: true,
       sDom: 'rtip',
       deferRender: true,
-      pageLength: ModuleExportRecords.calculatePageLength(),
+      pageLength: ModuleExtendedCDRs.calculatePageLength(),
 
       /**
        * Constructs the CDR row.
@@ -178,16 +178,16 @@ var ModuleExportRecords = {
       language: SemanticLocalization.dataTableLocalisation,
       ordering: false
     });
-    ModuleExportRecords.dataTable = ModuleExportRecords.$cdrTable.DataTable();
-    ModuleExportRecords.dataTable.on('draw', function () {
-      ModuleExportRecords.$globalSearch.closest('div').removeClass('loading');
+    ModuleExtendedCDRs.dataTable = ModuleExtendedCDRs.$cdrTable.DataTable();
+    ModuleExtendedCDRs.dataTable.on('draw', function () {
+      ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
     });
-    ModuleExportRecords.$cdrTable.on('click', 'tr.negative', function (e) {
+    ModuleExtendedCDRs.$cdrTable.on('click', 'tr.negative', function (e) {
       var filter = $(e.target).attr('data-phone');
 
       if (filter !== undefined && filter !== '') {
-        ModuleExportRecords.$globalSearch.val(filter);
-        ModuleExportRecords.applyFilter();
+        ModuleExtendedCDRs.$globalSearch.val(filter);
+        ModuleExtendedCDRs.applyFilter();
         return;
       }
 
@@ -198,7 +198,7 @@ var ModuleExportRecords = {
       }
     }); // Add event listener for opening and closing details
 
-    ModuleExportRecords.$cdrTable.on('click', 'tr.detailed', function (e) {
+    ModuleExtendedCDRs.$cdrTable.on('click', 'tr.detailed', function (e) {
       var ids = $(e.target).attr('data-ids');
 
       if (ids !== undefined && ids !== '') {
@@ -209,13 +209,13 @@ var ModuleExportRecords = {
       var filter = $(e.target).attr('data-phone');
 
       if (filter !== undefined && filter !== '') {
-        ModuleExportRecords.$globalSearch.val(filter);
-        ModuleExportRecords.applyFilter();
+        ModuleExtendedCDRs.$globalSearch.val(filter);
+        ModuleExtendedCDRs.applyFilter();
         return;
       }
 
       var tr = $(e.target).closest('tr');
-      var row = ModuleExportRecords.dataTable.row(tr);
+      var row = ModuleExtendedCDRs.dataTable.row(tr);
 
       if (row.length === 0) {
         return;
@@ -227,7 +227,7 @@ var ModuleExportRecords = {
         tr.removeClass('shown');
       } else {
         // Open this row
-        tr.after(ModuleExportRecords.showRecords(row.data(), tr.attr('id')));
+        tr.after(ModuleExtendedCDRs.showRecords(row.data(), tr.attr('id')));
         tr.addClass('shown');
         $('tr[data-row-id="' + tr.attr('id') + '-detailed"').each(function (index, playerRow) {
           var id = $(playerRow).attr('id');
@@ -264,7 +264,7 @@ var ModuleExportRecords = {
   },
   calculatePageLength: function calculatePageLength() {
     // Calculate row height
-    var rowHeight = ModuleExportRecords.$cdrTable.find('tbody > tr').first().outerHeight(); // Calculate window height and available space for table
+    var rowHeight = ModuleExtendedCDRs.$cdrTable.find('tbody > tr').first().outerHeight(); // Calculate window height and available space for table
 
     var windowHeight = window.innerHeight;
     var headerFooterHeight = 400 + 50; // Estimate height for header, footer, and other elements
@@ -279,7 +279,7 @@ var ModuleExportRecords = {
       var newRow = $('<tr>').attr('id', id);
       var nameCell = $('<td>').attr('data-label', 'name').addClass('right aligned').html('<div class="ui mini icon input"><input type="text" placeholder="" value=""></div>');
       var usersCell = $('<td>').attr('data-label', 'users').html('<div class="ui multiple dropdown">' + $('#users-selector').html() + '<div>');
-      var buttonsCell = $('<td>').attr('data-label', 'buttons').html('<div class="ui buttons">\n' + '                  <button class="compact ui icon basic button" data-action="settings" onclick="ModuleExportRecords.showRuleOptions(\'' + id + '\')">\n' + '                    <i class="cog icon"></i>\n' + '                  </button>\n' + '                  <button class="compact ui icon basic button" data-action="remove" onclick="ModuleExportRecords.removeRule(\'' + id + '\')">\n' + '                    <i class="icon trash red"></i>\n' + '                  </button>\n' + '                </div>');
+      var buttonsCell = $('<td>').attr('data-label', 'buttons').html('<div class="ui buttons">\n' + '                  <button class="compact ui icon basic button" data-action="settings" onclick="ModuleExtendedCDRs.showRuleOptions(\'' + id + '\')">\n' + '                    <i class="cog icon"></i>\n' + '                  </button>\n' + '                  <button class="compact ui icon basic button" data-action="remove" onclick="ModuleExtendedCDRs.removeRule(\'' + id + '\')">\n' + '                    <i class="icon trash red"></i>\n' + '                  </button>\n' + '                </div>');
       var headersCell = $('<td>').attr('data-label', 'headers').addClass('right aligned').attr('style', 'display: none').html('<div class="ui modal segment" data-id="' + id + '">\n' + '                  <i class="close icon"></i>\n' + '                    <div class="ui form">\n' + '                      <div class="field">\n' + '                        <label>HTTP Headers</label>\n' + '                        <textarea></textarea>\n' + '                      </div>\n' + '                      <div class="field">\n' + '                        <label>URL</label>\n' + '                        <div class="ui icon input"><input data-label="dstUrl" type="text" placeholder="" value=""></div>\n' + '                      </div>\n' + '                    </div>\n' + '                  <div class="actions">\n' + '                    <div class="ui positive right labeled icon button">\n' + '                      Завершить редактирование\n' + '                      <i class="checkmark icon"></i>\n' + '                    </div>\n' + '                  </div>\n' + '                </div>');
       newRow.append(nameCell, usersCell, headersCell, buttonsCell);
       $('#sync-rules').append(newRow);
@@ -358,11 +358,11 @@ var ModuleExportRecords = {
   initializeDateRangeSelector: function initializeDateRangeSelector() {
     var _options$ranges;
 
-    var period = ModuleExportRecords.$dateRangeSelector.attr('data-def-value');
+    var period = ModuleExtendedCDRs.$dateRangeSelector.attr('data-def-value');
     var defPeriod = [moment(), moment()];
 
     if (period !== '' && period !== undefined) {
-      var periods = ModuleExportRecords.getStandardPeriods();
+      var periods = ModuleExtendedCDRs.getStandardPeriods();
 
       if (periods[period] !== undefined) {
         defPeriod = periods[period];
@@ -370,7 +370,7 @@ var ModuleExportRecords = {
     }
 
     var options = {};
-    options.ranges = (_options$ranges = {}, _defineProperty(_options$ranges, globalTranslate.repModuleExportRecords_cdr_cal_Today, [moment(), moment()]), _defineProperty(_options$ranges, globalTranslate.repModuleExportRecords_cdr_cal_Yesterday, [moment().subtract(1, 'days'), moment().subtract(1, 'days')]), _defineProperty(_options$ranges, globalTranslate.repModuleExportRecords_cdr_cal_LastWeek, [moment().subtract(6, 'days'), moment()]), _defineProperty(_options$ranges, globalTranslate.repModuleExportRecords_cdr_cal_Last30Days, [moment().subtract(29, 'days'), moment()]), _defineProperty(_options$ranges, globalTranslate.repModuleExportRecords_cdr_cal_ThisMonth, [moment().startOf('month'), moment().endOf('month')]), _defineProperty(_options$ranges, globalTranslate.repModuleExportRecords_cdr_cal_LastMonth, [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]), _options$ranges);
+    options.ranges = (_options$ranges = {}, _defineProperty(_options$ranges, globalTranslate.repModuleExtendedCDRs_cdr_cal_Today, [moment(), moment()]), _defineProperty(_options$ranges, globalTranslate.repModuleExtendedCDRs_cdr_cal_Yesterday, [moment().subtract(1, 'days'), moment().subtract(1, 'days')]), _defineProperty(_options$ranges, globalTranslate.repModuleExtendedCDRs_cdr_cal_LastWeek, [moment().subtract(6, 'days'), moment()]), _defineProperty(_options$ranges, globalTranslate.repModuleExtendedCDRs_cdr_cal_Last30Days, [moment().subtract(29, 'days'), moment()]), _defineProperty(_options$ranges, globalTranslate.repModuleExtendedCDRs_cdr_cal_ThisMonth, [moment().startOf('month'), moment().endOf('month')]), _defineProperty(_options$ranges, globalTranslate.repModuleExtendedCDRs_cdr_cal_LastMonth, [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]), _options$ranges);
     options.alwaysShowCalendars = true;
     options.autoUpdateInput = true;
     options.linkedCalendars = true;
@@ -389,7 +389,7 @@ var ModuleExportRecords = {
     };
     options.startDate = defPeriod[0];
     options.endDate = defPeriod[1];
-    ModuleExportRecords.$dateRangeSelector.daterangepicker(options, ModuleExportRecords.cbDateRangeSelectorOnSelect);
+    ModuleExtendedCDRs.$dateRangeSelector.daterangepicker(options, ModuleExtendedCDRs.cbDateRangeSelectorOnSelect);
   },
 
   /**
@@ -399,24 +399,24 @@ var ModuleExportRecords = {
    * @param {string} label - The label.
    */
   cbDateRangeSelectorOnSelect: function cbDateRangeSelectorOnSelect(start, end, label) {
-    ModuleExportRecords.$dateRangeSelector.attr('data-start', start.format('YYYY/MM/DD'));
-    ModuleExportRecords.$dateRangeSelector.attr('data-end', moment(end.format('YYYYMMDD')).endOf('day').format('YYYY/MM/DD'));
-    ModuleExportRecords.$dateRangeSelector.val("".concat(start.format('DD/MM/YYYY'), " - ").concat(end.format('DD/MM/YYYY')));
-    ModuleExportRecords.applyFilter();
+    ModuleExtendedCDRs.$dateRangeSelector.attr('data-start', start.format('YYYY/MM/DD'));
+    ModuleExtendedCDRs.$dateRangeSelector.attr('data-end', moment(end.format('YYYYMMDD')).endOf('day').format('YYYY/MM/DD'));
+    ModuleExtendedCDRs.$dateRangeSelector.val("".concat(start.format('DD/MM/YYYY'), " - ").concat(end.format('DD/MM/YYYY')));
+    ModuleExtendedCDRs.applyFilter();
   },
 
   /**
    * Applies the filter to the data table.
    */
   applyFilter: function applyFilter() {
-    var text = ModuleExportRecords.getSearchText();
-    ModuleExportRecords.dataTable.search(text).draw();
-    ModuleExportRecords.$globalSearch.closest('div').addClass('loading');
+    var text = ModuleExtendedCDRs.getSearchText();
+    ModuleExtendedCDRs.dataTable.search(text).draw();
+    ModuleExtendedCDRs.$globalSearch.closest('div').addClass('loading');
   },
   getSearchText: function getSearchText() {
     var filter = {
-      dateRangeSelector: ModuleExportRecords.$dateRangeSelector.val(),
-      globalSearch: ModuleExportRecords.$globalSearch.val(),
+      dateRangeSelector: ModuleExtendedCDRs.$dateRangeSelector.val(),
+      globalSearch: ModuleExtendedCDRs.$globalSearch.val(),
       typeCall: $('#typeCall a.item.active').attr('data-tab'),
       additionalFilter: $('#additionalFilter').dropdown('get value').replace(/,/g, ' ')
     };
@@ -433,10 +433,10 @@ var ModuleExportRecords = {
     };
   },
   saveSearchSettings: function saveSearchSettings() {
-    var periods = ModuleExportRecords.getStandardPeriods();
+    var periods = ModuleExtendedCDRs.getStandardPeriods();
     var dateRangeSelector = '';
     $.each(periods, function (index, value) {
-      if (ModuleExportRecords.$dateRangeSelector.val() === "".concat(value[0].format('DD/MM/YYYY'), " - ").concat(value[1].format('DD/MM/YYYY'))) {
+      if (ModuleExtendedCDRs.$dateRangeSelector.val() === "".concat(value[0].format('DD/MM/YYYY'), " - ").concat(value[1].format('DD/MM/YYYY'))) {
         dateRangeSelector = index;
       }
     });
@@ -445,7 +445,7 @@ var ModuleExportRecords = {
       'dateRangeSelector': dateRangeSelector
     };
     $.ajax({
-      url: "".concat(globalRootUrl, "module-export-records/saveSearchSettings"),
+      url: "".concat(globalRootUrl).concat(idUrl, "/saveSearchSettings"),
       type: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
@@ -463,9 +463,9 @@ var ModuleExportRecords = {
     });
   },
   startCreateExcel: function startCreateExcel() {
-    var text = ModuleExportRecords.getSearchText();
+    var text = ModuleExtendedCDRs.getSearchText();
     $.ajax({
-      url: "".concat(globalRootUrl, "module-export-records/getHistory"),
+      url: "".concat(globalRootUrl).concat(idUrl, "/getHistory"),
       type: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
@@ -524,12 +524,12 @@ var ModuleExportRecords = {
           skipHeader: true // Пропускаем автоматическое создание заголовков из ключей объекта
 
         });
-        XLSX.utils.sheet_add_aoa(worksheet, [[globalTranslate.repModuleExportRecords_cdr_ColumnTypeState, globalTranslate.cdr_ColumnDate, globalTranslate.cdr_ColumnFrom, globalTranslate.cdr_ColumnTo, globalTranslate.repModuleExportRecords_cdr_ColumnLine, globalTranslate.repModuleExportRecords_cdr_ColumnWaitTime, globalTranslate.cdr_ColumnDuration, globalTranslate.repModuleExportRecords_cdr_ColumnCallState]], {
+        XLSX.utils.sheet_add_aoa(worksheet, [[globalTranslate.repModuleExtendedCDRs_cdr_ColumnTypeState, globalTranslate.cdr_ColumnDate, globalTranslate.cdr_ColumnFrom, globalTranslate.cdr_ColumnTo, globalTranslate.repModuleExtendedCDRs_cdr_ColumnLine, globalTranslate.repModuleExtendedCDRs_cdr_ColumnWaitTime, globalTranslate.cdr_ColumnDuration, globalTranslate.repModuleExtendedCDRs_cdr_ColumnCallState]], {
           origin: "A1"
         });
         worksheet['!cols'] = columns.map(function (col) {
           return {
-            wch: 8 + ModuleExportRecords.getMaxWidth(flattenedData, col)
+            wch: 8 + ModuleExtendedCDRs.getMaxWidth(flattenedData, col)
           };
         });
         var workbook = XLSX.utils.book_new();
@@ -552,8 +552,8 @@ var ModuleExportRecords = {
     return maxLength;
   },
   startDownload: function startDownload() {
-    var startTime = ModuleExportRecords.$dateRangeSelector.attr('data-start');
-    var endTime = ModuleExportRecords.$dateRangeSelector.attr('data-end');
+    var startTime = ModuleExtendedCDRs.$dateRangeSelector.attr('data-start');
+    var endTime = ModuleExtendedCDRs.$dateRangeSelector.attr('data-end');
 
     if (startTime === undefined) {
       startTime = moment().format('YYYY-MM-DD');
@@ -568,12 +568,12 @@ var ModuleExportRecords = {
       typeRec = 'out';
     }
 
-    var numbers = ModuleExportRecords.$globalSearch.val();
+    var numbers = ModuleExtendedCDRs.$globalSearch.val();
     window.open('/pbxcore/api/modules/' + className + '/downloads?start=' + startTime + '&end=' + endTime + "&numbers=" + encodeURIComponent(numbers) + "&type=" + typeRec, '_blank');
   },
   startDownloadHistory: function startDownloadHistory() {
-    var startTime = ModuleExportRecords.$dateRangeSelector.attr('data-start');
-    var endTime = ModuleExportRecords.$dateRangeSelector.attr('data-end');
+    var startTime = ModuleExtendedCDRs.$dateRangeSelector.attr('data-start');
+    var endTime = ModuleExtendedCDRs.$dateRangeSelector.attr('data-end');
 
     if (startTime === undefined) {
       startTime = moment().format('YYYY-MM-DD');
@@ -588,7 +588,7 @@ var ModuleExportRecords = {
       typeRec = 'out';
     }
 
-    var numbers = ModuleExportRecords.$globalSearch.val();
+    var numbers = ModuleExtendedCDRs.$globalSearch.val();
     window.open('/pbxcore/api/modules/' + className + '/downloads-history?start=' + startTime + '&end=' + endTime + "&numbers=" + encodeURIComponent(numbers) + "&type=" + typeRec, '_blank');
   },
 

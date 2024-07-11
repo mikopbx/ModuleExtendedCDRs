@@ -5,13 +5,13 @@
  * Written by Nikolay Beketov, 11 2018
  *
  */
-const idUrl     = 'module-export-records';
-const idForm    = 'module-export-records-form';
-const className = 'ModuleExportRecords';
+const idUrl     = 'module-extended-c-d-rs';
+const idForm    = 'module-extended-cdr-form';
+const className = 'ModuleExtendedCDRs';
 const inputClassName = 'mikopbx-module-input';
 
 /* global globalRootUrl, globalTranslate, Form, Config */
-const ModuleExportRecords = {
+const ModuleExtendedCDRs = {
 	$formObj: $('#'+idForm),
 	$checkBoxes: $('#'+idForm+' .ui.checkbox'),
 	$dropDowns: $('#'+idForm+' .ui.dropdown'),
@@ -61,33 +61,33 @@ const ModuleExportRecords = {
 	 * On page load we init some Semantic UI library
 	 */
 	initialize() {
-		ModuleExportRecords.initializeDateRangeSelector();
+		ModuleExtendedCDRs.initializeDateRangeSelector();
 		// инициализируем чекбоксы и выподающие менюшки
 		window[className].$checkBoxes.checkbox();
-		window[className].$dropDowns.dropdown({onChange: ModuleExportRecords.applyFilter});
+		window[className].$dropDowns.dropdown({onChange: ModuleExtendedCDRs.applyFilter});
 
 		window.addEventListener('ModuleStatusChanged', window[className].checkStatusToggle);
 		window[className].initializeForm();
 		$('.menu .item').tab();
 		$('#typeCall.menu a.item').on('click', function (e) {
-			ModuleExportRecords.applyFilter();
+			ModuleExtendedCDRs.applyFilter();
 		});
-		$('#globalsearchButton').on('click', function (e) {
-			ModuleExportRecords.startCreateExcel();
+		$('#createExcelButton').on('click', function (e) {
+			ModuleExtendedCDRs.startCreateExcel();
 		});
 		$('#saveSearchSettings').on('click', function (e) {
-			ModuleExportRecords.saveSearchSettings();
+			ModuleExtendedCDRs.saveSearchSettings();
 		});
 
-		ModuleExportRecords.$globalSearch.on('keyup', (e) => {
+		ModuleExtendedCDRs.$globalSearch.on('keyup', (e) => {
 			if (e.keyCode === 13
 				|| e.keyCode === 8
-				|| ModuleExportRecords.$globalSearch.val().length === 0) {
-				ModuleExportRecords.applyFilter();
+				|| ModuleExtendedCDRs.$globalSearch.val().length === 0) {
+				ModuleExtendedCDRs.applyFilter();
 			}
 		});
 
-		ModuleExportRecords.$formObj.keydown(function(event){
+		ModuleExtendedCDRs.$formObj.keydown(function(event){
 			if(event.keyCode === 13) {
 				event.preventDefault();
 				return false;
@@ -95,9 +95,9 @@ const ModuleExportRecords = {
 		});
 
 
-		ModuleExportRecords.$cdrTable.dataTable({
+		ModuleExtendedCDRs.$cdrTable.dataTable({
 			search: {
-				search: ModuleExportRecords.getSearchText(),
+				search: ModuleExtendedCDRs.getSearchText(),
 			},
 			serverSide: true,
 			processing: true,
@@ -105,7 +105,7 @@ const ModuleExportRecords = {
 				{ defaultContent: "-",  targets: "_all"},
 			],
 			ajax: {
-				url: `${globalRootUrl}module-export-records/getHistory`,
+				url: `${globalRootUrl}${idUrl}/getHistory`,
 				type: 'POST',
 				dataSrc: function(json) {
 					$('a.item[data-tab="all-calls"] b').html(': '+json.recordsFiltered)
@@ -127,7 +127,7 @@ const ModuleExportRecords = {
 			paging: true,
 			sDom: 'rtip',
 			deferRender: true,
-			pageLength: ModuleExportRecords.calculatePageLength(),
+			pageLength: ModuleExtendedCDRs.calculatePageLength(),
 
 			/**
 			 * Constructs the CDR row.
@@ -178,16 +178,16 @@ const ModuleExportRecords = {
 			language: SemanticLocalization.dataTableLocalisation,
 			ordering: false,
 		});
-		ModuleExportRecords.dataTable = ModuleExportRecords.$cdrTable.DataTable();
-		ModuleExportRecords.dataTable.on('draw', () => {
-			ModuleExportRecords.$globalSearch.closest('div').removeClass('loading');
+		ModuleExtendedCDRs.dataTable = ModuleExtendedCDRs.$cdrTable.DataTable();
+		ModuleExtendedCDRs.dataTable.on('draw', () => {
+			ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
 		});
 
-		ModuleExportRecords.$cdrTable.on('click', 'tr.negative', (e) => {
+		ModuleExtendedCDRs.$cdrTable.on('click', 'tr.negative', (e) => {
 			let filter = $(e.target).attr('data-phone');
 			if (filter !== undefined && filter !== '') {
-				ModuleExportRecords.$globalSearch.val(filter)
-				ModuleExportRecords.applyFilter();
+				ModuleExtendedCDRs.$globalSearch.val(filter)
+				ModuleExtendedCDRs.applyFilter();
 				return;
 			}
 			let ids = $(e.target).attr('data-ids');
@@ -197,7 +197,7 @@ const ModuleExportRecords = {
 		});
 
 		// Add event listener for opening and closing details
-		ModuleExportRecords.$cdrTable.on('click', 'tr.detailed', (e) => {
+		ModuleExtendedCDRs.$cdrTable.on('click', 'tr.detailed', (e) => {
 			let ids = $(e.target).attr('data-ids');
 			if (ids !== undefined && ids !== '') {
 				window.location = `${globalRootUrl}system-diagnostic/index/?filename=asterisk/verbose&filter=${ids}`;
@@ -205,13 +205,13 @@ const ModuleExportRecords = {
 			}
 			let filter = $(e.target).attr('data-phone');
 			if (filter !== undefined && filter !== '') {
-				ModuleExportRecords.$globalSearch.val(filter)
-				ModuleExportRecords.applyFilter();
+				ModuleExtendedCDRs.$globalSearch.val(filter)
+				ModuleExtendedCDRs.applyFilter();
 				return;
 			}
 
 			const tr = $(e.target).closest('tr');
-			const row = ModuleExportRecords.dataTable.row(tr);
+			const row = ModuleExtendedCDRs.dataTable.row(tr);
 			if(row.length === 0){
 				return;
 			}
@@ -221,7 +221,7 @@ const ModuleExportRecords = {
 				tr.removeClass('shown');
 			} else {
 				// Open this row
-				tr.after(ModuleExportRecords.showRecords(row.data() , tr.attr('id')));
+				tr.after(ModuleExtendedCDRs.showRecords(row.data() , tr.attr('id')));
 				tr.addClass('shown');
 				$('tr[data-row-id="'+tr.attr('id')+'-detailed"').each((index, playerRow) => {
 					const id = $(playerRow).attr('id');
@@ -276,7 +276,7 @@ const ModuleExportRecords = {
 
 	calculatePageLength() {
 		// Calculate row height
-		let rowHeight = ModuleExportRecords.$cdrTable.find('tbody > tr').first().outerHeight();
+		let rowHeight = ModuleExtendedCDRs.$cdrTable.find('tbody > tr').first().outerHeight();
 
 		// Calculate window height and available space for table
 		const windowHeight = window.innerHeight;
@@ -295,10 +295,10 @@ const ModuleExportRecords = {
 			let nameCell = $('<td>').attr('data-label', 'name').addClass('right aligned').html('<div class="ui mini icon input"><input type="text" placeholder="" value=""></div>');
 			let usersCell 	= $('<td>').attr('data-label', 'users').html('<div class="ui multiple dropdown">' + $('#users-selector').html() +  '<div>');
 			let buttonsCell	= $('<td>').attr('data-label', 'buttons').html('<div class="ui buttons">\n' +
-				'                  <button class="compact ui icon basic button" data-action="settings" onclick="ModuleExportRecords.showRuleOptions(\''+id+'\')">\n' +
+				'                  <button class="compact ui icon basic button" data-action="settings" onclick="ModuleExtendedCDRs.showRuleOptions(\''+id+'\')">\n' +
 				'                    <i class="cog icon"></i>\n' +
 				'                  </button>\n' +
-				'                  <button class="compact ui icon basic button" data-action="remove" onclick="ModuleExportRecords.removeRule(\''+id+'\')">\n' +
+				'                  <button class="compact ui icon basic button" data-action="remove" onclick="ModuleExtendedCDRs.removeRule(\''+id+'\')">\n' +
 				'                    <i class="icon trash red"></i>\n' +
 				'                  </button>\n' +
 				'                </div>');
@@ -394,10 +394,10 @@ const ModuleExportRecords = {
 	 */
 	initializeDateRangeSelector() {
 
-		const period = ModuleExportRecords.$dateRangeSelector.attr('data-def-value');
+		const period = ModuleExtendedCDRs.$dateRangeSelector.attr('data-def-value');
 		let defPeriod = [moment(),moment()];
 		if(period !== '' && period !== undefined){
-			let periods = ModuleExportRecords.getStandardPeriods();
+			let periods = ModuleExtendedCDRs.getStandardPeriods();
 			if(periods[period] !== undefined){
 				defPeriod = periods[period];
 			}
@@ -405,12 +405,12 @@ const ModuleExportRecords = {
 
 		const options = {};
 		options.ranges = {
-			[globalTranslate.repModuleExportRecords_cdr_cal_Today]: [moment(), moment()],
-			[globalTranslate.repModuleExportRecords_cdr_cal_Yesterday]: [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
-			[globalTranslate.repModuleExportRecords_cdr_cal_LastWeek]: [moment().subtract(6, 'days'), moment()],
-			[globalTranslate.repModuleExportRecords_cdr_cal_Last30Days]: [moment().subtract(29, 'days'), moment()],
-			[globalTranslate.repModuleExportRecords_cdr_cal_ThisMonth]: [moment().startOf('month'), moment().endOf('month')],
-			[globalTranslate.repModuleExportRecords_cdr_cal_LastMonth]: [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')],
+			[globalTranslate.repModuleExtendedCDRs_cdr_cal_Today]: [moment(), moment()],
+			[globalTranslate.repModuleExtendedCDRs_cdr_cal_Yesterday]: [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+			[globalTranslate.repModuleExtendedCDRs_cdr_cal_LastWeek]: [moment().subtract(6, 'days'), moment()],
+			[globalTranslate.repModuleExtendedCDRs_cdr_cal_Last30Days]: [moment().subtract(29, 'days'), moment()],
+			[globalTranslate.repModuleExtendedCDRs_cdr_cal_ThisMonth]: [moment().startOf('month'), moment().endOf('month')],
+			[globalTranslate.repModuleExtendedCDRs_cdr_cal_LastMonth]: [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')],
 		};
 		options.alwaysShowCalendars = true;
 		options.autoUpdateInput = true;
@@ -430,9 +430,9 @@ const ModuleExportRecords = {
 		};
 		options.startDate = defPeriod[0];
 		options.endDate   = defPeriod[1];
-		ModuleExportRecords.$dateRangeSelector.daterangepicker(
+		ModuleExtendedCDRs.$dateRangeSelector.daterangepicker(
 			options,
-			ModuleExportRecords.cbDateRangeSelectorOnSelect,
+			ModuleExtendedCDRs.cbDateRangeSelectorOnSelect,
 		);
 	},
 	/**
@@ -442,26 +442,26 @@ const ModuleExportRecords = {
 	 * @param {string} label - The label.
 	 */
 	cbDateRangeSelectorOnSelect(start, end, label) {
-		ModuleExportRecords.$dateRangeSelector.attr('data-start', start.format('YYYY/MM/DD'));
-		ModuleExportRecords.$dateRangeSelector.attr('data-end', moment(end.format('YYYYMMDD')).endOf('day').format('YYYY/MM/DD'));
-		ModuleExportRecords.$dateRangeSelector.val(`${start.format('DD/MM/YYYY')} - ${end.format('DD/MM/YYYY') }`);
-		ModuleExportRecords.applyFilter();
+		ModuleExtendedCDRs.$dateRangeSelector.attr('data-start', start.format('YYYY/MM/DD'));
+		ModuleExtendedCDRs.$dateRangeSelector.attr('data-end', moment(end.format('YYYYMMDD')).endOf('day').format('YYYY/MM/DD'));
+		ModuleExtendedCDRs.$dateRangeSelector.val(`${start.format('DD/MM/YYYY')} - ${end.format('DD/MM/YYYY') }`);
+		ModuleExtendedCDRs.applyFilter();
 	},
 
 	/**
 	 * Applies the filter to the data table.
 	 */
 	applyFilter() {
-		const text  = ModuleExportRecords.getSearchText();
+		const text  = ModuleExtendedCDRs.getSearchText();
 
-		ModuleExportRecords.dataTable.search(text).draw();
-		ModuleExportRecords.$globalSearch.closest('div').addClass('loading');
+		ModuleExtendedCDRs.dataTable.search(text).draw();
+		ModuleExtendedCDRs.$globalSearch.closest('div').addClass('loading');
 	},
 
 	getSearchText() {
 		const filter = {
-			dateRangeSelector: ModuleExportRecords.$dateRangeSelector.val(),
-			globalSearch: ModuleExportRecords.$globalSearch.val(),
+			dateRangeSelector: ModuleExtendedCDRs.$dateRangeSelector.val(),
+			globalSearch: ModuleExtendedCDRs.$globalSearch.val(),
 			typeCall: $('#typeCall a.item.active').attr('data-tab'),
 			additionalFilter: $('#additionalFilter').dropdown('get value').replace(/,/g,' '),
 		};
@@ -480,10 +480,10 @@ const ModuleExportRecords = {
 	},
 
 	saveSearchSettings() {
-		let periods = ModuleExportRecords.getStandardPeriods();
+		let periods = ModuleExtendedCDRs.getStandardPeriods();
 		let dateRangeSelector = '';
 		$.each(periods,function(index,value){
-			if(ModuleExportRecords.$dateRangeSelector.val() ===  `${value[0].format('DD/MM/YYYY')} - ${value[1].format('DD/MM/YYYY')}`){
+			if(ModuleExtendedCDRs.$dateRangeSelector.val() ===  `${value[0].format('DD/MM/YYYY')} - ${value[1].format('DD/MM/YYYY')}`){
 				dateRangeSelector = index;
 			}
 		});
@@ -492,7 +492,7 @@ const ModuleExportRecords = {
 			'dateRangeSelector' : dateRangeSelector
 		};
 		$.ajax({
-			url: `${globalRootUrl}module-export-records/saveSearchSettings`,
+			url: `${globalRootUrl}${idUrl}/saveSearchSettings`,
 			type: 'POST',
 			headers: {
 				'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
@@ -511,10 +511,10 @@ const ModuleExportRecords = {
 	},
 
 	startCreateExcel() {
-		const text  = ModuleExportRecords.getSearchText();
+		const text  = ModuleExtendedCDRs.getSearchText();
 
 		$.ajax({
-			url: `${globalRootUrl}module-export-records/getHistory`,
+			url: `${globalRootUrl}${idUrl}/getHistory`,
 			type: 'POST',
 			headers: {
 				'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
@@ -588,18 +588,18 @@ const ModuleExportRecords = {
 					skipHeader: true  // Пропускаем автоматическое создание заголовков из ключей объекта
 				});
 				XLSX.utils.sheet_add_aoa(worksheet, [[
-					globalTranslate.repModuleExportRecords_cdr_ColumnTypeState,
+					globalTranslate.repModuleExtendedCDRs_cdr_ColumnTypeState,
 					globalTranslate.cdr_ColumnDate,
 					globalTranslate.cdr_ColumnFrom,
 					globalTranslate.cdr_ColumnTo,
-					globalTranslate.repModuleExportRecords_cdr_ColumnLine,
-					globalTranslate.repModuleExportRecords_cdr_ColumnWaitTime,
+					globalTranslate.repModuleExtendedCDRs_cdr_ColumnLine,
+					globalTranslate.repModuleExtendedCDRs_cdr_ColumnWaitTime,
 					globalTranslate.cdr_ColumnDuration,
-					globalTranslate.repModuleExportRecords_cdr_ColumnCallState,
+					globalTranslate.repModuleExtendedCDRs_cdr_ColumnCallState,
 				]], {origin: "A1"});
 
 				worksheet['!cols'] =  columns.map(col => ({
-					wch: 8 + ModuleExportRecords.getMaxWidth(flattenedData, col)
+					wch: 8 + ModuleExtendedCDRs.getMaxWidth(flattenedData, col)
 				}));
 
 				const workbook = XLSX.utils.book_new();
@@ -623,8 +623,8 @@ const ModuleExportRecords = {
 	},
 
 	startDownload(){
-		let startTime = ModuleExportRecords.$dateRangeSelector.attr('data-start');
-		let endTime   = ModuleExportRecords.$dateRangeSelector.attr('data-end');
+		let startTime = ModuleExtendedCDRs.$dateRangeSelector.attr('data-start');
+		let endTime   = ModuleExtendedCDRs.$dateRangeSelector.attr('data-end');
 		if(startTime === undefined){
 			startTime = moment().format('YYYY-MM-DD');
 			endTime   =  moment().endOf('day').format('YYYY-MM-DD HH:mm:ss')
@@ -635,13 +635,13 @@ const ModuleExportRecords = {
 		}else if($('#outRecord').checkbox('is checked')){
 			typeRec = 'out';
 		}
-		let numbers = ModuleExportRecords.$globalSearch.val();
+		let numbers = ModuleExtendedCDRs.$globalSearch.val();
 		window.open('/pbxcore/api/modules/'+className+'/downloads?start='+startTime+'&end='+endTime+"&numbers="+encodeURIComponent(numbers)+"&type="+typeRec, '_blank');
 	},
 
 	startDownloadHistory(){
-		let startTime = ModuleExportRecords.$dateRangeSelector.attr('data-start');
-		let endTime   = ModuleExportRecords.$dateRangeSelector.attr('data-end');
+		let startTime = ModuleExtendedCDRs.$dateRangeSelector.attr('data-start');
+		let endTime   = ModuleExtendedCDRs.$dateRangeSelector.attr('data-end');
 		if(startTime === undefined){
 			startTime = moment().format('YYYY-MM-DD');
 			endTime =  moment().endOf('day').format('YYYY-MM-DD HH:mm:ss')
@@ -652,7 +652,7 @@ const ModuleExportRecords = {
 		}else if($('#outRecord').checkbox('is checked')){
 			typeRec = 'out';
 		}
-		let numbers = ModuleExportRecords.$globalSearch.val();
+		let numbers = ModuleExtendedCDRs.$globalSearch.val();
 		window.open('/pbxcore/api/modules/'+className+'/downloads-history?start='+startTime+'&end='+endTime+"&numbers="+encodeURIComponent(numbers)+"&type="+typeRec, '_blank');
 	},
 

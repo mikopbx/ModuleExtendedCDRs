@@ -6,7 +6,7 @@
  * Written by Nikolay Beketov, 9 2018
  *
  */
-namespace Modules\ModuleExportRecords\App\Forms;
+namespace Modules\ModuleExtendedCDRs\App\Forms;
 
 use Phalcon\Forms\Form;
 use Phalcon\Forms\Element\Text;
@@ -18,7 +18,7 @@ use Phalcon\Forms\Element\Hidden;
 use Phalcon\Forms\Element\Select;
 
 
-class ModuleExportRecordsForm extends Form
+class ModuleExtendedCDRsForm extends Form
 {
 
     public function initialize($entity = null, $options = null) :void

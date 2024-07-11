@@ -1,7 +1,7 @@
 {
   "developer":"MIKO",
-  "moduleUniqueID":"ModuleExportRecords",
+  "moduleUniqueID":"ModuleExtendedCDRs",
   "support_email": "help@miko.ru",
   "version": "1.4",
-  "min_pbx_version": "2020.2.757"
+  "min_pbx_version": "2024.1.114"
 }

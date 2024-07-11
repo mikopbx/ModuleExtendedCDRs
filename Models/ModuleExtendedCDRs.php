@@ -11,10 +11,10 @@
  *
  */
 
-namespace Modules\ModuleExportRecords\Models;
+namespace Modules\ModuleExtendedCDRs\Models;
 use MikoPBX\Modules\Models\ModulesModelsBase;
 
-class ModuleExportRecords extends ModulesModelsBase
+class ModuleExtendedCDRs extends ModulesModelsBase
 {
     /**
      * @Primary
@@ -79,7 +79,7 @@ class ModuleExportRecords extends ModulesModelsBase
 
     public function initialize(): void
     {
-        $this->setSource('m_ModuleExportRecords');
+        $this->setSource('m_ModuleExtendedCDRs');
         parent::initialize();
     }
 

@@ -11,7 +11,7 @@
  *
  */
 
-namespace Modules\ModuleExportRecords\Models;
+namespace Modules\ModuleExtendedCDRs\Models;
 
 use MikoPBX\Modules\Models\ModulesModelsBase;
 
