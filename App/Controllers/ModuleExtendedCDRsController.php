@@ -136,11 +136,23 @@ class ModuleExtendedCDRsController extends BaseController
 
         // Список выбора очередей.
         $this->view->queues = CallQueues::find(['columns' => ['id', 'name']]);
-        $this->view->users  = Extensions::find(["type = 'SIP'", 'columns' => ['number', 'callerid', 'userid']])->toArray();
-
         $this->view->groups = [];
+
         if(class_exists('\Modules\ModuleUsersGroups\Models\UsersGroups')){
             $this->view->groups = UsersGroups::find(['columns' => ['id', 'name']])->toArray();
+        }
+        $filterNumbers = [];
+        PBXConfModulesProvider::hookModulesMethod(CDRConfigInterface::APPLY_ACL_FILTERS_TO_CDR_QUERY, [&$filterNumbers]);
+        $filteredExtensions = $filterNumbers['bind']['filteredExtensions']??[];
+        if(!empty($filteredExtensions)){
+            $filterUsers = [
+                "number IN ({filteredExtensions:array}) AND type = 'SIP'",
+                'columns' => ['number', 'callerid', 'userid'],
+                'bind' => ['filteredExtensions' => $filteredExtensions]
+            ];
+            $this->view->users  = Extensions::find($filterUsers)->toArray();
+        }else{
+            $this->view->users  = Extensions::find(["type = 'SIP'", 'columns' => ['number', 'callerid', 'userid']])->toArray();
         }
         $this->view->rules = ExportRules::find()->toArray();
 
@@ -161,6 +173,7 @@ class ModuleExtendedCDRsController extends BaseController
                 }
             }
         }
+
         foreach ($this->view->users as $user){
             foreach ($filterNumbers as $number){
                 if($user['number'] === $number){
