@@ -489,10 +489,13 @@ class ModuleExtendedCDRsController extends BaseController
             $linkedRecord->line         = $providerName[$record->line]??$record->line;
             $linkedRecord->disposition = $linkedRecord->disposition !== 'ANSWERED' ? $disposition : 'ANSWERED';
             $linkedRecord->start = $linkedRecord->start === '' ? $record->start : $linkedRecord->start;
-            if($record->stateCall !== CallHistory::CALL_STATE_APPLICATION){
+            if($record->stateCall === CallHistory::CALL_STATE_OK){
+                $linkedRecord->stateCall = $statsCall[$record->stateCall];
+                $linkedRecord->stateCallIndex = $record->stateCall;
+            }elseif($record->stateCall !== CallHistory::CALL_STATE_APPLICATION){
                 $linkedRecord->stateCall = ($linkedRecord->stateCall === '') ? $statsCall[$record->stateCall] : $linkedRecord->stateCall;
+                $linkedRecord->stateCallIndex = $linkedRecord->stateCall === '' ? $record->stateCall : $linkedRecord->stateCall;
             }
-            $linkedRecord->stateCallIndex = $linkedRecord->stateCall === '' ? $record->stateCall : $linkedRecord->stateCall;
             $linkedRecord->endtime = max($record->endtime , $linkedRecord->endtime);
             $linkedRecord->src_num = $linkedRecord->src_num === '' ? $record->src_num : $linkedRecord->src_num;
             $linkedRecord->dst_num = $linkedRecord->dst_num === '' ? $record->dst_num : $linkedRecord->dst_num;
