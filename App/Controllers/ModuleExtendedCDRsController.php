@@ -148,11 +148,12 @@ class ModuleExtendedCDRsController extends BaseController
             $filterUsers = [
                 "number IN ({filteredExtensions:array}) AND type = 'SIP'",
                 'columns' => ['number', 'callerid', 'userid'],
-                'bind' => ['filteredExtensions' => $filteredExtensions]
+                'bind' => ['filteredExtensions' => $filteredExtensions],
+                'order' => 'number'
             ];
             $this->view->users  = Extensions::find($filterUsers)->toArray();
         }else{
-            $this->view->users  = Extensions::find(["type = 'SIP'", 'columns' => ['number', 'callerid', 'userid']])->toArray();
+            $this->view->users  = Extensions::find(["type = 'SIP'", 'order' => 'number DESC', 'columns' => ['number', 'callerid', 'userid']])->toArray();
         }
         $this->view->rules = ExportRules::find()->toArray();
 
