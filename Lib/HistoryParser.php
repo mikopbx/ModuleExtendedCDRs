@@ -32,6 +32,7 @@ use Phalcon\Di;
 class HistoryParser
 {
     public const LIMIT_CDR = 500;
+    public const CDR_SYNC_PROGRESS_KEY = "cdrSyncProgress";
 
     /**
      * Retrieves all completed temporary CDRs.
@@ -180,6 +181,21 @@ class HistoryParser
         }
 
         return $resultRows;
+    }
+
+    /**
+     * Возвращает данные последней CDR ID и START.
+     * @return array
+     */
+    public static function getLastCdrData():array
+    {
+        $filter = [
+            'columns' => 'id,start',
+            'order' => 'id DESC',
+            'limit' => 1,
+        ];
+        $res = \Modules\ModuleExtendedCDRs\Lib\HistoryParser::getCdr($filter);
+        return $res[0]??[];
     }
 
     /**

@@ -68,6 +68,7 @@ const ModuleExtendedCDRs = {
 
 		window.addEventListener('ModuleStatusChanged', window[className].checkStatusToggle);
 		window[className].initializeForm();
+
 		$('.menu .item').tab();
 		$('#typeCall.menu a.item').on('click', function (e) {
 			ModuleExtendedCDRs.applyFilter();
@@ -237,7 +238,37 @@ const ModuleExtendedCDRs = {
 			}
 		});
 
+		window[className].updateSyncState();
+		setInterval(window[className].updateSyncState, 5000);
+	},
 
+	/**
+	 *
+	 */
+	updateSyncState(){
+		// Выполняем GET-запрос
+		let divProgress = $("#sync-progress");
+		$.ajax({
+			url: `${globalRootUrl}${idUrl}/getState`,
+			method: 'GET',
+			success: function(response) {
+				if(response.stateData.lastId - response.stateData.nowId > 0){
+					divProgress.show();
+				}else{
+					divProgress.hide();
+				}
+				divProgress.progress({
+					total: response.stateData.lastId, value: response.stateData.nowId,
+					text: {
+						active  : globalTranslate.repModuleExtendedCDRs_syncState
+					},
+					error: function(jqXHR, textStatus, errorThrown) {
+						// Обработка ошибки
+						console.error('Ошибка запроса:', textStatus, errorThrown);
+					}
+				})
+			}
+		});
 	},
 
 	/**

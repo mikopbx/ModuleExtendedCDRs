@@ -16,6 +16,8 @@ use MikoPBX\Modules\Config\CDRConfigInterface;
 use MikoPBX\Modules\PbxExtensionUtils;
 use Modules\ModuleExtendedCDRs\App\Forms\ModuleExtendedCDRsForm;
 use Modules\ModuleExtendedCDRs\bin\ConnectorDB;
+use Modules\ModuleExtendedCDRs\Lib\CacheManager;
+use Modules\ModuleExtendedCDRs\Lib\HistoryParser;
 use Modules\ModuleExtendedCDRs\Models\CallHistory;
 use Modules\ModuleExtendedCDRs\Models\ExportRules;
 use Modules\ModuleExtendedCDRs\Models\ModuleExtendedCDRs;
@@ -110,9 +112,12 @@ class ModuleExtendedCDRsController extends BaseController
         $footerCollection->addJS('js/vendor/moment/moment.min.js', true);
         $footerCollection->addJS('js/vendor/datepicker/daterangepicker.js', true);
         $footerCollection->addJs('js/vendor/range/range.min.js', true);
+        $footerCollection->addJs('js/vendor/semantic/progress.min.js', true);
+
 
         $headerCollectionCSS = $this->assets->collection('headerCSS');
         $headerCollectionCSS->addCss("css/cache/{$this->moduleUniqueID}/module-export-records.css", true);
+        $headerCollectionCSS->addCss('css/vendor/semantic/progress.min.css', true);
         $headerCollectionCSS->addCss('css/vendor/datatable/dataTables.semanticui.min.css', true);
         $headerCollectionCSS->addCss('css/vendor/semantic/modal.min.css', true);
 
@@ -361,6 +366,15 @@ class ModuleExtendedCDRsController extends BaseController
         }
         $settings->searchSettings = $searchPhrase['value']??'';
         $settings->save();
+    }
+
+    /**
+     * Returns the synchronization progress of the call history.
+     * @return void
+     */
+    public function getStateAction(): void
+    {
+        $this->view->stateData = CacheManager::getCacheData(HistoryParser::CDR_SYNC_PROGRESS_KEY);
     }
 
     /**

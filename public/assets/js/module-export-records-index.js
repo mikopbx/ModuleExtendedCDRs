@@ -242,6 +242,39 @@ var ModuleExtendedCDRs = {
         Extensions.updatePhonesRepresent('need-update');
       }
     });
+    window[className].updateSyncState();
+    setInterval(window[className].updateSyncState, 5000);
+  },
+
+  /**
+   *
+   */
+  updateSyncState: function updateSyncState() {
+    // Выполняем GET-запрос
+    var divProgress = $("#sync-progress");
+    $.ajax({
+      url: "".concat(globalRootUrl).concat(idUrl, "/getState"),
+      method: 'GET',
+      success: function success(response) {
+        if (response.stateData.lastId - response.stateData.nowId > 0) {
+          divProgress.show();
+        } else {
+          divProgress.hide();
+        }
+
+        divProgress.progress({
+          total: response.stateData.lastId,
+          value: response.stateData.nowId,
+          text: {
+            active: globalTranslate.repModuleExtendedCDRs_syncState
+          },
+          error: function error(jqXHR, textStatus, errorThrown) {
+            // Обработка ошибки
+            console.error('Ошибка запроса:', textStatus, errorThrown);
+          }
+        });
+      }
+    });
   },
 
   /**
