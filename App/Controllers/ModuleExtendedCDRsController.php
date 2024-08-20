@@ -458,6 +458,7 @@ class ModuleExtendedCDRsController extends BaseController
             'answered'      => [],
             'detail'        => [],
             'ids'           => [],
+            'did'           => ''
         ];
 
         $providers = Sip::find("type='friend'");
@@ -510,6 +511,11 @@ class ModuleExtendedCDRsController extends BaseController
                 $linkedRecord->stateCall = ($linkedRecord->stateCall === '') ? $statsCall[$record->stateCall] : $linkedRecord->stateCall;
                 $linkedRecord->stateCallIndex = $linkedRecord->stateCall === '' ? $record->stateCall : $linkedRecord->stateCall;
             }
+
+            if($linkedRecord->typeCall === CallHistory::CALL_TYPE_INCOMING){
+                $linkedRecord->did =  ($linkedRecord->did === '') ? $record->did : $linkedRecord->did;
+            }
+
             $linkedRecord->endtime = max($record->endtime , $linkedRecord->endtime);
             $linkedRecord->src_num = $linkedRecord->src_num === '' ? $record->src_num : $linkedRecord->src_num;
             $linkedRecord->dst_num = $linkedRecord->dst_num === '' ? $record->dst_num : $linkedRecord->dst_num;
@@ -571,6 +577,7 @@ class ModuleExtendedCDRsController extends BaseController
                 'typeCall'    => $cdr->typeCall,
                 'typeCallDesc'=> $cdr->typeCallDesc,
                 'line'        => $cdr->line,
+                'did'         => $cdr->did,
                 'DT_RowId'    => $cdr->linkedid,
                 'DT_RowClass' => trim($additionalClass.' '.('NOANSWER' === $cdr->disposition ? 'negative' : '')),
                 'ids'         => rawurlencode(implode('&', array_unique($cdr->ids))),

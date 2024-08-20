@@ -163,7 +163,13 @@ const ModuleExtendedCDRs = {
 				if (data.ids !== '') {
 					duration += '<i data-ids="' + data.ids + '" class="file alternate outline icon">';
 				}
-				$('td', row).eq(4).html(data.line).addClass('right aligned');
+
+				let lineText = data.line;
+				if(data.did !== ""){
+					lineText = `${data.line} <a class="ui mini basic label">${data.did}</a>`;
+				}
+				$('td', row).eq(4).html(lineText).addClass('right aligned');
+
 				$('td', row).eq(5).html(data.waitTime).addClass('right aligned');
 				$('td', row).eq(6).html(duration).addClass('right aligned');
 				$('td', row).eq(7).html(data.stateCall).addClass('right aligned');
