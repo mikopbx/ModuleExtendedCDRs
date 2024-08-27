@@ -163,7 +163,13 @@ var ModuleExtendedCDRs = {
           duration += '<i data-ids="' + data.ids + '" class="file alternate outline icon">';
         }
 
-        $('td', row).eq(4).html(data.line).addClass('right aligned');
+        var lineText = data.line;
+
+        if (data.did !== "") {
+          lineText = "".concat(data.line, " <a class=\"ui mini basic label\">").concat(data.did, "</a>");
+        }
+
+        $('td', row).eq(4).html(lineText).addClass('right aligned');
         $('td', row).eq(5).html(data.waitTime).addClass('right aligned');
         $('td', row).eq(6).html(duration).addClass('right aligned');
         $('td', row).eq(7).html(data.stateCall).addClass('right aligned');
@@ -234,6 +240,39 @@ var ModuleExtendedCDRs = {
           return new CDRPlayer(id);
         });
         Extensions.updatePhonesRepresent('need-update');
+      }
+    });
+    window[className].updateSyncState();
+    setInterval(window[className].updateSyncState, 5000);
+  },
+
+  /**
+   *
+   */
+  updateSyncState: function updateSyncState() {
+    // Выполняем GET-запрос
+    var divProgress = $("#sync-progress");
+    $.ajax({
+      url: "".concat(globalRootUrl).concat(idUrl, "/getState"),
+      method: 'GET',
+      success: function success(response) {
+        if (response.stateData.lastId - response.stateData.nowId > 0) {
+          divProgress.show();
+        } else {
+          divProgress.hide();
+        }
+
+        divProgress.progress({
+          total: response.stateData.lastId,
+          value: response.stateData.nowId,
+          text: {
+            active: globalTranslate.repModuleExtendedCDRs_syncState
+          },
+          error: function error(jqXHR, textStatus, errorThrown) {
+            // Обработка ошибки
+            console.error('Ошибка запроса:', textStatus, errorThrown);
+          }
+        });
       }
     });
   },

@@ -22,6 +22,7 @@ namespace Modules\ModuleExtendedCDRs\bin;
 use MikoPBX\Core\System\Util;
 use MikoPBX\Core\Workers\WorkerBase;
 use MikoPBX\Core\System\BeanstalkClient;
+use Modules\ModuleExtendedCDRs\Lib\CacheManager;
 use Modules\ModuleExtendedCDRs\Lib\HistoryParser;
 use Modules\ModuleExtendedCDRs\Lib\Logger;
 use Exception;
@@ -259,7 +260,16 @@ class ConnectorDB extends WorkerBase
             }
         }
         if($oldOffset !== $this->cdrOffset){
-            $this->logger->writeInfo(" $$oldOffset !== $this->cdrOffset ");
+            $this->logger->writeInfo(" $oldOffset !== $this->cdrOffset ");
+            $lastCdrData = HistoryParser::getLastCdrData();
+            if(!empty($lastCdrData)){
+                $tmpCdrData = [
+                    'lastId'    => 1*$lastCdrData['id'],
+                    'lastDate'  => $lastCdrData['start'],
+                    'nowId'     => $this->cdrOffset
+                ];
+                CacheManager::setCacheData(HistoryParser::CDR_SYNC_PROGRESS_KEY, $tmpCdrData);
+            }
             $this->updateSettings($this->cdrOffset);
         }
     }

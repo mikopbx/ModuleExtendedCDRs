@@ -1,4 +1,8 @@
 <form class="ui large grey segment form" id="module-extended-cdr-form">
+    <div id="sync-progress" class="ui progress">
+      <div class="bar"></div>
+      <div class="label"></div>
+    </div>
      <div class="ui bottom attached active tab" data-tab="first">
          <div class="ui  grid">
              <div class="ui row" style="padding-bottom:3px">

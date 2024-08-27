@@ -16,6 +16,8 @@ use MikoPBX\Modules\Config\CDRConfigInterface;
 use MikoPBX\Modules\PbxExtensionUtils;
 use Modules\ModuleExtendedCDRs\App\Forms\ModuleExtendedCDRsForm;
 use Modules\ModuleExtendedCDRs\bin\ConnectorDB;
+use Modules\ModuleExtendedCDRs\Lib\CacheManager;
+use Modules\ModuleExtendedCDRs\Lib\HistoryParser;
 use Modules\ModuleExtendedCDRs\Models\CallHistory;
 use Modules\ModuleExtendedCDRs\Models\ExportRules;
 use Modules\ModuleExtendedCDRs\Models\ModuleExtendedCDRs;
@@ -110,9 +112,12 @@ class ModuleExtendedCDRsController extends BaseController
         $footerCollection->addJS('js/vendor/moment/moment.min.js', true);
         $footerCollection->addJS('js/vendor/datepicker/daterangepicker.js', true);
         $footerCollection->addJs('js/vendor/range/range.min.js', true);
+        $footerCollection->addJs('js/vendor/semantic/progress.min.js', true);
+
 
         $headerCollectionCSS = $this->assets->collection('headerCSS');
         $headerCollectionCSS->addCss("css/cache/{$this->moduleUniqueID}/module-export-records.css", true);
+        $headerCollectionCSS->addCss('css/vendor/semantic/progress.min.css', true);
         $headerCollectionCSS->addCss('css/vendor/datatable/dataTables.semanticui.min.css', true);
         $headerCollectionCSS->addCss('css/vendor/semantic/modal.min.css', true);
 
@@ -136,11 +141,24 @@ class ModuleExtendedCDRsController extends BaseController
 
         // Список выбора очередей.
         $this->view->queues = CallQueues::find(['columns' => ['id', 'name']]);
-        $this->view->users  = Extensions::find(["type = 'SIP'", 'columns' => ['number', 'callerid', 'userid']])->toArray();
-
         $this->view->groups = [];
+
         if(class_exists('\Modules\ModuleUsersGroups\Models\UsersGroups')){
             $this->view->groups = UsersGroups::find(['columns' => ['id', 'name']])->toArray();
+        }
+        $filterNumbers = [];
+        PBXConfModulesProvider::hookModulesMethod(CDRConfigInterface::APPLY_ACL_FILTERS_TO_CDR_QUERY, [&$filterNumbers]);
+        $filteredExtensions = $filterNumbers['bind']['filteredExtensions']??[];
+        if(!empty($filteredExtensions)){
+            $filterUsers = [
+                "number IN ({filteredExtensions:array}) AND type = 'SIP'",
+                'columns' => ['number', 'callerid', 'userid'],
+                'bind' => ['filteredExtensions' => $filteredExtensions],
+                'order' => 'number'
+            ];
+            $this->view->users  = Extensions::find($filterUsers)->toArray();
+        }else{
+            $this->view->users  = Extensions::find(["type = 'SIP'", 'order' => 'number DESC', 'columns' => ['number', 'callerid', 'userid']])->toArray();
         }
         $this->view->rules = ExportRules::find()->toArray();
 
@@ -161,6 +179,7 @@ class ModuleExtendedCDRsController extends BaseController
                 }
             }
         }
+
         foreach ($this->view->users as $user){
             foreach ($filterNumbers as $number){
                 if($user['number'] === $number){
@@ -350,6 +369,15 @@ class ModuleExtendedCDRsController extends BaseController
     }
 
     /**
+     * Returns the synchronization progress of the call history.
+     * @return void
+     */
+    public function getStateAction(): void
+    {
+        $this->view->stateData = CacheManager::getCacheData(HistoryParser::CDR_SYNC_PROGRESS_KEY);
+    }
+
+    /**
      * Requests new package of call history records for DataTable JSON.
      *
      * @return void
@@ -444,6 +472,7 @@ class ModuleExtendedCDRsController extends BaseController
             'answered'      => [],
             'detail'        => [],
             'ids'           => [],
+            'did'           => ''
         ];
 
         $providers = Sip::find("type='friend'");
@@ -489,10 +518,18 @@ class ModuleExtendedCDRsController extends BaseController
             $linkedRecord->line         = $providerName[$record->line]??$record->line;
             $linkedRecord->disposition = $linkedRecord->disposition !== 'ANSWERED' ? $disposition : 'ANSWERED';
             $linkedRecord->start = $linkedRecord->start === '' ? $record->start : $linkedRecord->start;
-            if($record->stateCall !== CallHistory::CALL_STATE_APPLICATION){
+            if($record->stateCall === CallHistory::CALL_STATE_OK){
+                $linkedRecord->stateCall = $statsCall[$record->stateCall];
+                $linkedRecord->stateCallIndex = $record->stateCall;
+            }elseif($record->stateCall !== CallHistory::CALL_STATE_APPLICATION){
                 $linkedRecord->stateCall = ($linkedRecord->stateCall === '') ? $statsCall[$record->stateCall] : $linkedRecord->stateCall;
+                $linkedRecord->stateCallIndex = $linkedRecord->stateCall === '' ? $record->stateCall : $linkedRecord->stateCall;
             }
-            $linkedRecord->stateCallIndex = $linkedRecord->stateCall === '' ? $record->stateCall : $linkedRecord->stateCall;
+
+            if($linkedRecord->typeCall === CallHistory::CALL_TYPE_INCOMING){
+                $linkedRecord->did =  ($linkedRecord->did === '') ? $record->did : $linkedRecord->did;
+            }
+
             $linkedRecord->endtime = max($record->endtime , $linkedRecord->endtime);
             $linkedRecord->src_num = $linkedRecord->src_num === '' ? $record->src_num : $linkedRecord->src_num;
             $linkedRecord->dst_num = $linkedRecord->dst_num === '' ? $record->dst_num : $linkedRecord->dst_num;
@@ -554,6 +591,7 @@ class ModuleExtendedCDRsController extends BaseController
                 'typeCall'    => $cdr->typeCall,
                 'typeCallDesc'=> $cdr->typeCallDesc,
                 'line'        => $cdr->line,
+                'did'         => $cdr->did,
                 'DT_RowId'    => $cdr->linkedid,
                 'DT_RowClass' => trim($additionalClass.' '.('NOANSWER' === $cdr->disposition ? 'negative' : '')),
                 'ids'         => rawurlencode(implode('&', array_unique($cdr->ids))),
