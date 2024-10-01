@@ -22,7 +22,6 @@ namespace Modules\ModuleExtendedCDRs\Lib;
 use MikoPBX\Common\Providers\ConfigProvider;
 use MikoPBX\Core\System\Util;
 use Phalcon\Cache\Adapter\Redis;
-use Phalcon\Di;
 use Phalcon\Storage\SerializerFactory;
 
 class CacheManager
@@ -36,7 +35,7 @@ class CacheManager
     public static function cacheAdapter():Redis
     {
         $serializerFactory = new SerializerFactory();
-        $di     = Di::getDefault();
+        $di     = MikoPBXVersion::getDefaultDi();
         $options = [
             'defaultSerializer' => 'Php',
             'lifetime'          => 86400,

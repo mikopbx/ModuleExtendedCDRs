@@ -12,8 +12,6 @@ namespace Modules\ModuleExtendedCDRs\Lib\RestAPI\Controllers;
 use MikoPBX\Common\Providers\CDRDatabaseProvider;
 use MikoPBX\Core\System\Util;
 use MikoPBX\PBXCoreREST\Controllers\Modules\ModulesControllerBase;
-use Modules\ModuleExtendedCDRs\Lib\XlsxWriter;
-use Modules\ModuleExtendedCDRs\Lib\HistoryParser;
 
 class ApiController extends ModulesControllerBase
 {

@@ -31,7 +31,7 @@ require_once(dirname(__DIR__).'/vendor/autoload.php');
 class Logger
 {
     public bool $debug;
-    private \Phalcon\Logger $logger;
+    private $logger;
     private string $module_name;
     private string $logFile;
 
@@ -54,7 +54,8 @@ class Logger
         $adapter       = new Stream($this->logFile);
         $lineFormatter = new LineFormatter("[%date%] %message%", "Y-m-d H:i:s");
         $adapter->setFormatter($lineFormatter);
-        $this->logger  = new \Phalcon\Logger(
+        $loggerClass = MikoPBXVersion::getLoggerClass();
+        $this->logger  = new $loggerClass(
             'messages',
             [
                 'main' => $adapter,
