@@ -296,7 +296,7 @@ class ConnectorDB extends WorkerBase
         $tagWriter->tagformats        = ['id3v2.3'];
         $tagWriter->overwrite_tags    = true;
         $tagWriter->tag_encoding      = 'UTF-8';
-        $tagWriter->remove_other_tags = false; // Не удалять другие типы тегов
+        $tagWriter->remove_other_tags = false;
 
         $formattedDate  = date('Y-m-d-H_i', strtotime($data->start));
         $uid            = str_replace('mikopbx-', '', $data->linkedid);
