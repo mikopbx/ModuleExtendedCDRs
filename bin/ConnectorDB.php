@@ -305,6 +305,12 @@ class ConnectorDB extends WorkerBase
         $tagWriter->tag_data = ['title'   => [$prettyFilename]];
         $tagWriter->WriteTags();
         unset($getID3, $tagWriter);
+
+        $dirLink = str_replace('/monitor/', '/pretty-monitor/', dirname($data->recordingfile,2));
+        $mkdirPath = Util::which('mkdir');
+        $lnPath = Util::which('ln');
+        shell_exec("$mkdirPath -p $dirLink; $lnPath -s $data->recordingfile $dirLink/$prettyFilename.mp3");
+
     }
 
     /**
