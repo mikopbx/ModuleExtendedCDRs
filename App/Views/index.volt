@@ -32,6 +32,7 @@
                      <div class="ui action  input">
                         <input type="search" id="globalsearch" placeholder="{{ t._('repModuleExtendedCDRs_FindCallsPlaceholder') }}" aria-controls="KeysTable">
                         <button id="createExcelButton" class="ui icon basic button"> <i class="green file excel outline icon"></i></button>
+                        <button id="createPdfButton" class="ui icon basic button"> <i class="red file pdf outline icon"></i></button>
                         <button type="button" id="saveSearchSettings" class="ui icon basic button">
                              <i class="blue save outline icon"></i>
                         </button>

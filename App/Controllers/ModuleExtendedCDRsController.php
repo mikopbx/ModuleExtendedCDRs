@@ -106,6 +106,8 @@ class ModuleExtendedCDRsController extends BaseController
         $footerCollection->addJs('js/vendor/datatable/dataTables.semanticui.js', true);
         $footerCollection->addJs("js/cache/{$this->moduleUniqueID}/module-export-records-index.js", true);
         $footerCollection->addJs("js/cache/{$this->moduleUniqueID}/xlsx.full.min.js", true);
+        $footerCollection->addJs("js/cache/{$this->moduleUniqueID}/pdfmake.min.js", true);
+        $footerCollection->addJs("js/cache/{$this->moduleUniqueID}/vfs_fonts.js", true);
         $footerCollection->addJs('js/vendor/jquery.tablednd.min.js', true);
         $footerCollection->addJs('js/vendor/semantic/modal.min.js', true);
         $footerCollection->addJs('js/pbx/CallDetailRecords/call-detail-records-player.js', true);

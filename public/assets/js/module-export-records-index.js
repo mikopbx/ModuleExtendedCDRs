@@ -65,6 +65,8 @@ var ModuleExtendedCDRs = {
    * On page load we init some Semantic UI library
    */
   initialize: function initialize() {
+    // Удаляем отступы контейнера.
+    $('#main-content-container').removeClass('container');
     ModuleExtendedCDRs.initializeDateRangeSelector(); // инициализируем чекбоксы и выподающие менюшки
 
     window[className].$checkBoxes.checkbox();
@@ -78,7 +80,10 @@ var ModuleExtendedCDRs = {
       ModuleExtendedCDRs.applyFilter();
     });
     $('#createExcelButton').on('click', function (e) {
-      ModuleExtendedCDRs.startCreateExcel();
+      ModuleExtendedCDRs.startCreateExcelPDF('excel');
+    });
+    $('#createPdfButton').on('click', function (e) {
+      ModuleExtendedCDRs.startCreateExcelPDF('pdf');
     });
     $('#saveSearchSettings').on('click', function (e) {
       ModuleExtendedCDRs.saveSearchSettings();
@@ -100,6 +105,7 @@ var ModuleExtendedCDRs = {
       },
       serverSide: true,
       processing: true,
+      info: false,
       columnDefs: [{
         defaultContent: "-",
         targets: "_all"
@@ -499,7 +505,7 @@ var ModuleExtendedCDRs = {
       }
     });
   },
-  startCreateExcel: function startCreateExcel() {
+  startCreateExcelPDF: function startCreateExcelPDF(type) {
     var text = ModuleExtendedCDRs.getSearchText();
     $.ajax({
       url: "".concat(globalRootUrl).concat(idUrl, "/getHistory"),
@@ -512,16 +518,7 @@ var ModuleExtendedCDRs = {
         'search[value]': text
       },
       success: function success(response) {
-        var flattenedData = [{
-          start: '',
-          src_num: '',
-          dst_num: '',
-          billsec: '',
-          stateCall: '',
-          typeCall: '',
-          line: '',
-          waitTime: ''
-        }];
+        var flattenedData = [];
         $.each(response.data, function (index, item) {
           var baseRecord = {
             start: item['0'],
@@ -531,7 +528,8 @@ var ModuleExtendedCDRs = {
             stateCall: item['stateCall'],
             typeCall: item['typeCallDesc'],
             line: item['line'],
-            waitTime: item['waitTime']
+            waitTime: item['waitTime'],
+            id: item['DT_RowId']
           }; // Добавляем основной элемент
 
           flattenedData.push(baseRecord); // Если есть вложенные данные, добавляем их сразу после основного элемента
@@ -548,30 +546,95 @@ var ModuleExtendedCDRs = {
                   stateCall: nestedItem.stateCall,
                   typeCall: item['typeCallDesc'],
                   line: item['line'],
-                  waitTime: nestedItem.waitTime // Другие свойства можно добавить здесь
-
+                  waitTime: nestedItem.waitTime,
+                  id: item['DT_RowId']
                 });
               }
             });
           }
         });
-        var columns = ["typeCall", "start", "src_num", "dst_num", "line", "waitTime", "billsec", "stateCall"];
-        var worksheet = XLSX.utils.json_to_sheet(flattenedData, {
-          header: columns,
-          skipHeader: true // Пропускаем автоматическое создание заголовков из ключей объекта
+        var columns = ["typeCall", "start", "src_num", "dst_num", "line", "waitTime", "billsec", "stateCall", "id"];
 
-        });
-        XLSX.utils.sheet_add_aoa(worksheet, [[globalTranslate.repModuleExtendedCDRs_cdr_ColumnTypeState, globalTranslate.cdr_ColumnDate, globalTranslate.cdr_ColumnFrom, globalTranslate.cdr_ColumnTo, globalTranslate.repModuleExtendedCDRs_cdr_ColumnLine, globalTranslate.repModuleExtendedCDRs_cdr_ColumnWaitTime, globalTranslate.cdr_ColumnDuration, globalTranslate.repModuleExtendedCDRs_cdr_ColumnCallState]], {
-          origin: "A1"
-        });
-        worksheet['!cols'] = columns.map(function (col) {
-          return {
-            wch: 8 + ModuleExtendedCDRs.getMaxWidth(flattenedData, col)
+        if (type === 'excel') {
+          var worksheet = XLSX.utils.json_to_sheet(flattenedData, {
+            header: columns,
+            skipHeader: true // Пропускаем автоматическое создание заголовков из ключей объекта
+
+          });
+          XLSX.utils.sheet_add_aoa(worksheet, [[globalTranslate.repModuleExtendedCDRs_cdr_ColumnTypeState, globalTranslate.cdr_ColumnDate, globalTranslate.cdr_ColumnFrom, globalTranslate.cdr_ColumnTo, globalTranslate.repModuleExtendedCDRs_cdr_ColumnLine, globalTranslate.repModuleExtendedCDRs_cdr_ColumnWaitTime, globalTranslate.cdr_ColumnDuration, globalTranslate.repModuleExtendedCDRs_cdr_ColumnCallState, 'id']], {
+            origin: "A1"
+          });
+          worksheet['!cols'] = columns.map(function (col) {
+            return {
+              wch: 8 + ModuleExtendedCDRs.getMaxWidth(flattenedData, col)
+            };
+          });
+          var workbook = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(workbook, worksheet, "cdr");
+          XLSX.writeFile(workbook, "history.xlsx");
+        } else {
+          var tableBody = [[{
+            text: globalTranslate.repModuleExtendedCDRs_cdr_ColumnTypeState,
+            style: 'tableHeader'
+          }, {
+            text: globalTranslate.cdr_ColumnDate,
+            style: 'tableHeader'
+          }, {
+            text: globalTranslate.cdr_ColumnFrom,
+            style: 'tableHeader'
+          }, {
+            text: globalTranslate.cdr_ColumnTo,
+            style: 'tableHeader'
+          }, {
+            text: globalTranslate.repModuleExtendedCDRs_cdr_ColumnLine,
+            style: 'tableHeader'
+          }, {
+            text: globalTranslate.repModuleExtendedCDRs_cdr_ColumnWaitTime,
+            style: 'tableHeader'
+          }, {
+            text: globalTranslate.cdr_ColumnDuration,
+            style: 'tableHeader'
+          }, {
+            text: globalTranslate.repModuleExtendedCDRs_cdr_ColumnCallState,
+            style: 'tableHeader'
+          }, {
+            text: 'id',
+            style: 'tableHeader'
+          }]];
+          flattenedData.forEach(function (item) {
+            tableBody.push([item.typeCall, item.start, item.src_num, item.dst_num, item.line, item.waitTime, item.billsec, item.stateCall, item.id]);
+          });
+          var docDefinition = {
+            pageOrientation: 'landscape',
+            content: [// { text: 'Call Details', style: 'header' },
+            {
+              table: {
+                headerRows: 1,
+                widths: ['auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto'],
+                body: tableBody
+              },
+              layout: {
+                fillColor: function fillColor(rowIndex, node, columnIndex) {
+                  return rowIndex === 0 ? '#CCCCCC' : null; // Цвет заливки для заголовка таблицы
+                }
+              }
+            }],
+            styles: {
+              header: {
+                fontSize: 18,
+                bold: true,
+                margin: [0, 0, 0, 10]
+              },
+              tableHeader: {
+                bold: true,
+                fontSize: 12,
+                color: 'black',
+                alignment: 'center'
+              }
+            }
           };
-        });
-        var workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "cdr");
-        XLSX.writeFile(workbook, "history.xlsx");
+          pdfMake.createPdf(docDefinition).download('history.pdf');
+        }
       },
       error: function error(xhr, status, _error4) {
         console.error(_error4);
