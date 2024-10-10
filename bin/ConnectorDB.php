@@ -289,6 +289,9 @@ class ConnectorDB extends WorkerBase
         if(!file_exists($data->recordingfile)){
             return;
         }
+
+        $cover_image = dirname(__DIR__).'/public/assets/img/mikopbx-picture.jpg';
+
         $getID3    = new getID3();
         $tagWriter = new getid3_writetags();
 
@@ -300,9 +303,21 @@ class ConnectorDB extends WorkerBase
 
         $formattedDate  = date('Y-m-d-H_i', strtotime($data->start));
         $uid            = str_replace('mikopbx-', '', $data->linkedid);
-        $prettyFilename = "$uid-$formattedDate-$data->src_num-$data->dst_num-id-$data->id";
+        $prettyFilename = "$uid-$formattedDate-$data->src_num-$data->dst_num";
 
-        $tagWriter->tag_data = ['title'   => [$prettyFilename]];
+        $soxPath = Util::which('soxi');
+        $tagWriter->tag_data = [
+            'title'   => [$prettyFilename],
+            'attached_picture' => [
+                [
+                    'data' => file_get_contents($cover_image),
+                    'picturetypeid' => 0x03,
+                    'description' => 'MikoPBX',
+                    'mime' => 'image/jpeg'
+                ]
+            ],
+            'comment' => [md5($prettyFilename.'_'.trim(shell_exec("$soxPath $data->recordingfile")??''))            ]
+        ];
         $tagWriter->WriteTags();
         unset($getID3, $tagWriter);
 

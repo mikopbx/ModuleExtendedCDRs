@@ -44,21 +44,6 @@ class ModuleExtendedCDRsForm extends Form
             'defaultValue' => 3,
         ]));
 
-
-        // checkbox_field
-        $checkAr = ['value' => null];
-        if ($entity->checkbox_field) {
-            $checkAr = ['checked' => 'checked', 'value' => null];
-        }
-        $this->add(new Check('checkbox_field', $checkAr));
-
-        // toggle_field
-        $checkAr = ['value' => null];
-        if ($entity->toggle_field) {
-            $checkAr = ['checked' => 'checked', 'value' => null];
-        }
-        $this->add(new Check('toggle_field', $checkAr));
-
         // dropdown_field
         $providers = new Select('dropdown_field', $options['providers'], [
             'using'    => [

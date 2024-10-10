@@ -541,6 +541,11 @@ class ModuleExtendedCDRsController extends BaseController
                 }else{
                     $waitTime = strtotime($record->answer) - strtotime($record->start);
                 }
+
+                $formattedDate  = date('Y-m-d-H_i', strtotime($linkedRecord->start));
+                $uid            = str_replace('mikopbx-', '', $linkedRecord->linkedid);
+                $prettyFilename = "$uid-$formattedDate-$linkedRecord->src_num-$linkedRecord->dst_num";
+
                 $linkedRecord->answered[] = [
                     'id'            => $record->id,
                     'start'         => date('d-m-Y H:i:s', strtotime($record->start)),
@@ -549,6 +554,7 @@ class ModuleExtendedCDRsController extends BaseController
                     'src_num'       => $record->src_num,
                     'dst_num'       => $record->dst_num,
                     'recordingfile' => $record->recordingfile,
+                    'prettyFilename'=> $prettyFilename,
                     'stateCall'     => $statsCall[$record->stateCall],
                     'stateCallIndex'=> $record->stateCall,
                 ];

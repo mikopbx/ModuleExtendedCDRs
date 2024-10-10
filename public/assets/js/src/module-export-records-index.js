@@ -282,9 +282,7 @@ const ModuleExtendedCDRs = {
 			let srcAudio = '';
 			let srcDownloadAudio = '';
 			if (!(record.recordingfile === undefined || record.recordingfile === null || record.recordingfile.length === 0)) {
-				let recordFileName = `record_${record.src_num}_to_${record.dst_num}_from_${data[0]}`;
-				recordFileName.replace(/[^\w\s!?]/g, '');
-				recordFileName = encodeURIComponent(recordFileName);
+				let recordFileName = encodeURIComponent(record.prettyFilename);
 				const recordFileUri = encodeURIComponent(record.recordingfile);
 				srcAudio = `/pbxcore/api/cdr/v2/playback?view=${recordFileUri}`;
 				srcDownloadAudio = `/pbxcore/api/cdr/v2/playback?view=${recordFileUri}&download=1&filename=${recordFileName}.mp3`;
