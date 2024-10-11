@@ -147,6 +147,7 @@ const ModuleExtendedCDRs = {
 				if (data.DT_RowClass.indexOf("detailed") >= 0) {
 					detailedIcon = '<i class="icon caret down"></i>';
 				}
+				data.typeCall = `${data.typeCall}`;
 				if(data.typeCall === '1'){
 					$('td', row).eq(0).html('<i class="custom-outgoing-icon-15x15"></i>'+detailedIcon);
 				}else if(data.typeCall === '2'){

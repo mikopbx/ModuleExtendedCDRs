@@ -4,7 +4,7 @@
       <div class="label"></div>
     </div>
      <div class="ui bottom attached active tab" data-tab="first">
-         <div class="ui  grid">
+         <div class="ui grid">
              <div class="ui row" style="padding-bottom:3px">
                  <div class="ui four wide column">
                      <div class="ui fluid  input">
@@ -29,7 +29,7 @@
                      </div>
                  </div>
                  <div class="ui two wide column">
-                     <div class="ui action  input">
+                     <div class="ui action input">
                         <input type="search" id="globalsearch" placeholder="{{ t._('repModuleExtendedCDRs_FindCallsPlaceholder') }}" aria-controls="KeysTable">
                         <button id="createExcelButton" class="ui icon basic button"> <i class="green file excel outline icon"></i></button>
                         <button id="createPdfButton" class="ui icon basic button"> <i class="red file pdf outline icon"></i></button>
