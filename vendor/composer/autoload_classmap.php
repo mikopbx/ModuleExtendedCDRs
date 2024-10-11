@@ -11,6 +11,7 @@ return array(
     'AVCSequenceParameterSetReader' => $vendorDir . '/james-heinrich/getid3/getid3/module.audio-video.flv.php',
     'Composer\\InstalledVersions' => $vendorDir . '/composer/InstalledVersions.php',
     'Image_XMP' => $vendorDir . '/james-heinrich/getid3/getid3/module.tag.xmp.php',
+    'Stringable' => $vendorDir . '/myclabs/php-enum/stubs/Stringable.php',
     'XLSXWriter' => $vendorDir . '/mk-j/php_xlsxwriter/xlsxwriter.class.php',
     'XLSXWriter_BuffererWriter' => $vendorDir . '/mk-j/php_xlsxwriter/xlsxwriter.class.php',
     'getID3' => $vendorDir . '/james-heinrich/getid3/getid3/getid3.php',

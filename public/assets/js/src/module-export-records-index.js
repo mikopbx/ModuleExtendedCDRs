@@ -63,6 +63,7 @@ const ModuleExtendedCDRs = {
 	initialize() {
 		// Удаляем отступы контейнера.
 		$('#main-content-container').removeClass('container');
+		$('#module-status-toggle-segment').hide();
 		ModuleExtendedCDRs.initializeDateRangeSelector();
 		// инициализируем чекбоксы и выподающие менюшки
 		window[className].$checkBoxes.checkbox();
@@ -76,7 +77,7 @@ const ModuleExtendedCDRs = {
 			ModuleExtendedCDRs.applyFilter();
 		});
 		$('#createExcelButton').on('click', function (e) {
-			ModuleExtendedCDRs.startCreateExcelPDF('excel');
+			ModuleExtendedCDRs.startCreateExcelPDF('xlsx');
 		});
 		$('#createPdfButton').on('click', function (e) {
 			ModuleExtendedCDRs.startCreateExcelPDF('pdf');
@@ -321,7 +322,7 @@ const ModuleExtendedCDRs = {
 
 		// Calculate window height and available space for table
 		const windowHeight = window.innerHeight;
-		const headerFooterHeight = 400 + 50; // Estimate height for header, footer, and other elements
+		const headerFooterHeight = 400 ; // Estimate height for header, footer, and other elements
 
 		// Calculate new page length
 		return Math.max(Math.floor((windowHeight - headerFooterHeight) / rowHeight), 5);
@@ -552,159 +553,9 @@ const ModuleExtendedCDRs = {
 	},
 
 	startCreateExcelPDF(type) {
-		const text  = ModuleExtendedCDRs.getSearchText();
-
-		$.ajax({
-			url: `${globalRootUrl}${idUrl}/getHistory`,
-			type: 'POST',
-			headers: {
-				'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-				'X-Requested-With': 'XMLHttpRequest',
-			},
-			data: {
-				'search[value]': text,
-			},
-			success: function(response) {
-				const flattenedData = [ ];
-
-				$.each(response.data, function(index, item) {
-					const baseRecord = {
-						start: item['0'],
-						src_num: item['1'],
-						dst_num: item['2'],
-						billsec: item['3'],
-						stateCall: item['stateCall'],
-						typeCall: item['typeCallDesc'],
-						line: item['line'],
-						waitTime: item['waitTime'],
-						id: item['DT_RowId']
-					};
-
-					// Добавляем основной элемент
-					flattenedData.push(baseRecord);
-
-					// Если есть вложенные данные, добавляем их сразу после основного элемента
-					if (item['4'] && item['4'].length > 0) {
-						$.each(item['4'], function(i, nestedItem) {
-							// Проверяем, совпадают ли значения start, src_num и dst_num с основной записью
-							if (nestedItem.start !== item['0'] || nestedItem.src_num !== item['1'] || nestedItem.dst_num !== item['2']) {
-								flattenedData.push({
-									start: nestedItem.start || item['0'],
-									src_num: nestedItem.src_num || item['1'],
-									dst_num: nestedItem.dst_num || item['2'],
-									billsec: nestedItem.billsec || item['3'],
-									stateCall: nestedItem.stateCall,
-									typeCall: item['typeCallDesc'],
-									line: item['line'],
-									waitTime: nestedItem.waitTime,
-									id: item['DT_RowId']
-								});
-							}
-						});
-					}
-				});
-
-				let columns = [
-					"typeCall",
-					"start",
-					"src_num",
-					"dst_num",
-					"line",
-					"waitTime",
-					"billsec",
-					"stateCall",
-					"id"
-				];
-				if(type === 'excel'){
-					const worksheet = XLSX.utils.json_to_sheet(flattenedData,{
-						header: columns,
-						skipHeader: true  // Пропускаем автоматическое создание заголовков из ключей объекта
-					});
-					XLSX.utils.sheet_add_aoa(worksheet, [[
-						globalTranslate.repModuleExtendedCDRs_cdr_ColumnTypeState,
-						globalTranslate.cdr_ColumnDate,
-						globalTranslate.cdr_ColumnFrom,
-						globalTranslate.cdr_ColumnTo,
-						globalTranslate.repModuleExtendedCDRs_cdr_ColumnLine,
-						globalTranslate.repModuleExtendedCDRs_cdr_ColumnWaitTime,
-						globalTranslate.cdr_ColumnDuration,
-						globalTranslate.repModuleExtendedCDRs_cdr_ColumnCallState,
-						'id',
-					]], {origin: "A1"});
-
-					worksheet['!cols'] =  columns.map(col => ({
-						wch: 8 + ModuleExtendedCDRs.getMaxWidth(flattenedData, col)
-					}));
-
-					const workbook = XLSX.utils.book_new();
-					XLSX.utils.book_append_sheet(workbook, worksheet, "cdr");
-					XLSX.writeFile(workbook, "history.xlsx");
-				}else{
-					const tableBody = [
-						[
-							{ text: globalTranslate.repModuleExtendedCDRs_cdr_ColumnTypeState, style: 'tableHeader' },
-							{ text: globalTranslate.cdr_ColumnDate, style: 'tableHeader' },
-							{ text: globalTranslate.cdr_ColumnFrom, style: 'tableHeader' },
-							{ text: globalTranslate.cdr_ColumnTo, style: 'tableHeader' },
-							{ text: globalTranslate.repModuleExtendedCDRs_cdr_ColumnLine, style: 'tableHeader' },
-							{ text: globalTranslate.repModuleExtendedCDRs_cdr_ColumnWaitTime, style: 'tableHeader' },
-							{ text: globalTranslate.cdr_ColumnDuration, style: 'tableHeader' },
-							{ text: globalTranslate.repModuleExtendedCDRs_cdr_ColumnCallState, style: 'tableHeader' },
-							{ text: 'id', style: 'tableHeader' },
-						]
-					];
-					flattenedData.forEach(item => {
-						tableBody.push([
-							item.typeCall,
-							item.start,
-							item.src_num,
-							item.dst_num,
-							item.line,
-							item.waitTime,
-							item.billsec,
-							item.stateCall,
-							item.id
-						]);
-					});
-					const docDefinition = {
-						pageOrientation: 'landscape',
-						content: [
-							// { text: 'Call Details', style: 'header' },
-							{
-								table: {
-									headerRows: 1,
-									widths: ['auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto'],
-									body: tableBody
-								},
-								layout: {
-									fillColor: function (rowIndex, node, columnIndex) {
-										return rowIndex === 0 ? '#CCCCCC' : null; // Цвет заливки для заголовка таблицы
-									}
-								}
-							}
-						],
-						styles: {
-							header: {
-								fontSize: 18,
-								bold: true,
-								margin: [0, 0, 0, 10]
-							},
-							tableHeader: {
-								bold: true,
-								fontSize: 12,
-								color: 'black',
-								alignment: 'center'
-							}
-						}
-					};
-					pdfMake.createPdf(docDefinition).download('history.pdf');
-				}
-
-			},
-			error: function(xhr, status, error) {
-				console.error(error);
-			}
-		});
+		const encodedSearch = encodeURIComponent(ModuleExtendedCDRs.getSearchText());
+		const url = `${window.location.origin}/pbxcore/api/modules/${className}/exportHistory?type=${type}&search=${encodedSearch}`;
+		window.open(url, '_blank');
 	},
 
 	getMaxWidth(data, key) {

@@ -291,6 +291,10 @@ class ConnectorDB extends WorkerBase
         }
 
         $cover_image = dirname(__DIR__).'/public/assets/img/mikopbx-picture.jpg';
+        $cover_image_custom = dirname(__DIR__,2).'/ModuleExtendedCDRs-logo-mp3.jpg';
+        if(file_exists($cover_image_custom)){
+            $cover_image = $cover_image_custom;
+        }
 
         $getID3    = new getID3();
         $tagWriter = new getid3_writetags();
