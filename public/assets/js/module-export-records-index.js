@@ -2,6 +2,18 @@
 
 function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
 
+function _toConsumableArray(arr) { return _arrayWithoutHoles(arr) || _iterableToArray(arr) || _unsupportedIterableToArray(arr) || _nonIterableSpread(); }
+
+function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
+
+function _unsupportedIterableToArray(o, minLen) { if (!o) return; if (typeof o === "string") return _arrayLikeToArray(o, minLen); var n = Object.prototype.toString.call(o).slice(8, -1); if (n === "Object" && o.constructor) n = o.constructor.name; if (n === "Map" || n === "Set") return Array.from(o); if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen); }
+
+function _iterableToArray(iter) { if (typeof Symbol !== "undefined" && iter[Symbol.iterator] != null || iter["@@iterator"] != null) return Array.from(iter); }
+
+function _arrayWithoutHoles(arr) { if (Array.isArray(arr)) return _arrayLikeToArray(arr); }
+
+function _arrayLikeToArray(arr, len) { if (len == null || len > arr.length) len = arr.length; for (var i = 0, arr2 = new Array(len); i < len; i++) { arr2[i] = arr[i]; } return arr2; }
+
 /*
  * Copyright (C) MIKO LLC - All Rights Reserved
  * Unauthorized copying of this file, via any medium is strictly prohibited
@@ -13,6 +25,7 @@ var idUrl = 'module-extended-c-d-rs';
 var idForm = 'module-extended-cdr-form';
 var className = 'ModuleExtendedCDRs';
 var inputClassName = 'mikopbx-module-input';
+var listenedIDs = [];
 /* global globalRootUrl, globalTranslate, Form, Config */
 
 var ModuleExtendedCDRs = {
@@ -189,6 +202,13 @@ var ModuleExtendedCDRs = {
        */
       drawCallback: function drawCallback() {
         Extensions.updatePhonesRepresent('need-update');
+        listenedIDs.forEach(function (id) {
+          var element = $("[id=\"".concat(id, "\"]"));
+
+          if (element.length) {
+            element.removeClass('warning').addClass('positive');
+          }
+        });
       },
       language: SemanticLocalization.dataTableLocalisation,
       ordering: false
@@ -198,14 +218,12 @@ var ModuleExtendedCDRs = {
       ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
     });
     ModuleExtendedCDRs.$cdrTable.on('click', 'tr.negative', function (e) {
-      var filter = $(e.target).attr('data-phone');
-
-      if (filter !== undefined && filter !== '') {
-        ModuleExtendedCDRs.$globalSearch.val(filter);
-        ModuleExtendedCDRs.applyFilter();
-        return;
-      }
-
+      // let filter = $(e.target).attr('data-phone');
+      // if (filter !== undefined && filter !== '') {
+      // 	ModuleExtendedCDRs.$globalSearch.val(filter)
+      // 	ModuleExtendedCDRs.applyFilter();
+      // 	return;
+      // }
       var ids = $(e.target).attr('data-ids');
 
       if (ids !== undefined && ids !== '') {
@@ -219,15 +237,13 @@ var ModuleExtendedCDRs = {
       if (ids !== undefined && ids !== '') {
         window.location = "".concat(globalRootUrl, "system-diagnostic/index/?filename=asterisk/verbose&filter=").concat(ids);
         return;
-      }
+      } // let filter = $(e.target).attr('data-phone');
+      // if (filter !== undefined && filter !== '') {
+      // 	ModuleExtendedCDRs.$globalSearch.val(filter)
+      // 	ModuleExtendedCDRs.applyFilter();
+      // 	return;
+      // }
 
-      var filter = $(e.target).attr('data-phone');
-
-      if (filter !== undefined && filter !== '') {
-        ModuleExtendedCDRs.$globalSearch.val(filter);
-        ModuleExtendedCDRs.applyFilter();
-        return;
-      }
 
       var tr = $(e.target).closest('tr');
       var row = ModuleExtendedCDRs.dataTable.row(tr);
@@ -249,6 +265,19 @@ var ModuleExtendedCDRs = {
           return new CDRPlayer(id);
         });
         Extensions.updatePhonesRepresent('need-update');
+        listenedIDs.forEach(function (id) {
+          var element = $("[id=\"".concat(id, "\"]"));
+
+          if (element.length) {
+            element.removeClass('warning').addClass('positive');
+          }
+
+          element = $("[data-row-id=\"".concat(id, "\"]"));
+
+          if (element.length) {
+            element.removeClass('warning').addClass('positive');
+          }
+        });
       }
     });
     window[className].updateSyncState();
@@ -304,9 +333,31 @@ var ModuleExtendedCDRs = {
         srcDownloadAudio = "/pbxcore/api/cdr/v2/playback?view=".concat(recordFileUri, "&download=1&filename=").concat(recordFileName, ".mp3");
       }
 
-      htmlPlayer += "\n\t\t\t<tr id=\"".concat(record.id, "\" data-row-id=\"").concat(id, "-detailed\" class=\"warning detailed odd shown\" role=\"row\">\n\t\t\t\t<td></td>\n\t\t\t\t<td class=\"right aligned\">").concat(record.start, "</td>\n\t\t\t\t<td data-phone=\"").concat(record.src_num, "\" class=\"right aligned need-update\">").concat(record.src_num, "</td>\n\t\t\t   \t<td data-phone=\"").concat(record.dst_num, "\" class=\"left aligned need-update\">").concat(record.dst_num, "</td>\n\t\t\t\t<td class=\"right aligned\">\t\t\t\n\t\t\t\t</td>\n\t\t\t\t<td class=\"right aligned\">").concat(record.waitTime, "</td>\n\t\t\t\t<td class=\"right aligned\">\n\t\t\t\t\t<i class=\"ui icon play\"></i>\n\t\t\t\t\t<audio preload=\"metadata\" id=\"audio-player-").concat(record.id, "\" src=\"").concat(srcAudio, "\"></audio>\n\t\t\t\t\t").concat(record.billsec, "\n\t\t\t\t\t<i class=\"ui icon download\" data-value=\"").concat(srcDownloadAudio, "\"></i>\n\t\t\t\t</td>\n\t\t\t\t<td class=\"right aligned\" data-state-index=\"").concat(record.stateCallIndex, "\">").concat(record.stateCall, "</td>\n\t\t\t</tr>");
+      htmlPlayer += "\n\t\t\t<tr id=\"".concat(record.id, "\" data-row-id=\"").concat(id, "-detailed\" class=\"warning detailed odd shown\" role=\"row\">\n\t\t\t\t<td></td>\n\t\t\t\t<td class=\"right aligned\">").concat(record.start, "</td>\n\t\t\t\t<td data-phone=\"").concat(record.src_num, "\" class=\"right aligned need-update\">").concat(record.src_num, "</td>\n\t\t\t   \t<td data-phone=\"").concat(record.dst_num, "\" class=\"left aligned need-update\">").concat(record.dst_num, "</td>\n\t\t\t\t<td class=\"right aligned\">\t\t\t\n\t\t\t\t</td>\n\t\t\t\t<td class=\"right aligned\">").concat(record.waitTime, "</td>\n\t\t\t\t<td class=\"right aligned\">\n\t\t\t\t\t<i class=\"ui icon play\"></i>\n\t\t\t\t\t<audio preload=\"metadata\" id=\"audio-player-").concat(record.id, "\" src=\"").concat(srcAudio, "\" onplay=\"ModuleExtendedCDRs.audioPlayHandler(event)\"></audio>\n\t\t\t\t\t").concat(record.billsec, "\n\t\t\t\t\t<i class=\"ui icon download\" data-value=\"").concat(srcDownloadAudio, "\" onclick=\"ModuleExtendedCDRs.audioPlayHandler(event)\"></i>\n\t\t\t\t</td>\n\t\t\t\t<td class=\"right aligned\" data-state-index=\"").concat(record.stateCallIndex, "\">").concat(record.stateCall, "</td>\n\t\t\t</tr>");
     });
     return htmlPlayer;
+  },
+  audioPlayHandler: function audioPlayHandler(event) {
+    var detailRow = $(event.target).closest('tr');
+    detailRow.removeClass('warning');
+    detailRow.addClass('positive');
+    var callIdDetail = detailRow.attr('data-row-id');
+    listenedIDs.push(callIdDetail);
+    var callId = callIdDetail.replace('-detailed', '');
+    var allPositive = true;
+    $('[data-row-id="' + callIdDetail + '"]').each(function () {
+      if (!$(this).hasClass('positive')) {
+        allPositive = false;
+        return false;
+      }
+    });
+
+    if (allPositive) {
+      $("[id=\"".concat(callId, "\"]")).addClass('positive');
+      listenedIDs.push(callId);
+    }
+
+    listenedIDs = _toConsumableArray(new Set(listenedIDs));
   },
   calculatePageLength: function calculatePageLength() {
     // Calculate row height
@@ -456,6 +507,7 @@ var ModuleExtendedCDRs = {
    */
   applyFilter: function applyFilter() {
     var text = ModuleExtendedCDRs.getSearchText();
+    listenedIDs = [];
     ModuleExtendedCDRs.dataTable.search(text).draw();
     ModuleExtendedCDRs.$globalSearch.closest('div').addClass('loading');
   },

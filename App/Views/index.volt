@@ -4,14 +4,14 @@
       <div class="label"></div>
     </div>
      <div class="ui bottom attached active tab" data-tab="first">
-         <div class="ui grid">
+         <div class="ui three column grid">
              <div class="ui row" style="padding-bottom:3px">
                  <div class="ui four wide column">
                      <div class="ui fluid  input">
                           <input type="text" data-def-value="{{dateRangeSelector}}" id="date-range-selector" class="form-control">
                      </div>
                  </div>
-                 <div class="">
+                 <div class="ui column" style="display: inline-block; width: auto;">
                      <div id="typeCall" class="ui menu" style="margin: 0;">
                         <a class="item active" data-tab="all-calls">Все <b></b> </a>
                         <a class="item" data-tab="incoming-calls" style="padding-top: 0; padding-bottom: 0;">
@@ -28,11 +28,12 @@
                         </a>
                      </div>
                  </div>
-                 <div class="ui two wide column">
+                 <div class="ui two wide column" >
                      <div class="ui action input">
                         <input type="search" id="globalsearch" placeholder="{{ t._('repModuleExtendedCDRs_FindCallsPlaceholder') }}" aria-controls="KeysTable">
                         <button id="createExcelButton" class="ui icon basic button"> <i class="green file excel outline icon"></i></button>
                         <button id="createPdfButton" class="ui icon basic button"> <i class="red file pdf outline icon"></i></button>
+                        <button id="downloadRecords" class="ui icon basic button"> <i class="download icon"></i></button>
                         <button type="button" id="saveSearchSettings" class="ui icon basic button">
                              <i class="blue save outline icon"></i>
                         </button>

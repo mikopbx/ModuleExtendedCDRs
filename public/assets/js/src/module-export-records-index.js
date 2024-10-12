@@ -9,6 +9,7 @@ const idUrl     = 'module-extended-c-d-rs';
 const idForm    = 'module-extended-cdr-form';
 const className = 'ModuleExtendedCDRs';
 const inputClassName = 'mikopbx-module-input';
+let listenedIDs = [];
 
 /* global globalRootUrl, globalTranslate, Form, Config */
 const ModuleExtendedCDRs = {
@@ -189,6 +190,12 @@ const ModuleExtendedCDRs = {
 			 */
 			drawCallback() {
 				Extensions.updatePhonesRepresent('need-update');
+				listenedIDs.forEach(function(id) {
+					let element = $(`[id="${id}"]`);
+					if (element.length) {
+						element.removeClass('warning').addClass('positive');
+					}
+				});
 			},
 			language: SemanticLocalization.dataTableLocalisation,
 			ordering: false,
@@ -199,12 +206,13 @@ const ModuleExtendedCDRs = {
 		});
 
 		ModuleExtendedCDRs.$cdrTable.on('click', 'tr.negative', (e) => {
-			let filter = $(e.target).attr('data-phone');
-			if (filter !== undefined && filter !== '') {
-				ModuleExtendedCDRs.$globalSearch.val(filter)
-				ModuleExtendedCDRs.applyFilter();
-				return;
-			}
+			// let filter = $(e.target).attr('data-phone');
+			// if (filter !== undefined && filter !== '') {
+			// 	ModuleExtendedCDRs.$globalSearch.val(filter)
+			// 	ModuleExtendedCDRs.applyFilter();
+			// 	return;
+			// }
+
 			let ids = $(e.target).attr('data-ids');
 			if (ids !== undefined && ids !== '') {
 				window.location = `${globalRootUrl}system-diagnostic/index/?filename=asterisk/verbose&filter=${ids}`;
@@ -218,12 +226,12 @@ const ModuleExtendedCDRs = {
 				window.location = `${globalRootUrl}system-diagnostic/index/?filename=asterisk/verbose&filter=${ids}`;
 				return;
 			}
-			let filter = $(e.target).attr('data-phone');
-			if (filter !== undefined && filter !== '') {
-				ModuleExtendedCDRs.$globalSearch.val(filter)
-				ModuleExtendedCDRs.applyFilter();
-				return;
-			}
+			// let filter = $(e.target).attr('data-phone');
+			// if (filter !== undefined && filter !== '') {
+			// 	ModuleExtendedCDRs.$globalSearch.val(filter)
+			// 	ModuleExtendedCDRs.applyFilter();
+			// 	return;
+			// }
 
 			const tr = $(e.target).closest('tr');
 			const row = ModuleExtendedCDRs.dataTable.row(tr);
@@ -243,6 +251,17 @@ const ModuleExtendedCDRs = {
 					return new CDRPlayer(id);
 				});
 				Extensions.updatePhonesRepresent('need-update');
+
+				listenedIDs.forEach(function(id) {
+					let element = $(`[id="${id}"]`);
+					if (element.length) {
+						element.removeClass('warning').addClass('positive');
+					}
+					element = $(`[data-row-id="${id}"]`);
+					if (element.length) {
+						element.removeClass('warning').addClass('positive');
+					}
+				});
 			}
 		});
 
@@ -307,16 +326,40 @@ const ModuleExtendedCDRs = {
 				<td class="right aligned">${record.waitTime}</td>
 				<td class="right aligned">
 					<i class="ui icon play"></i>
-					<audio preload="metadata" id="audio-player-${record.id}" src="${srcAudio}"></audio>
+					<audio preload="metadata" id="audio-player-${record.id}" src="${srcAudio}" onplay="ModuleExtendedCDRs.audioPlayHandler(event)"></audio>
 					${record.billsec}
-					<i class="ui icon download" data-value="${srcDownloadAudio}"></i>
+					<i class="ui icon download" data-value="${srcDownloadAudio}" onclick="ModuleExtendedCDRs.audioPlayHandler(event)"></i>
 				</td>
 				<td class="right aligned" data-state-index="${record.stateCallIndex}">${record.stateCall}</td>
 			</tr>`
 		});
 		return htmlPlayer;
 	},
+	audioPlayHandler(event) {
+		let detailRow = $(event.target).closest('tr');
+		detailRow.removeClass('warning');
+		detailRow.addClass('positive');
 
+		let callIdDetail = detailRow.attr('data-row-id');
+		listenedIDs.push(callIdDetail);
+
+		let callId = callIdDetail.replace('-detailed', '');
+
+		let allPositive = true;
+		$('[data-row-id="' + callIdDetail + '"]').each(function() {
+			if (!$(this).hasClass('positive')) {
+				allPositive = false;
+				return false;
+			}
+		});
+
+		if (allPositive) {
+			$(`[id="${callId}"]`).addClass('positive');
+			listenedIDs.push(callId);
+		}
+
+		listenedIDs = [...new Set(listenedIDs)];
+	},
 	calculatePageLength() {
 		// Calculate row height
 		let rowHeight = ModuleExtendedCDRs.$cdrTable.find('tbody > tr').first().outerHeight();
@@ -496,7 +539,7 @@ const ModuleExtendedCDRs = {
 	 */
 	applyFilter() {
 		const text  = ModuleExtendedCDRs.getSearchText();
-
+		listenedIDs = [];
 		ModuleExtendedCDRs.dataTable.search(text).draw();
 		ModuleExtendedCDRs.$globalSearch.closest('div').addClass('loading');
 	},
