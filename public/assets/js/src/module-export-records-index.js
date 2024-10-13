@@ -83,6 +83,11 @@ const ModuleExtendedCDRs = {
 		$('#createPdfButton').on('click', function (e) {
 			ModuleExtendedCDRs.startCreateExcelPDF('pdf');
 		});
+		$('#downloadRecords').on('click', function (e) {
+			const encodedSearch = encodeURIComponent(ModuleExtendedCDRs.getSearchText());
+			const url = `${window.location.origin}/pbxcore/api/modules/${className}/downloads?search=${encodedSearch}`;
+			window.open(url, '_blank');
+		});
 		$('#saveSearchSettings').on('click', function (e) {
 			ModuleExtendedCDRs.saveSearchSettings();
 		});

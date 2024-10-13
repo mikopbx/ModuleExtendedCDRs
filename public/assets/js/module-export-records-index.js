@@ -99,6 +99,11 @@ var ModuleExtendedCDRs = {
     $('#createPdfButton').on('click', function (e) {
       ModuleExtendedCDRs.startCreateExcelPDF('pdf');
     });
+    $('#downloadRecords').on('click', function (e) {
+      var encodedSearch = encodeURIComponent(ModuleExtendedCDRs.getSearchText());
+      var url = "".concat(window.location.origin, "/pbxcore/api/modules/").concat(className, "/downloads?search=").concat(encodedSearch);
+      window.open(url, '_blank');
+    });
     $('#saveSearchSettings').on('click', function (e) {
       ModuleExtendedCDRs.saveSearchSettings();
     });

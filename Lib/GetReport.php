@@ -219,6 +219,7 @@ class GetReport
                     'src_num'       => $record->src_num,
                     'dst_num'       => $record->dst_num,
                     'recordingfile' => '',
+                    'prettyFilename'=> '',
                     'stateCall'     => $statsCall[$record->stateCall],
                     'stateCallIndex'=> $record->stateCall,
                 ];
