@@ -481,7 +481,7 @@ class ConnectorDB extends WorkerBase
                 }, $extFilter)
             );
             $condition .= ' AND '. str_replace(
-                ['{filteredExtensions:array}', 'src_num', 'dst_num', 'AND ()'],
+                ['{filteredExtensions:array}', 'dst_num', 'src_num', 'AND ()'],
                 [$placeholders, 'cdr_general.dstIndex', 'cdr_general.srcIndex', ''],
                 $additionalFilter['conditions']??''
             );
