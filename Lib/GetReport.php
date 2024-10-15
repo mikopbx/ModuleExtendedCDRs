@@ -58,7 +58,11 @@ class GetReport
             $view->conditions = 'empty';
             return $view;
         }
-        $recordsFilteredReq = ConnectorDB::invoke('getCountCdr', [$start, $end, $numbers, $additionalNumbers]);
+        $additionalFilter = [];
+        PBXConfModulesProvider::hookModulesMethod(CDRConfigInterface::APPLY_ACL_FILTERS_TO_CDR_QUERY, [&$additionalFilter]);
+        $view->additionalFilter = $additionalFilter;
+
+        $recordsFilteredReq = ConnectorDB::invoke('getCountCdr', [$start, $end, $numbers, $additionalNumbers, $additionalFilter]);
         $view->recordsFiltered = $recordsFilteredReq['cCalls'] ?? 0;
         $view->recordsInner    = $recordsFilteredReq['cINNER'] ?? 0;
         $view->recordsOutgoing = $recordsFilteredReq['cOUTGOING'] ?? 0;

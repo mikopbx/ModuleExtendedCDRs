@@ -431,9 +431,10 @@ class ConnectorDB extends WorkerBase
      * @param string $end
      * @param array  $numbers
      * @param array  $additionalNumbers
+     * @param array  $additionalFilter
      * @return array
      */
-    public function getCountCdr(string $start, string $end, array $numbers, array $additionalNumbers): array
+    public function getCountCdr(string $start, string $end, array $numbers, array $additionalNumbers, array $additionalFilter): array
     {
         $bindParams = [
             ':start' => $start,
@@ -452,6 +453,7 @@ class ConnectorDB extends WorkerBase
             );
             $condition .= " AND (cdr_general.dstIndex IN ($placeholders) OR cdr_general.srcIndex IN ($placeholders))";
         }
+
         if (!empty($additionalNumbers)) {
             foreach ($additionalNumbers as $value) {
                 $bindParams[":IndexAdd$value"] = $value;
@@ -463,6 +465,26 @@ class ConnectorDB extends WorkerBase
                 }, $additionalNumbers)
             );
             $condition .= " AND (cdr_general.dstIndex IN ($placeholders) OR cdr_general.srcIndex IN ($placeholders))";
+        }
+
+        $extFilter = $additionalFilter['bind']['filteredExtensions']??[];
+        if(!empty($extFilter)){
+            foreach ($extFilter as &$value) {
+                $value = self::getPhoneIndex($value);
+                $bindParams[":IndexAdd$value"] = $value;
+            }
+            unset($value);
+            $placeholders = implode(
+                ', ',
+                array_map(static function ($value){
+                    return ":IndexAdd$value";
+                }, $extFilter)
+            );
+            $condition .= ' AND '. str_replace(
+                ['{filteredExtensions:array}', 'src_num', 'dst_num', 'AND ()'],
+                [$placeholders, 'cdr_general.dstIndex', 'cdr_general.srcIndex', ''],
+                $additionalFilter['conditions']??''
+            );
         }
 
         if (!$this->di->has(CdrDbProvider::SERVICE_NAME)) {
