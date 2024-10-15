@@ -1,15 +1,3 @@
-<div class="ui compact menu">
-  <a class="link item active">
-    Журнал звонков
-  </a>
-  <div class="link item">
-    Распределение по сотрудникам
-  </div>
-  <div class="link item">
-    Настройки
-  </div>
-</div>
-
 <form class="ui large grey  form" id="module-extended-cdr-form">
     <div id="sync-progress" class="ui progress">
       <div class="bar"></div>
@@ -18,7 +6,6 @@
 
     <br>
     <div class="ui three column grid">
-
         <div class="ui row" style="padding-bottom:3px">
              <div class="ui four wide column">
                  <div class="ui fluid  input">
