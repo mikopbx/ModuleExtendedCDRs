@@ -44,4 +44,13 @@ return [
     'repModuleExtendedCDRs_cdr_cal_Last30Days' => 'Последние 30 дней',
     'repModuleExtendedCDRs_cdr_cal_ThisMonth' => 'Текущий месяц',
     'repModuleExtendedCDRs_cdr_cal_LastMonth' => 'Прошлый месяц',
+
+    'repModuleExtendedCDRs_outgoingEmployeeCalls_callerId'     => 'Сотрудник',
+    'repModuleExtendedCDRs_outgoingEmployeeCalls_number'       => 'Внутренний номер',
+    'repModuleExtendedCDRs_outgoingEmployeeCalls_billHourCalls'=> 'Часы',
+    'repModuleExtendedCDRs_outgoingEmployeeCalls_billMinCalls' => 'Минуты',
+    'repModuleExtendedCDRs_outgoingEmployeeCalls_billSecCalls' => 'Секунды',
+    'repModuleExtendedCDRs_outgoingEmployeeCalls_countCalls'   => 'Количество',
+    'repModuleExtendedCDRs_CallDetails'   => 'Журнал звонков',
+    'repModuleExtendedCDRs_OutgoingEmployeeCalls'   => 'Исходящие сотрудников',
 ];

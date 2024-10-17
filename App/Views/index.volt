@@ -1,3 +1,33 @@
+<div id="menu-reports"  style="display: none;" class="ui fluid popup bottom left transition hidden">
+  <input id="currentReportNameID" type="hidden" name="filters" value="{{currentReportNameID}}">
+  <input id="currentVariantId" type="hidden" name="filters" value="{{currentVariantId}}">
+
+  <div class="ui four column relaxed equal height divided grid">
+<!--     <div class="column"> -->
+<!--       <h4 id="CallDetails" class="ui header" style="cursor: pointer;">Журнал звонков</h4> -->
+<!--       <div class="ui link list"> -->
+<!--         <a class="item">Вариант 1</a> -->
+<!--         <a class="item">Вариант 2</a> -->
+<!--       </div> -->
+<!--     </div> -->
+<!--     <div class="column"> -->
+<!--       <h4 id="OutgoingEmployeeCalls" class="ui header" style="cursor: pointer;">Исходящие сотрудников</h4> -->
+<!--       <div class="ui link list"> -->
+<!--         <a class="item">Вариант 1</a> -->
+<!--         <a class="item">Вариант 2</a> -->
+<!--       </div> -->
+<!--     </div> -->
+       {% for variantId,variantsData in mainReports %}
+        <div class="column">
+          <h4 id="{{ variantId }}" class="ui header" data-search-text="{{ variantsData['searchText'] }}" data-is-main="{{ variantsData['isMain'] }}" data-min-bill-sec="{{ variantsData['minBillSec'] }}" style="cursor: pointer;">{{ variantsData['variantName'] }}</h4>
+          <div class="ui link list">
+          </div>
+        </div>
+       {% endfor %}
+  </div>
+  </div>
+</div>
+
 <form class="ui large grey  form" id="module-extended-cdr-form">
     <div id="sync-progress" class="ui progress">
       <div class="bar"></div>
@@ -77,7 +107,25 @@
              </div>
          </div>
      </div>
-     <table id="cdr-table" class="ui small very compact single line unstackable table ">
+     <table id="OutgoingEmployeeCalls-table" data-report-name="OutgoingEmployeeCalls" class="ui small very compact single line unstackable celled striped table ">
+         <thead>
+         <tr>
+             <th class="three">{{ t._('repModuleExtendedCDRs_outgoingEmployeeCalls_callerId') }}</th>
+             <th class="three wide">{{ t._('repModuleExtendedCDRs_outgoingEmployeeCalls_number') }}</th>
+             <th class="one wide">{{ t._('repModuleExtendedCDRs_outgoingEmployeeCalls_billHourCalls') }}</th>
+             <th class="one wide">{{ t._('repModuleExtendedCDRs_outgoingEmployeeCalls_billMinCalls') }}</th>
+             <th class="one wide">{{ t._('repModuleExtendedCDRs_outgoingEmployeeCalls_billSecCalls') }}</th>
+             <th class="one wide">{{ t._('repModuleExtendedCDRs_outgoingEmployeeCalls_countCalls') }}</th>
+         </tr>
+         </thead>
+         <tbody>
+         <tr>
+             <td colspan="5" class="dataTables_empty">{{ t._('dt_TableIsEmpty') }}</td>
+         </tr>
+         </tbody>
+     </table>
+     <br>
+     <table id="cdr-table" data-report-name="CallDetails" class="ui small very compact single line unstackable table ">
          <thead>
          <tr>
              <th class="one wide"></th>

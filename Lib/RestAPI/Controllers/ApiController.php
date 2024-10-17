@@ -9,14 +9,15 @@
 
 namespace Modules\ModuleExtendedCDRs\Lib\RestAPI\Controllers;
 
-use MikoPBX\Common\Providers\CDRDatabaseProvider;
 use MikoPBX\Core\System\Util;
 use MikoPBX\PBXCoreREST\Controllers\Modules\ModulesControllerBase;
 use Modules\ModuleExtendedCDRs\Lib\GetReport;
+use Modules\ModuleExtendedCDRs\Models\ReportSettings;
 use Mpdf\Mpdf;
 use Mpdf\Output\Destination;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 
 require_once(dirname(__DIR__,3).'/vendor/autoload.php');
 
@@ -25,25 +26,35 @@ class ApiController extends ModulesControllerBase
 {
 
     /**
-     * curl -H 'Cookie: PHPSESSID=5ada41f50486a5792cb3520f0922b7e9' 'https://boffart.miko.ru/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory?type=json&search=%7B%22dateRangeSelector%22%3A%2201%2F10%2F2024+-+31%2F10%2F2024%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22all-calls%22%2C%22additionalFilter%22%3A%22%22%7D&search%5Bregex%5D=false'
+     * curl 'https://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory?reportNameID=OutgoingEmployeeCalls&type=json&search=%7B%22dateRangeSelector%22%3A%2201%2F10%2F2024+-+31%2F10%2F2024%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22all-calls%22%2C%22additionalFilter%22%3A%22%22%7D'
+     * curl -H 'Cookie: PHPSESSID=5ada41f50486a5792cb3520f0922b7e9' 'https://boffart.miko.ru/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory?type=json&search=%7B%22dateRangeSelector%22%3A%2201%2F10%2F2024+-+31%2F10%2F2024%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22all-calls%22%2C%22additionalFilter%22%3A%22%22%7D'
      * @return void
      */
     public function exportHistory()
     {
+        $reportNameID   = $this->request->get('reportNameID');
+        if(ReportSettings::REPORT_OUTGOING_EMPLOYEE_CALLS  === $reportNameID){
+            $this->exportOutgoingEmployeeCalls();
+            return;
+        }
         $type           = $this->request->get('type');
         $searchPhrase   = $this->request->get('search');
+        if(!is_string($searchPhrase)){
+            $this->response->sendRaw();
+            return;
+        }
         $gr = new GetReport();
         $view = $gr->history($searchPhrase);
         if($type === 'json'){
             $this->echoResponse((array)$view);
         }elseif($type === 'pdf'){
-            $this->printPdf($view);
+            $this->exportHistoryPdf($view);
         }elseif ($type === 'xlsx'){
-            $this->printXls($view);
+            $this->exportHistoryXls($view);
         }
         $this->response->sendRaw();
     }
-    private function printXls($view):void
+    private function exportHistoryXls($view):void
     {
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
@@ -94,8 +105,7 @@ class ApiController extends ModulesControllerBase
         header('Cache-Control: max-age=0');
         $writer->save('php://output');
     }
-
-    private function printPdf($view):void
+    private function exportHistoryPdf($view):void
     {
         $mpdf = new Mpdf([
                              'tempDir' => '/tmp',
@@ -168,6 +178,104 @@ class ApiController extends ModulesControllerBase
         shell_exec($pathBusybox.' rm -rf '.$tmpDir);
     }
 
+    /**
+     * curl -H 'Cookie: PHPSESSID=5ada41f50486a5792cb3520f0922b7e9' 'https://boffart.miko.ru/pbxcore/api/modules/ModuleExtendedCDRs/exportOutgoingEmployeeCalls?type=json&search=%7B%22dateRangeSelector%22%3A%2201%2F10%2F2024+-+31%2F10%2F2024%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22all-calls%22%2C%22additionalFilter%22%3A%22%22%7D'
+     * curl 'http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/exportOutgoingEmployeeCalls?type=json&search=%7B%22dateRangeSelector%22%3A%2201%2F10%2F2024%20-%2031%2F10%2F2024%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22outgoing-calls%22%2C%22additionalFilter%22%3A%22204%20203%22%7D'
+     * @return void
+     */
+    public function exportOutgoingEmployeeCalls()
+    {
+        $type           = $this->request->get('type');
+        $searchPhrase   = $this->request->get('search');
+        if(!is_string($searchPhrase)){
+            $this->response->sendRaw();
+            return;
+        }
+        $gr = new GetReport();
+        $view = $gr->outgoingEmployeeCalls($searchPhrase);
+        if($type === 'json'){
+            $this->echoResponse((array)$view);
+        }elseif($type === 'pdf'){
+            $this->exportOutgoingEmployeeCallsPrintPdf($view);
+        }elseif ($type === 'xlsx'){
+            $this->exportOutgoingEmployeeCallsPrintXls($view);
+        }
+        $this->response->sendRaw();
+    }
+    private function exportOutgoingEmployeeCallsPrintPdf($view):void
+    {
+        $mpdf = new Mpdf(['tempDir' => '/tmp',]);
+        $html  = '<h3>Сводная статистика за период: '.json_decode($view->searchPhrase,true)['dateRangeSelector'].'</h3>';
+        $html .= '<table border="1" cellpadding="10" cellspacing="0" style="width: 100%;">';
+        $html .= '<tr>';
+        $html .= '<thead>' .
+            '<th>' . Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_callerId') . '</th>'.
+            '<th>' . Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_number') . '</th>'.
+            '<th>' . Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_billHourCalls') . '</th>'.
+            '<th>' . Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_billMinCalls') . '</th>'.
+            '<th>' . Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_billSecCalls') . '</th>'.
+            '<th>' . Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_countCalls') . '</th>'.
+            '</thead>';
+        $html .= '<tbody>';
+        foreach ($view->data as $index => $item) {
+            $rowStyle = ($index % 2 == 1) ? 'background-color: #f0f0f0;' : '';
+            $html .= '<tr>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['callerId']) . '</td>';
+            $html .= '<td style="background-color: #d3d3d3;">' . htmlspecialchars($item['number']) . '</td>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['billHourCalls']) . '</td>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['billMinCalls']) . '</td>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['billSecCalls']) . '</td>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['countCalls']) . '</td>';
+            $html .= '</tr>';
+        }
+        $html .= '</tbody></table>';
+        $mpdf->WriteHTML($html);
+        $mpdf->Output('outgoing-employee-calls.pdf', Destination::DOWNLOAD);
+    }
+
+    private function exportOutgoingEmployeeCallsPrintXls($view)
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $headers = [
+            Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_callerId'),
+            Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_number'),
+            Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_billHourCalls'),
+            Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_billMinCalls'),
+            Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_billSecCalls'),
+            Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_countCalls'),
+        ];
+        $sheet->fromArray($headers, NULL, 'A1');
+        $rowIndex = 2;
+        foreach ($view->data as $item) {
+            $sheet->setCellValueExplicit('A' . $rowIndex, htmlspecialchars($item['callerId']), DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit('B' . $rowIndex, htmlspecialchars($item['number']), DataType::TYPE_STRING);
+            $sheet->setCellValue('C' . $rowIndex, htmlspecialchars($item['billHourCalls']));
+            $sheet->setCellValue('D' . $rowIndex, htmlspecialchars($item['billMinCalls']));
+            $sheet->setCellValue('E' . $rowIndex, htmlspecialchars($item['billSecCalls']));
+            $sheet->setCellValue('F' . $rowIndex, htmlspecialchars($item['countCalls']));
+            $rowIndex++;
+        }
+        $highestRow = $sheet->getHighestRow();
+        $highestColumn = $sheet->getHighestColumn();
+        $highestColumnIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($highestColumn);
+        for ($col = 1; $col <= $highestColumnIndex; $col++) {
+            $maxLength = 0;
+            for ($row = 1; $row <= $highestRow; $row++) {
+                $cellValue = $sheet->getCellByColumnAndRow($col, $row)->getValue();
+                if ($cellValue !== null) {
+                    $maxLength = max($maxLength, strlen($cellValue));
+                }
+            }
+            $sheet->getColumnDimensionByColumn($col)->setWidth($maxLength + 2);
+        }
+        $writer = new Xlsx($spreadsheet);
+
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="outgoing-employee-calls.xlsx"');
+        header('Cache-Control: max-age=0');
+        $writer->save('php://output');
+    }
     /**
      * Вывод ответа сервера.
      * @param $result

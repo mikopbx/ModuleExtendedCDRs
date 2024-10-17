@@ -7,10 +7,12 @@
  */
 namespace Modules\ModuleExtendedCDRs\App\Controllers;
 use MikoPBX\AdminCabinet\Controllers\BaseController;
+use MikoPBX\AdminCabinet\Controllers\SessionController;
 use MikoPBX\Common\Models\CallQueues;
 use MikoPBX\Common\Models\Extensions;
 use MikoPBX\Common\Models\Sip;
 use MikoPBX\Common\Providers\PBXConfModulesProvider;
+use MikoPBX\Common\Providers\SessionProvider;
 use MikoPBX\Core\System\Util;
 use MikoPBX\Modules\Config\CDRConfigInterface;
 use MikoPBX\Modules\PbxExtensionUtils;
@@ -23,9 +25,13 @@ use Modules\ModuleExtendedCDRs\Models\CallHistory;
 use Modules\ModuleExtendedCDRs\Models\ExportRules;
 use Modules\ModuleExtendedCDRs\Models\ModuleExtendedCDRs;
 use MikoPBX\Common\Models\Providers;
+use Modules\ModuleExtendedCDRs\Models\ReportSettings;
 use Modules\ModuleUsersGroups\Models\GroupMembers;
 use Modules\ModuleUsersGroups\Models\UsersGroups;
 use DateTime;
+use Modules\ModuleUsersUI\Lib\Constants;
+use Modules\ModuleUsersUI\Models\AccessGroups;
+use Modules\ModuleUsersUI\Models\UsersCredentials;
 
 class ModuleExtendedCDRsController extends BaseController
 {
@@ -38,7 +44,6 @@ class ModuleExtendedCDRsController extends BaseController
     public function initialize(): void
     {
         $this->moduleDir = PbxExtensionUtils::getModuleDir($this->moduleUniqueID);
-        $this->view->logoImagePath = "{$this->url->get()}assets/img/cache/{$this->moduleUniqueID}/logo.svg";
         $this->view->submitMode = null;
         parent::initialize();
     }
@@ -118,6 +123,7 @@ class ModuleExtendedCDRsController extends BaseController
         $headerCollectionCSS = $this->assets->collection('headerCSS');
         $headerCollectionCSS->addCss("css/cache/{$this->moduleUniqueID}/module-export-records.css", true);
         $headerCollectionCSS->addCss('css/vendor/semantic/progress.min.css', true);
+        $headerCollectionCSS->addCss('css/vendor/semantic/list.css', true);
         $headerCollectionCSS->addCss('css/vendor/datatable/dataTables.semanticui.min.css', true);
         $headerCollectionCSS->addCss('css/vendor/semantic/modal.min.css', true);
 
@@ -162,11 +168,8 @@ class ModuleExtendedCDRsController extends BaseController
         }
         $this->view->rules = ExportRules::find()->toArray();
 
-        try {
-            $searchSettings = json_decode($settings->searchSettings, true, 512, JSON_THROW_ON_ERROR);
-        }catch (\Exception $e){
-            $searchSettings = [];
-        }
+        $searchSettings = [];
+        $this->getVariantsReports($searchSettings);
         $filterNumbers = explode(' ', $searchSettings['additionalFilter']??'');
         $additionalFilter = [];
         foreach ($this->view->groups as $group){
@@ -184,7 +187,7 @@ class ModuleExtendedCDRsController extends BaseController
             foreach ($filterNumbers as $number){
                 if($user['number'] === $number){
                     $additionalFilter[] = [
-                        'name'   => $user['callerid'],
+                        'name'   => $user['callerid']."($number)",
                         'number' => $number
                     ];
                 }
@@ -193,6 +196,105 @@ class ModuleExtendedCDRsController extends BaseController
         $this->view->dateRangeSelector      = $searchSettings['dateRangeSelector']??'';
         $this->view->additionalFilter       = $additionalFilter;
         $this->view->additionalFilterString = implode(',',array_column($additionalFilter, 'number'));
+    }
+
+    private function getVariantsReports(&$searchSettings)
+    {
+        $mainReports = [
+            ReportSettings::REPORT_MAIN => [
+                'searchText' => '{}',
+                'minBillSec' => 0,
+                'isMain' => 1,
+                'variantName' => Util::translate('BreadcrumbModuleExtendedCDRs')
+            ],
+            ReportSettings::REPORT_OUTGOING_EMPLOYEE_CALLS => [
+                'searchText' => '{}',
+                'minBillSec' => 0,
+                'isMain' => 1,
+                'variantName' => Util::translate('repModuleExtendedCDRs_'.ReportSettings::REPORT_OUTGOING_EMPLOYEE_CALLS)
+            ],
+        ];
+        $filterVariantReport = [
+            'userID=:userID:',
+            'bind' => ['userID' => $this->getUserData()['userId']],
+            'order'=> 'isMain DESC,id ASC,variantId ASC'
+        ];
+        $variants = ReportSettings::find($filterVariantReport)->toArray();
+        $currentReportNameID = ReportSettings::REPORT_MAIN;
+        $currentVariantId    = null;
+        $resultVariants      = [];
+        foreach ($variants as $variant){
+            if(empty($variant['variantId'])){
+                $mainReports[$variant['reportNameID']]['searchText'] = rawurlencode($variant['searchText']);
+                $mainReports[$variant['reportNameID']]['minBillSec'] = $variant['minBillSec'];
+                $mainReports[$variant['reportNameID']]['isMain']     = $variant['isMain'];
+                continue;
+            }
+
+            $resultVariants[$variant['reportNameID']][] = $variant;
+            if($currentVariantId !== null){
+                continue;
+            }
+            $currentReportNameID = $variant['reportNameID'];
+            $currentVariantId    = $variant['variantId'];
+            try {
+                $searchSettings      = json_decode($variant['searchText'], true, 512, JSON_THROW_ON_ERROR);
+            }catch (\Exception $e){
+                unset($e);
+            }
+        }
+        $this->view->mainReports = $mainReports;
+        $this->view->variants = $resultVariants;
+        $this->view->currentReportNameID    = $currentReportNameID;
+        $this->view->currentVariantId       = $currentVariantId;
+    }
+
+    private function getUserData():array
+    {
+        $accessData = (object)[
+            'userId' => 0,
+            'userNumber' => '',
+            'roleId' => '',
+            'roleName' => '',
+            'fullAccess' => '1',
+            'username' => '',
+        ];
+
+        if(PbxExtensionUtils::isEnabled('ModuleUsersUI')){
+            $session = $this->getDI()->get(SessionProvider::SERVICE_NAME)->get(SessionController::SESSION_ID);
+            $roleId  = str_replace(Constants::MODULE_ROLE_PREFIX,'', $session[SessionController::ROLE]??'');
+
+            $accessData->roleId     = $roleId;
+            $roleData = AccessGroups::findFirst(['id=:id:', 'bind' => ['id' => $roleId]]);
+            if($roleData){
+                $accessData->roleName   = $roleData->name;
+                $accessData->fullAccess = $roleData->fullAccess;
+            }
+            $accessData->username = $session[SessionController::USER_NAME]??'';
+            $filterCred = [
+                'user_login=:user_login:',
+                'bind' => [
+                    'user_login' => $session[SessionController::USER_NAME]??""
+                ]
+            ];
+            $credUI = UsersCredentials::findFirst($filterCred);
+            if($credUI){
+                $accessData->userId = $credUI->user_id;
+                $filterExten = [
+                    'type=:type: AND userid=:userid:',
+                    'bind' => [
+                        'type'   => Extensions::TYPE_SIP,
+                        'userid' => $credUI->user_id,
+                    ]
+                ];
+                $ext = Extensions::findFirst($filterExten);
+                if($ext){
+                    $accessData->userNumber = $ext->number;
+                    $accessData->cid = $ext->callerid;
+                }
+            }
+        }
+        return (array)$accessData;
     }
 
     /**
@@ -359,13 +461,36 @@ class ModuleExtendedCDRsController extends BaseController
     public function saveSearchSettingsAction(): void
     {
         $searchPhrase = $this->request->getPost('search');
+        $reportNameID = $this->request->getPost('reportNameID')??ReportSettings::REPORT_MAIN;
+        $variantId    = $this->request->getPost('variantId')??'';
+        $accessData   = $this->getUserData();
         $this->view->searchPhrase = $searchPhrase['value'];
+        $this->view->accessData   = $accessData;
+
         $settings = ModuleExtendedCDRs::findFirst();
         if(!$settings){
             $settings = new ModuleExtendedCDRs();
         }
         $settings->searchSettings = $searchPhrase['value']??'';
         $settings->save();
+
+        $filter = [
+            'userID=:userID: AND reportNameID=:reportNameID: AND variantId=:variantId:',
+            'bind' => [
+                'userID' => $accessData['userId'],
+                'reportNameID' => $reportNameID,
+                'variantId' => $variantId
+            ]
+        ];
+        $reportData = ReportSettings::findFirst($filter);
+        if(!$reportData){
+            $reportData = new ReportSettings();
+            $reportData->userID = $accessData['userId'];
+            $reportData->reportNameID = $reportNameID;
+            $reportData->variantId = $variantId;
+        }
+        $reportData->searchText = $searchPhrase['value']??'';
+        $reportData->save();
     }
 
     /**
@@ -384,14 +509,28 @@ class ModuleExtendedCDRsController extends BaseController
      */
     public function getHistoryAction(): void
     {
-        if($this->request->get('export-type') === 'pdf'){
-            echo 'test';
-            return;
-        }
         $this->view->draw = $this->request->get('draw');
         $searchPhrase     = $this->request->get('search');
+        $length           = is_numeric($this->request->get('length'))?(int)$this->request->get('length'):null;
+
         $gr = new GetReport();
-        $view = $gr->history($searchPhrase['value']??'',  $this->request->get('start'), $this->request->get('length'));
+        $view = $gr->history($searchPhrase['value']??'',  $this->request->get('start'), $length);
+        foreach ($view as $key => $value) {
+            $this->view->$key = $value;
+        }
+    }
+
+    /**
+     * Запрос отвчета по исходящим сотрудников
+     * @return void
+     */
+    public function getOutgoingEmployeeCallsAction(): void
+    {
+        $this->view->draw = $this->request->get('draw');
+        $searchPhrase     = $this->request->get('search');
+        $length           = is_numeric($this->request->get('length'))?(int)$this->request->get('length'):null;
+        $gr = new GetReport();
+        $view = $gr->outgoingEmployeeCalls($searchPhrase['value']??'',  $this->request->get('start'), $length);
         foreach ($view as $key => $value) {
             $this->view->$key = $value;
         }

@@ -18,83 +18,28 @@
  */
 
 use Modules\ModuleExtendedCDRs\Lib\GetReport;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Modules\ModuleExtendedCDRs\Models\ReportSettings;
 
 require_once('Globals.php');
 
-require_once(dirname(__DIR__).'/vendor/autoload.php');
+$filterVariantReport = [
+    'userID=:userID:',
+    'bind' => ['userID' => 0],
+    'order'=> 'isMain DESC,id ASC'
+];
+$variants = ReportSettings::find($filterVariantReport)->toArray();
 
+$test = [];
+foreach ($variants as $variant){
+    $test[$variant['reportNameID']][] = $variant;
+}
+print_r($test);
+exit();
 
 $searchPhrase = "{\"dateRangeSelector\":\"12\/09\/2024 - 11\/10\/2024\",\"globalSearch\":\"\",\"typeCall\":\"outgoing-calls\",\"additionalFilter\":\"\"}";
+$searchPhrase = "{\"dateRangeSelector\":\"01/10/2024 - 31/10/2024\",\"globalSearch\":\"\",\"typeCall\":\"all-calls\",\"additionalFilter\":\"201\"}";
 $gr = new GetReport();
-$view = $gr->history($searchPhrase);
-print_r($view);
+$view = $gr->outgoingEmployeeCalls($searchPhrase);
 
+print_r(array_values($view->data));
 exit();
-// Создаем экземпляр mPDF
-$mpdf = new \Mpdf\Mpdf();
-
-// Пример ассоциативного массива
-$data = [
-    ['name' => 'Иван', 'age' => 25, 'city' => 'Москва'],
-    ['name' => 'Мария', 'age' => 30, 'city' => 'Санкт-Петербург'],
-    ['name' => 'Петр', 'age' => 28, 'city' => 'Новосибирск'],
-    ['name' => 'Ольга', 'age' => 22, 'city' => 'Екатеринбург']
-];
-
-// Генерация HTML для вывода в PDF
-$html = '<h1>Список пользователей</h1>';
-$html .= '<table border="1" cellpadding="10" cellspacing="0" style="width: 100%;">';
-$html .= '<thead><tr><th>Имя</th><th>Возраст</th><th>Город</th></tr></thead>';
-$html .= '<tbody>';
-
-foreach ($data as $row) {
-    $html .= '<tr>';
-    $html .= '<td>' . htmlspecialchars($row['name']) . '</td>';
-    $html .= '<td>' . htmlspecialchars($row['age']) . '</td>';
-    $html .= '<td>' . htmlspecialchars($row['city']) . '</td>';
-    $html .= '</tr>';
-}
-
-$html .= '</tbody></table>';
-
-// Загружаем HTML в mPDF
-$mpdf->WriteHTML($html);
-
-// Выводим PDF напрямую в браузер
-$mpdf->Output('/root/users.pdf', \Mpdf\Output\Destination::FILE);
-
-
-
-// Создаем новый экземпляр Spreadsheet
-$spreadsheet = new Spreadsheet();
-$sheet = $spreadsheet->getActiveSheet();
-
-// Пример ассоциативного массива
-$data = [
-    ['name' => 'Иван', 'age' => 25, 'city' => 'Москва'],
-    ['name' => 'Мария', 'age' => 30, 'city' => 'Санкт-Петербург'],
-    ['name' => 'Петр', 'age' => 28, 'city' => 'Новосибирск'],
-    ['name' => 'Ольга', 'age' => 22, 'city' => 'Екатеринбург']
-];
-
-// Устанавливаем заголовки столбцов
-$sheet->setCellValue('A1', 'Имя');
-$sheet->setCellValue('B1', 'Возраст');
-$sheet->setCellValue('C1', 'Город');
-
-// Добавляем данные в ячейки
-$row = 2; // Начинаем со второй строки, так как первая — заголовки
-foreach ($data as $item) {
-    $sheet->setCellValue('A' . $row, $item['name']);
-    $sheet->setCellValue('B' . $row, $item['age']);
-    $sheet->setCellValue('C' . $row, $item['city']);
-    $row++;
-}
-
-// Создаем объект для записи файла
-$writer = new Xlsx($spreadsheet);
-
-// Сохраняем Excel-файл на сервере
-$writer->save('/root/users.xlsx');

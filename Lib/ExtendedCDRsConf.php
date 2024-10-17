@@ -70,8 +70,9 @@ class ExtendedCDRsConf extends ConfigClass
     public function getPBXCoreRESTAdditionalRoutes(): array
     {
         return [
-            [ApiController::class, 'downloads',         '/pbxcore/api/modules/ModuleExtendedCDRs/downloads', 'get', '/', false],
-            [ApiController::class, 'exportHistory',     '/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory', 'get', '/', false],
+            [ApiController::class, 'downloads',                     '/pbxcore/api/modules/ModuleExtendedCDRs/downloads', 'get', '/', false],
+            [ApiController::class, 'exportHistory',                 '/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory', 'get', '/', false],
+            [ApiController::class, 'exportOutgoingEmployeeCalls',   '/pbxcore/api/modules/ModuleExtendedCDRs/exportOutgoingEmployeeCalls', 'get', '/', false],
         ];
     }
 

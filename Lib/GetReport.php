@@ -59,8 +59,11 @@ class GetReport
             return $view;
         }
         $additionalFilter = [];
-        PBXConfModulesProvider::hookModulesMethod(CDRConfigInterface::APPLY_ACL_FILTERS_TO_CDR_QUERY, [&$additionalFilter]);
+        if (php_sapi_name() !== 'cli') {
+            PBXConfModulesProvider::hookModulesMethod(CDRConfigInterface::APPLY_ACL_FILTERS_TO_CDR_QUERY, [&$additionalFilter]);
+        }
         $view->additionalFilter = $additionalFilter;
+        $view->baseNumberFilter = array_merge($numbers, $additionalNumbers, $additionalFilter);
 
         $recordsFilteredReq = ConnectorDB::invoke('getCountCdr', [$start, $end, $numbers, $additionalNumbers, $additionalFilter]);
         $view->recordsFiltered = $recordsFilteredReq['cCalls'] ?? 0;
@@ -206,6 +209,7 @@ class GetReport
                     'start'         => date('d-m-Y H:i:s', strtotime($record->start)),
                     'waitTime'      => gmdate( $waitTime < 3600 ? 'i:s' : 'G:i:s', $waitTime),
                     'billsec'       => gmdate( $record->billsec < 3600 ? 'i:s' : 'G:i:s', $record->billsec),
+                    'billSecInt'    => $record->billsec,
                     'src_num'       => $record->src_num,
                     'dst_num'       => $record->dst_num,
                     'recordingfile' => $record->recordingfile,
@@ -220,6 +224,7 @@ class GetReport
                     'start'         => date('d-m-Y H:i:s', strtotime($record->start)),
                     'waitTime'      => gmdate( $waitTime < 3600 ? 'i:s' : 'G:i:s', $waitTime),
                     'billsec'       => gmdate( 'i:s', 0),
+                    'billSecInt'    => 0,
                     'src_num'       => $record->src_num,
                     'dst_num'       => $record->dst_num,
                     'recordingfile' => '',
@@ -254,6 +259,7 @@ class GetReport
                 'typeCallDesc'=> $cdr->typeCallDesc,
                 'line'        => $cdr->line,
                 'did'         => $cdr->did,
+                'billsec'     => $cdr->billsec,
                 'DT_RowId'    => $cdr->linkedid,
                 'DT_RowClass' => trim($additionalClass.' '.('NOANSWER' === $cdr->disposition ? 'negative' : '')),
                 'ids'         => rawurlencode(implode('&', array_unique($cdr->ids))),
@@ -263,6 +269,96 @@ class GetReport
         $view->data = $output;
         return $view;
     }
+
+    public function outgoingEmployeeCalls(string $searchPhrase = '', ?int $offset = null, ?int $limit = null):stdClass
+    {
+        $minBilSec = 1;
+        $tmpSearchPhrase = json_decode($searchPhrase, true);
+        $tmpSearchPhrase['typeCall'] = 'outgoing-calls';
+        $searchPhrase = json_encode($tmpSearchPhrase, JSON_UNESCAPED_SLASHES);
+        unset($tmpSearchPhrase);
+
+        $resultView = (object)[
+            'data'              => [],
+            'searchPhrase'      => $searchPhrase,
+        ];
+
+        $view = $this->history($searchPhrase);
+        $baseNumberFilter = $view->baseNumberFilter;
+        if(isset($baseNumberFilter['bind'])){
+            $baseNumberFilter = $baseNumberFilter['bind']['filteredExtensions']??[];
+        }
+        $resultView->additionalFilter = array_unique(array_merge($view->additionalFilter['bind']['filteredExtensions']??[], $baseNumberFilter));
+        if(empty($resultView->additionalFilter)){
+            $extensionsFilter = [
+                'type="'.Extensions::TYPE_SIP.'"',
+                'columns' => 'number,callerid',
+                'order' => 'number'
+            ];
+        }else{
+            $extensionsFilter = [
+                'type="'.Extensions::TYPE_SIP.'" AND number IN ({numbers:array})',
+                'columns' => 'number,callerid',
+                'order' => 'number',
+                'bind' => [
+                    'numbers' => $resultView->additionalFilter
+                ]
+            ];
+        }
+        $staffNumbers = Extensions::find($extensionsFilter)->toArray();
+        $staffNumbers = array_combine(
+            array_column($staffNumbers, 'number'),
+            array_column($staffNumbers, 'callerid')
+        );
+
+        $resultsCdrData = [];
+        $typeCallOutgoing = (int)CallHistory::CALL_TYPE_OUTGOING;
+        foreach ($view->data as $call) {
+            if ($call['typeCall'] !== $typeCallOutgoing) {
+                continue;
+            }
+            foreach ($call[4] as $detail) {
+                if (!empty($resultView->additionalFilter) && !in_array($detail['src_num'], $resultView->additionalFilter)) {
+                    continue;
+                }
+                if ($detail['billSecInt'] >= $minBilSec) {
+                    if (!isset($resultsCdrData[$detail['src_num']])) {
+                        $resultsCdrData[$detail['src_num']] = [
+                            'count' => 0,
+                            'total_billsec' => 0
+                        ];
+                    }
+                    $resultsCdrData[$detail['src_num']]['count']++;
+                    $resultsCdrData[$detail['src_num']]['total_billsec'] += $detail['billSecInt'];
+                }
+            }
+        }
+
+        foreach ($staffNumbers as $number => $userData){
+            $staffNumbers[$number] = [
+                'number' => $number,
+                'callerId' => $userData,
+                'countCalls' => $resultsCdrData[$number]['count']??0,
+                'billSecCalls' => $resultsCdrData[$number]['total_billsec']??0,
+                'billMinCalls' => round(($resultsCdrData[$number]['total_billsec']??0)/60, 2),
+                'billHourCalls' => round(($resultsCdrData[$number]['total_billsec']??0)/60/60, 2),
+            ];
+            unset($resultsCdrData[$number]);
+        }
+        unset($resultsCdrData);
+
+        $resultView->recordsFiltered = count($staffNumbers);
+
+        if ($offset !== null) {
+            $staffNumbers = array_slice($staffNumbers, $offset);
+        }
+        if ($limit !== null) {
+            $staffNumbers = array_slice($staffNumbers, 0, $limit);
+        }
+        $resultView->data = array_values($staffNumbers);
+        return $resultView;
+    }
+
 
     /**
      * Prepares query parameters for filtering CDR records.
@@ -389,7 +485,6 @@ class GetReport
         return [$start, $end, $globalNumbers, $additionalNumbers];
     }
 
-
     /**
      * Select CDR records with filters based on the provided parameters.
      *
@@ -398,9 +493,10 @@ class GetReport
      */
     private function selectCDRRecordsWithFilters(array $parameters): array
     {
-        // Apply ACL filters to CDR query using hook method
-        PBXConfModulesProvider::hookModulesMethod(CDRConfigInterface::APPLY_ACL_FILTERS_TO_CDR_QUERY, [&$parameters]);
-
+        if (php_sapi_name() !== 'cli') {
+            // Apply ACL filters to CDR query using hook method
+            PBXConfModulesProvider::hookModulesMethod(CDRConfigInterface::APPLY_ACL_FILTERS_TO_CDR_QUERY, [&$parameters]);
+        }
         // Retrieve CDR records based on the filtered parameters
         return ConnectorDB::invoke('getCdr', [$parameters]);
     }
