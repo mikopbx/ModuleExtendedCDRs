@@ -3,23 +3,16 @@
   <input id="currentVariantId" type="hidden" name="filters" value="{{currentVariantId}}">
 
   <div class="ui four column relaxed equal height divided grid">
-<!--     <div class="column"> -->
-<!--       <h4 id="CallDetails" class="ui header" style="cursor: pointer;">Журнал звонков</h4> -->
-<!--       <div class="ui link list"> -->
-<!--         <a class="item">Вариант 1</a> -->
-<!--         <a class="item">Вариант 2</a> -->
-<!--       </div> -->
-<!--     </div> -->
-<!--     <div class="column"> -->
-<!--       <h4 id="OutgoingEmployeeCalls" class="ui header" style="cursor: pointer;">Исходящие сотрудников</h4> -->
-<!--       <div class="ui link list"> -->
-<!--         <a class="item">Вариант 1</a> -->
-<!--         <a class="item">Вариант 2</a> -->
-<!--       </div> -->
-<!--     </div> -->
        {% for variantId,variantsData in mainReports %}
-        <div class="column">
-          <h4 id="{{ variantId }}" class="ui header" data-search-text="{{ variantsData['searchText'] }}" data-is-main="{{ variantsData['isMain'] }}" data-min-bill-sec="{{ variantsData['minBillSec'] }}" style="cursor: pointer;">{{ variantsData['variantName'] }}</h4>
+        <div class="six wide column">
+            <h4 id="{{ variantId }}" class="ui header" data-variant-id="{{ variantsData['variantId'] }}" data-search-text="{{ variantsData['searchText'] }}" data-is-main="{{ variantsData['isMain'] }}" data-min-bill-sec="{{ variantsData['minBillSec'] }}" style="cursor: pointer;">
+                {{ variantsData['variantName'] }}
+                {% if variantsData['isMain'] == '1' %}
+                    <i class="small star yellow icon" style="margin-bottom: 3px"></i>
+                {% else %}
+                    <i class="small star yellow outline icon" style="margin-bottom: 3px"></i>
+                {% endif %}
+            </h4>
           <div class="ui link list">
           </div>
         </div>

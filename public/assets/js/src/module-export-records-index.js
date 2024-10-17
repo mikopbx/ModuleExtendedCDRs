@@ -98,6 +98,30 @@ const ModuleExtendedCDRs = {
 		window[className].initializeForm();
 		$('.menu .item').tab();
 
+		$('#menu-reports i.star').on('click', function (e) {
+			e.stopPropagation();
+			let self = $(this);
+			$.ajax({
+				url: `${globalRootUrl}${idUrl}/saveMainVariantReport`,
+				type: 'POST',
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+					'X-Requested-With': 'XMLHttpRequest',
+				},
+				data: {
+					'reportNameID': $(this).parent().attr('id'),
+					'variantId': 	$(this).parent().attr('data-variant-id')
+				},
+				success: function(response) {
+					$('#menu-reports i.star').addClass('outline');
+					self.removeClass('outline');
+				},
+				error: function(xhr, status, error) {
+					console.error(error);
+				}
+			});
+
+		});
 		$('#typeCall.menu a.item').on('click', function (e) {
 			ModuleExtendedCDRs.applyFilter();
 		});
@@ -355,6 +379,9 @@ const ModuleExtendedCDRs = {
 	changeReportVariant(reportNameID, currentVariantId=''){
 		$(`table[data-report-name!=""]`).hide();
 		$(`table[data-report-name="${reportNameID}"]`).css('width', '').show();
+		if(reportNameID === 'CallDetails'){
+			ModuleExtendedCDRs.dataTable.page.len(ModuleExtendedCDRs.calculatePageLength()).draw();
+		}
 
 		$('#currentReportNameID').val(reportNameID);
 		$('#currentVariantId').val(currentVariantId);

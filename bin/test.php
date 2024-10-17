@@ -22,18 +22,9 @@ use Modules\ModuleExtendedCDRs\Models\ReportSettings;
 
 require_once('Globals.php');
 
-$filterVariantReport = [
-    'userID=:userID:',
-    'bind' => ['userID' => 0],
-    'order'=> 'isMain DESC,id ASC'
-];
-$variants = ReportSettings::find($filterVariantReport)->toArray();
 
-$test = [];
-foreach ($variants as $variant){
-    $test[$variant['reportNameID']][] = $variant;
-}
-print_r($test);
+$variants = ReportSettings::find()->toArray();
+var_dump($variants);
 exit();
 
 $searchPhrase = "{\"dateRangeSelector\":\"12\/09\/2024 - 11\/10\/2024\",\"globalSearch\":\"\",\"typeCall\":\"outgoing-calls\",\"additionalFilter\":\"\"}";

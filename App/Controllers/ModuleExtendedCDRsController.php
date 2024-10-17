@@ -224,19 +224,20 @@ class ModuleExtendedCDRsController extends BaseController
         $currentVariantId    = null;
         $resultVariants      = [];
         foreach ($variants as $variant){
+            if($variant['isMain'] === 1){
+                $currentReportNameID = $variant['reportNameID'];
+                $currentVariantId    = $variant['variantId'];
+            }
             if(empty($variant['variantId'])){
                 $mainReports[$variant['reportNameID']]['searchText'] = rawurlencode($variant['searchText']);
                 $mainReports[$variant['reportNameID']]['minBillSec'] = $variant['minBillSec'];
                 $mainReports[$variant['reportNameID']]['isMain']     = $variant['isMain'];
                 continue;
             }
-
             $resultVariants[$variant['reportNameID']][] = $variant;
             if($currentVariantId !== null){
                 continue;
             }
-            $currentReportNameID = $variant['reportNameID'];
-            $currentVariantId    = $variant['variantId'];
             try {
                 $searchSettings      = json_decode($variant['searchText'], true, 512, JSON_THROW_ON_ERROR);
             }catch (\Exception $e){
@@ -458,6 +459,28 @@ class ModuleExtendedCDRsController extends BaseController
         echo json_encode($result);
     }
 
+    public function saveMainVariantReportAction(): void{
+        $reportNameID = $this->request->getPost('reportNameID')??ReportSettings::REPORT_MAIN;
+        $variantId    = $this->request->getPost('variantId')??'';
+        $accessData   = $this->getUserData();
+        $this->view->accessData   = $accessData;
+
+        $filter = [
+            'userID=:userID:',
+            'bind' => [
+                'userID' => $accessData['userId'],
+            ]
+        ];
+        $reportsData = ReportSettings::find($filter);
+        foreach ($reportsData as $reportSettings) {
+            if($reportNameID === $reportSettings->reportNameID && $reportSettings->variantId === $variantId){
+                $reportSettings->isMain = true;
+            }else{
+                $reportSettings->isMain = false;
+            }
+            $reportSettings->save();
+        }
+    }
     public function saveSearchSettingsAction(): void
     {
         $searchPhrase = $this->request->getPost('search');
@@ -466,13 +489,6 @@ class ModuleExtendedCDRsController extends BaseController
         $accessData   = $this->getUserData();
         $this->view->searchPhrase = $searchPhrase['value'];
         $this->view->accessData   = $accessData;
-
-        $settings = ModuleExtendedCDRs::findFirst();
-        if(!$settings){
-            $settings = new ModuleExtendedCDRs();
-        }
-        $settings->searchSettings = $searchPhrase['value']??'';
-        $settings->save();
 
         $filter = [
             'userID=:userID: AND reportNameID=:reportNameID: AND variantId=:variantId:',
