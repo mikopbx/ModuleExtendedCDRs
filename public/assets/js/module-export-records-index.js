@@ -360,6 +360,7 @@ var ModuleExtendedCDRs = {
       }
     });
     ModuleExtendedCDRs.updateSettings();
+    ModuleExtendedCDRs.applyFilter();
     window[className].updateSyncState();
     setInterval(window[className].updateSyncState, 5000);
   },
