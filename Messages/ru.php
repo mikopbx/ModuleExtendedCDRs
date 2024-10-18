@@ -53,4 +53,19 @@ return [
     'repModuleExtendedCDRs_outgoingEmployeeCalls_countCalls'   => 'Количество',
     'repModuleExtendedCDRs_CallDetails'   => 'Журнал звонков',
     'repModuleExtendedCDRs_OutgoingEmployeeCalls'   => 'Исходящие сотрудников',
+
+
+    'repModuleExtendedCDRs_Form_titleReport'   => 'Наименование',
+    'repModuleExtendedCDRs_Form_titleReportError'   => 'Наименование не может быть пустым!',
+    'repModuleExtendedCDRs_Form_minBillSec'    => 'Минимальная длительность',
+    'repModuleExtendedCDRs_Form_minBillSecError'    => 'Значение минимальной длительности должно быть от 0 до 1000',
+    'repModuleExtendedCDRs_Form_minBillSec_s'  => 'с.',
+    'repModuleExtendedCDRs_Form_SendingScheduledReport'  => 'Отправка отчета по расписанию',
+    'repModuleExtendedCDRs_Form_DateMonth'  => 'Число месяца',
+    'repModuleExtendedCDRs_Form_DateMonthError'  => 'Число месяца должно быть от 1 до 31',
+    'repModuleExtendedCDRs_Form_Day'  => 'День недели',
+    'repModuleExtendedCDRs_Form_DayError'  => 'Допустимо указывать либо номер дня, либо диапазон: 1-7',
+    'repModuleExtendedCDRs_Form_Time' => 'Время',
+    'repModuleExtendedCDRs_Form_TimeError' => 'Время необходимо указать в формате 09:35',
+    'repModuleExtendedCDRs_Form_EmailError' => 'Не корректный email адрес',
 ];

@@ -196,6 +196,8 @@ class ModuleExtendedCDRsController extends BaseController
         $this->view->dateRangeSelector      = $searchSettings['dateRangeSelector']??'';
         $this->view->additionalFilter       = $additionalFilter;
         $this->view->additionalFilterString = implode(',',array_column($additionalFilter, 'number'));
+        $this->view->accessData  = $this->getUserData();
+
     }
 
     private function getVariantsReports(&$searchSettings)
@@ -210,7 +212,7 @@ class ModuleExtendedCDRsController extends BaseController
             ReportSettings::REPORT_OUTGOING_EMPLOYEE_CALLS => [
                 'searchText' => '{}',
                 'minBillSec' => 0,
-                'isMain' => 1,
+                'isMain' => 0,
                 'variantName' => Util::translate('repModuleExtendedCDRs_'.ReportSettings::REPORT_OUTGOING_EMPLOYEE_CALLS)
             ],
         ];
@@ -222,14 +224,21 @@ class ModuleExtendedCDRsController extends BaseController
         $variants = ReportSettings::find($filterVariantReport)->toArray();
         $currentReportNameID = ReportSettings::REPORT_MAIN;
         $currentVariantId    = null;
-        $resultVariants      = [];
+        $resultVariants      = [
+            ReportSettings::REPORT_MAIN => [],
+            ReportSettings::REPORT_OUTGOING_EMPLOYEE_CALLS => [],
+        ];
         foreach ($variants as $variant){
+            $variant['searchText'] = rawurlencode($variant['searchText']);
             if($variant['isMain'] === 1){
+                foreach (array_keys($mainReports) as $reportNameID){
+                    $mainReports[$reportNameID]['isMain'] = false;
+                }
                 $currentReportNameID = $variant['reportNameID'];
                 $currentVariantId    = $variant['variantId'];
             }
             if(empty($variant['variantId'])){
-                $mainReports[$variant['reportNameID']]['searchText'] = rawurlencode($variant['searchText']);
+                $mainReports[$variant['reportNameID']]['searchText'] = $variant['searchText'];
                 $mainReports[$variant['reportNameID']]['minBillSec'] = $variant['minBillSec'];
                 $mainReports[$variant['reportNameID']]['isMain']     = $variant['isMain'];
                 continue;
@@ -459,7 +468,8 @@ class ModuleExtendedCDRsController extends BaseController
         echo json_encode($result);
     }
 
-    public function saveMainVariantReportAction(): void{
+    public function saveMainVariantReportAction(): void
+    {
         $reportNameID = $this->request->getPost('reportNameID')??ReportSettings::REPORT_MAIN;
         $variantId    = $this->request->getPost('variantId')??'';
         $accessData   = $this->getUserData();
@@ -472,13 +482,46 @@ class ModuleExtendedCDRsController extends BaseController
             ]
         ];
         $reportsData = ReportSettings::find($filter);
+
+        $mainFound = false;
         foreach ($reportsData as $reportSettings) {
             if($reportNameID === $reportSettings->reportNameID && $reportSettings->variantId === $variantId){
                 $reportSettings->isMain = true;
+                $mainFound = true;
             }else{
                 $reportSettings->isMain = false;
             }
             $reportSettings->save();
+        }
+        if($mainFound === false){
+            $this->view->wasAddNewReport = 1;
+            $report = new ReportSettings();
+            $report->reportNameID = $reportNameID;
+            $report->userID = $accessData['userId'];
+            $report->variantId = $variantId;
+            $report->isMain = true;
+            $report->sendingScheduledReport = 0;
+            $report->searchText = '{"dateRangeSelector":"cal_ThisMonth","globalSearch":"","typeCall":"all-calls","additionalFilter":""}';
+            $report->save();
+        }
+    }
+    public function removeVariantReportAction(): void{
+        $reportNameID = $this->request->getPost('reportNameID')??ReportSettings::REPORT_MAIN;
+        $variantId    = $this->request->getPost('variantId')??'';
+        $accessData   = $this->getUserData();
+        $this->view->accessData   = $accessData;
+
+        $filter = [
+            'userID=:userID: AND reportNameID=:reportNameID: AND variantId=:variantId:',
+            'bind' => [
+                'userID' => $accessData['userId'],
+                'reportNameID' => $reportNameID,
+                'variantId' => $variantId
+            ]
+        ];
+        $reportsData = ReportSettings::findFirst($filter);
+        if($reportsData){
+            $reportsData->delete();
         }
     }
     public function saveSearchSettingsAction(): void
@@ -486,6 +529,7 @@ class ModuleExtendedCDRsController extends BaseController
         $searchPhrase = $this->request->getPost('search');
         $reportNameID = $this->request->getPost('reportNameID')??ReportSettings::REPORT_MAIN;
         $variantId    = $this->request->getPost('variantId')??'';
+        $variantName  = $this->request->getPost('variantName')??'';
         $accessData   = $this->getUserData();
         $this->view->searchPhrase = $searchPhrase['value'];
         $this->view->accessData   = $accessData;
@@ -505,8 +549,17 @@ class ModuleExtendedCDRsController extends BaseController
             $reportData->reportNameID = $reportNameID;
             $reportData->variantId = $variantId;
         }
+        $reportData->variantName = $variantName;
         $reportData->searchText = $searchPhrase['value']??'';
-        $reportData->save();
+
+        $reportData->minBillSec = $this->request->getPost('minBillSec')??'';
+        $reportData->sendingScheduledReport = $this->request->getPost('sendingScheduledReport')??'0';
+        $reportData->dateMonth = $this->request->getPost('dateMonth')??'';
+        $reportData->day = $this->request->getPost('day')??'';
+        $reportData->time = $this->request->getPost('time')??'';
+        $reportData->email = $this->request->getPost('email')??'';
+
+        $this->view->resSave = $reportData->save();
     }
 
     /**

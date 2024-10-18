@@ -76,6 +76,55 @@ var ModuleExtendedCDRs = {
   validateRules: {},
 
   /**
+   * Field validation rules
+   * https://semantic-ui.com/behaviors/form.html
+   */
+  validateVariantRules: {
+    title: {
+      identifier: 'title',
+      rules: [{
+        type: 'empty',
+        prompt: globalTranslate.repModuleExtendedCDRs_Form_titleReportError
+      }]
+    },
+    minBillSec: {
+      identifier: 'minBillSec',
+      rules: [{
+        type: 'integer[0..1000]',
+        prompt: globalTranslate.repModuleExtendedCDRs_Form_titleReportError
+      }]
+    },
+    dateMonth: {
+      identifier: 'dateMonth',
+      rules: [{
+        type: 'integer[1..31]',
+        prompt: globalTranslate.repModuleExtendedCDRs_Form_DateMonthError
+      }]
+    },
+    day: {
+      identifier: 'day',
+      rules: [{
+        type: 'regExp[/^((([1-7])(,[1-7])*)|(([1-7])-([1-7])(/([1-7]))?)|(\\*\\/[1-7]))$/]',
+        prompt: globalTranslate.repModuleExtendedCDRs_Form_DayError
+      }]
+    },
+    time: {
+      identifier: 'time',
+      rules: [{
+        type: 'regExp[/^(0[0-9]|1[0-9]|2[0-3]):([0-5][0-9])$/]',
+        prompt: globalTranslate.repModuleExtendedCDRs_Form_TimeError
+      }]
+    },
+    email: {
+      identifier: 'email',
+      rules: [{
+        type: 'regExp[/^\\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})(\\s+[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})*\\s*$/]',
+        prompt: globalTranslate.repModuleExtendedCDRs_Form_EmailError
+      }]
+    }
+  },
+
+  /**
    * On page load we init some Semantic UI library
    */
   initialize: function initialize() {
@@ -98,7 +147,7 @@ var ModuleExtendedCDRs = {
     $('#content-frame').css('display', 'none'); // Окончание форматирования базовой страницы
     //////
 
-    ModuleExtendedCDRs.changeReportVariant($('#currentReportNameID').val());
+    ModuleExtendedCDRs.changeReportVariant();
     ModuleExtendedCDRs.initializeDateRangeSelector(); // инициализируем чекбоксы и выподающие менюшки
 
     window[className].$checkBoxes.checkbox();
@@ -108,8 +157,118 @@ var ModuleExtendedCDRs = {
     window.addEventListener('ModuleStatusChanged', window[className].checkStatusToggle);
     window[className].initializeForm();
     $('.menu .item').tab();
+    $(document).on('click', '#menu-reports i.edit', function (e) {
+      e.stopPropagation();
+      var parent = $(this).parent();
+      $(e.target).parents('div.six.wide.column').children('h4').hide();
+      $(e.target).parents('div.six.wide.column').children('div').hide();
+      var reportId = $(this).parent().attr('data-report-id');
+      var form = $("form[data-report-id=\"".concat(reportId, "\"]"));
+      form.show();
+      form.form('set value', 'reportNameID', reportId);
+      form.form('set value', 'variantId', parent.attr('data-variant-id'));
+      form.form('set value', 'title', parent.find('div.content div.title').text().trim());
+      form.form('set value', 'minBillSec', parent.attr('data-min-bill-sec'));
+      form.form('set value', 'sendingScheduledReport', parent.attr('data-sending-scheduled-report') === '1');
+      form.form('set value', 'dateMonth', parent.attr('data-date-month'));
+      form.form('set value', 'day', parent.attr('data-day'));
+      form.form('set value', 'time', parent.attr('data-time'));
+      form.form('set value', 'email', parent.attr('data-email'));
+    });
+    $(document).on('click', '#menu-reports form button[data-action="save"]', function (e) {
+      e.stopPropagation();
+      var form = $(this).parent();
+      form.form({
+        fields: ModuleExtendedCDRs.validateVariantRules
+      });
+      var reportNameID = form.form('get value', 'reportNameID');
+      var variantId = form.form('get value', 'variantId');
+      var title = form.form('get value', 'title').trim();
+      var minBillSec = form.form('get value', 'minBillSec');
+      var sendingReport = form.form('get value', 'sendingScheduledReport') ? 1 : 0;
+      var dateMonth = form.form('get value', 'dateMonth');
+      var day = form.form('get value', 'day');
+      var time = form.form('get value', 'time');
+      var email = form.form('get value', 'email');
+
+      if (!form.form('is valid', 'title')) {
+        form.form('submit');
+        return;
+      }
+
+      if (!form.form('is valid', 'minBillSec')) {
+        form.form('submit');
+        return;
+      }
+
+      if (dateMonth && !form.form('is valid', 'dateMonth')) {
+        form.form('submit');
+        return;
+      }
+
+      if (day && !form.form('is valid', 'day')) {
+        form.form('submit');
+        return;
+      }
+
+      if (time && !form.form('is valid', 'time')) {
+        form.form('submit');
+        return;
+      }
+
+      if (email && !form.form('is valid', 'email')) {
+        form.form('submit');
+        return;
+      }
+
+      var parent = $("a[data-variant-id=\"".concat(variantId, "\"][data-report-id=\"").concat(reportNameID, "\"]"));
+      parent.find('div.content div.title').text(title);
+      parent.attr({
+        'data-min-bill-sec': minBillSec,
+        'data-sending-scheduled-report': sendingReport,
+        'data-date-month': dateMonth,
+        'data-day': day,
+        'data-time': time,
+        'data-email': email
+      });
+      var contentDiv = parent.find('div.content');
+      contentDiv.find('div.input').hide();
+      contentDiv.find('div.title').show();
+      parent.find('i.star').show();
+      form.hide();
+      $(e.target).parents('div.six.wide.column').children('h4').show();
+      $(e.target).parents('div.six.wide.column').children('div').show();
+      ModuleExtendedCDRs.changeReportVariant(reportNameID, variantId);
+      ModuleExtendedCDRs.saveSearchSettings();
+      ModuleExtendedCDRs.applyFilter();
+    });
+    $('#menu-reports i.copy').on('click', function (e) {
+      e.stopPropagation();
+      var reportId = $(this).parent().attr('id');
+      var timestamp = Date.now();
+      var parentTitle = $(this).parent().find('div.content').text().trim();
+      var html = "<i class=\"small star outline yellow icon\" style=\"display: none;padding-top: 3px\"></i>\n<i class=\"small edit outline icon\" style=\"padding-top: 3px\"></i>\n<i class=\"small trash alternate outline outline red icon\" style=\"padding-top: 3px\"></i>\n<div class=\"content\">\n\t<div class=\"title\">".concat(parentTitle, " (").concat(timestamp, ")</div>\n\t<div class=\"ui mini input fluid hidden\" style=\"display: none;\">\n\t  <input type=\"text\" value=\"").concat(parentTitle, " (").concat(timestamp, ")\">\n\t</div>\n</div>");
+      var newItem = $('<a>', {
+        "class": 'item',
+        html: html,
+        'data-report-id': reportId,
+        'data-is-main': '0',
+        'data-min-bill-sec': $(this).parent().attr('data-min-bill-sec'),
+        'data-search-text': $(this).parent().attr('data-search-text'),
+        'data-variant-id': timestamp
+      });
+      $(this).parent().siblings('.ui.link.list').append(newItem);
+      $("a[data-variant-id=\"".concat(timestamp, "\"][data-report-id=\"").concat(reportId, "\"] i.edit")).trigger('click');
+    });
     $('#menu-reports i.star').on('click', function (e) {
       e.stopPropagation();
+      var reportNameID = $(this).parent().attr('id');
+
+      if (reportNameID === undefined) {
+        reportNameID = $(this).parent().attr('data-report-id');
+      }
+
+      var variantId = $(this).parent().attr('data-variant-id');
       var self = $(this);
       $.ajax({
         url: "".concat(globalRootUrl).concat(idUrl, "/saveMainVariantReport"),
@@ -119,8 +278,8 @@ var ModuleExtendedCDRs = {
           'X-Requested-With': 'XMLHttpRequest'
         },
         data: {
-          'reportNameID': $(this).parent().attr('id'),
-          'variantId': $(this).parent().attr('data-variant-id')
+          'reportNameID': reportNameID,
+          'variantId': variantId
         },
         success: function success(response) {
           $('#menu-reports i.star').addClass('outline');
@@ -128,6 +287,30 @@ var ModuleExtendedCDRs = {
         },
         error: function error(xhr, status, _error) {
           console.error(_error);
+        }
+      });
+    });
+    $(document).on('click', '#menu-reports i.trash', function (e) {
+      e.stopPropagation();
+      var reportNameID = $(this).parent().attr('data-report-id');
+      var variantId = $(this).parent().attr('data-variant-id');
+      var self = $(this);
+      $.ajax({
+        url: "".concat(globalRootUrl).concat(idUrl, "/removeVariantReport"),
+        type: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        data: {
+          'reportNameID': reportNameID,
+          'variantId': variantId
+        },
+        success: function success(response) {
+          self.parent().remove();
+        },
+        error: function error(xhr, status, _error2) {
+          console.error(_error2);
         }
       });
     });
@@ -152,6 +335,14 @@ var ModuleExtendedCDRs = {
       var reportId = $(this).attr('id');
       $("h1.header i.th.icon").popup('hide');
       ModuleExtendedCDRs.changeReportVariant(reportId);
+      ModuleExtendedCDRs.applyFilter();
+    });
+    $(document).on('click', 'div.column div.link.list a.item div.title', function (e) {
+      var reportId = $(e.target).closest('a').attr('data-report-id');
+      var variantId = $(e.target).closest('a').attr('data-variant-id');
+      $("h1.header i.th.icon").popup('hide');
+      ModuleExtendedCDRs.changeReportVariant(reportId, variantId);
+      ModuleExtendedCDRs.applyFilter();
     });
     ModuleExtendedCDRs.$globalSearch.on('keyup', function (e) {
       if (e.keyCode === 13 || e.keyCode === 8 || ModuleExtendedCDRs.$globalSearch.val().length === 0) {
@@ -387,32 +578,48 @@ var ModuleExtendedCDRs = {
     window[className].updateSyncState();
     setInterval(window[className].updateSyncState, 5000);
   },
-  changeReportVariant: function changeReportVariant(reportNameID) {
+  changeReportVariant: function changeReportVariant() {
+    var reportNameID = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : '';
     var currentVariantId = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : '';
+
+    if (reportNameID === '') {
+      reportNameID = $('#currentReportNameID').val();
+      currentVariantId = $('#currentVariantId').val();
+    }
+
     $("table[data-report-name!=\"\"]").hide();
     $("table[data-report-name=\"".concat(reportNameID, "\"]")).css('width', '').show();
 
-    if (reportNameID === 'CallDetails') {
+    if (reportNameID === 'CallDetails' && ModuleExtendedCDRs.dataTable.page !== undefined) {
       ModuleExtendedCDRs.dataTable.page.len(ModuleExtendedCDRs.calculatePageLength()).draw();
     }
 
     $('#currentReportNameID').val(reportNameID);
     $('#currentVariantId').val(currentVariantId);
+    var variantName = '';
+
+    if (currentVariantId !== '') {
+      variantName = $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportNameID, "\"] div.title")).text().trim();
+    } else {
+      variantName = $("h4#".concat(reportNameID, " div.content")).text().trim();
+    }
+
     $("h1.header div.content").contents().filter(function () {
       return this.nodeType === 3 && this.nodeValue.trim() !== '';
     }).each(function () {
-      this.nodeValue = $("#".concat($('#currentReportNameID').val())).text();
+      this.nodeValue = variantName;
     });
     ModuleExtendedCDRs.updateSettings();
   },
   updateSettings: function updateSettings() {
     var currentVariantId = $('#currentVariantId').val();
+    var reportNameID = $('#currentReportNameID').val();
     var settings = {};
 
     if (currentVariantId === '') {
-      settings = JSON.parse(decodeURIComponent($("#".concat($('#currentReportNameID').val())).attr('data-search-text')));
-    } else {// settings = JSON.parse(decodeURIComponent($(`#${$('#currentReportNameID').val()}`).attr('data-search-text')));
-      // TODO
+      settings = JSON.parse(decodeURIComponent($("#".concat(reportNameID)).attr('data-search-text')));
+    } else {
+      settings = JSON.parse(decodeURIComponent($("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportNameID, "\"]")).attr('data-search-text')));
     }
 
     if (settings.dateRangeSelector !== undefined && settings.dateRangeSelector !== '') {
@@ -581,8 +788,8 @@ var ModuleExtendedCDRs = {
             }
           }
         },
-        error: function error(xhr, status, _error2) {
-          console.error("Ошибка запроса", status, _error2);
+        error: function error(xhr, status, _error3) {
+          console.error("Ошибка запроса", status, _error3);
         }
       });
     });
@@ -604,8 +811,8 @@ var ModuleExtendedCDRs = {
         console.log("Успешный запрос", response);
         $('#sync-rules tr#' + id).remove();
       },
-      error: function error(xhr, status, _error3) {
-        console.error("Ошибка запроса", status, _error3);
+      error: function error(xhr, status, _error4) {
+        console.error("Ошибка запроса", status, _error4);
       }
     });
   },
@@ -689,8 +896,17 @@ var ModuleExtendedCDRs = {
       dateRangeSelector = ModuleExtendedCDRs.$dateRangeSelector.val();
     }
 
+    var reportNameID = $('#currentReportNameID').val();
+    var currentVariantId = $('#currentVariantId').val();
+    var minBilSec = $("h4#".concat(reportNameID)).attr('data-min-bill-sec');
+
+    if (currentVariantId !== '') {
+      minBilSec = $("a[data-report-id=\"".concat(reportNameID, "\"][data-variant-id=\"").concat(currentVariantId, "\"]")).attr('data-min-bill-sec');
+    }
+
     var filter = {
       dateRangeSelector: dateRangeSelector,
+      minBilSec: minBilSec,
       globalSearch: ModuleExtendedCDRs.$globalSearch.val(),
       typeCall: $('#typeCall a.item.active').attr('data-tab'),
       additionalFilter: $('#additionalFilter').dropdown('get value').replace(/,/g, ' ')
@@ -714,6 +930,27 @@ var ModuleExtendedCDRs = {
   },
   saveSearchSettings: function saveSearchSettings() {
     var search = ModuleExtendedCDRs.getSearchText(true, true);
+    var currentVariantId = $('#currentVariantId').val();
+    var reportId = $('#currentReportNameID').val();
+    var variantName = '';
+    var data = {
+      'search[value]': search,
+      'reportNameID': reportId,
+      'variantId': currentVariantId,
+      'variantName': variantName
+    };
+
+    if (currentVariantId !== '') {
+      var parent = $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportId, "\"]"));
+      data.variantName = parent.find('div.title').text().trim();
+      data.minBillSec = parent.attr('data-min-bill-sec').trim();
+      data.sendingScheduledReport = parent.attr('data-sending-scheduled-report').trim();
+      data.dateMonth = parent.attr('data-date-month').trim();
+      data.day = parent.attr('data-day').trim();
+      data.time = parent.attr('data-time').trim();
+      data.email = parent.attr('data-email').trim();
+    }
+
     $.ajax({
       url: "".concat(globalRootUrl).concat(idUrl, "/saveSearchSettings"),
       type: 'POST',
@@ -721,23 +958,16 @@ var ModuleExtendedCDRs = {
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
         'X-Requested-With': 'XMLHttpRequest'
       },
-      data: {
-        'search[value]': search,
-        'reportNameID': $('#currentReportNameID').val(),
-        'variantId': $('#currentVariantId').val()
-      },
+      data: data,
       success: function success(response) {
-        console.log(response);
-        var currentVariantId = $('#currentVariantId').val();
-
         if (currentVariantId === '') {
           $("#".concat($('#currentReportNameID').val())).attr('data-search-text', encodeURIComponent(search));
-        } else {// settings = JSON.parse(decodeURIComponent($(`#${$('#currentReportNameID').val()}`).attr('data-search-text')));
-          // TODO
+        } else {
+          $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportId, "\"]")).attr('data-search-text', encodeURIComponent(search));
         }
       },
-      error: function error(xhr, status, _error4) {
-        console.error(_error4);
+      error: function error(xhr, status, _error5) {
+        console.error(_error5);
       }
     });
   },

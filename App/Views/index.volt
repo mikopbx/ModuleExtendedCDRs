@@ -6,15 +6,90 @@
        {% for variantId,variantsData in mainReports %}
         <div class="six wide column">
             <h4 id="{{ variantId }}" class="ui header" data-variant-id="{{ variantsData['variantId'] }}" data-search-text="{{ variantsData['searchText'] }}" data-is-main="{{ variantsData['isMain'] }}" data-min-bill-sec="{{ variantsData['minBillSec'] }}" style="cursor: pointer;">
-                {{ variantsData['variantName'] }}
                 {% if variantsData['isMain'] == '1' %}
-                    <i class="small star yellow icon" style="margin-bottom: 3px"></i>
+                    <i class="small star yellow icon"></i>
                 {% else %}
-                    <i class="small star yellow outline icon" style="margin-bottom: 3px"></i>
+                    <i class="small star yellow outline icon"></i>
                 {% endif %}
+                <i class="small copy green outline icon"></i>
+                <div class="content">
+                  {{ variantsData['variantName'] }}
+                </div>
             </h4>
           <div class="ui link list">
+               {% for variantsAdditionalData in variants[variantId] %}
+                    <a class="item" data-variant-id="{{ variantsAdditionalData['variantId'] }}" data-search-text="{{ variantsAdditionalData['searchText'] }}"
+                        data-report-id="{{variantId}}" data-is-main="{{ variantsAdditionalData['isMain'] }}"
+                        data-sending-scheduled-report="{{ variantsAdditionalData['sendingScheduledReport'] }}" data-min-bill-sec="{{ variantsAdditionalData['minBillSec'] }}"
+                        data-date-month="{{ variantsAdditionalData['dateMonth'] }}" data-day="{{ variantsAdditionalData['day'] }}" data-time="{{ variantsAdditionalData['time'] }}"
+                        data-email="{{ variantsAdditionalData['email'] }}"
+                        >
+                        {% if variantsAdditionalData['isMain'] == '1' %}
+                            <i class="small star yellow icon" style="padding-top: 3px"></i>
+                        {% else %}
+                            <i class="small star outline yellow icon" style="padding-top: 3px"></i>
+                        {% endif %}
+                        <i class="small edit outline icon" style="padding-top: 3px"></i>
+                        <i class="small trash alternate outline outline red icon" style="padding-top: 3px"></i>
+                        <div class="content">
+                        	<div class="title">{{ variantsAdditionalData['variantName'] }}</div>
+                        </div>
+                    </a>
+               {% endfor %}
           </div>
+          <form data-report-id="{{variantId}}" class="ui mini form" style="display: none;">
+            <input type="hidden" name="reportNameID" value="{{variantId}}">
+            <input type="hidden" name="variantId" value="{{ variantsAdditionalData['variantId'] }}">
+
+            <div class="field">
+              <label>{{t._('repModuleExtendedCDRs_Form_titleReport')}}</label>
+              <input type="text" name="title" placeholder="{{ t._('repModuleExtendedCDRs_Form_titleReport') }}...">
+            </div>
+            {% if variantId == 'CallDetails' %}
+            <div class="field" style="display: none;">
+            {% else %}
+            <div class="field">
+            {% endif %}
+
+              <label>{{ t._('repModuleExtendedCDRs_Form_minBillSec') }}</label>
+              <div class="ui right labeled input">
+                <input type="text" name="minBillSec" placeholder="0">
+                <div class="ui basic label">
+                  {{ t._('repModuleExtendedCDRs_Form_minBillSec_s') }}
+                </div>
+              </div>
+            </div>
+            {% if accessData['fullAccess'] == '1' %}
+            <div>
+            {% else %}
+            <div style="display: none;">
+            {% endif %}
+                <div class="field">
+                  <div class="ui checkbox">
+                    <input type="checkbox" name="sendingScheduledReport" tabindex="0" class="hidden">
+                    <label>{{ t._('repModuleExtendedCDRs_Form_SendingScheduledReport') }}</label>
+                  </div>
+                </div>
+                <div class="field">
+                  <label>{{ t._('repModuleExtendedCDRs_Form_DateMonth') }}</label>
+                  <input type="text" name="dateMonth" placeholder="1-31">
+                </div>
+                <div class="field">
+                  <label>{{ t._('repModuleExtendedCDRs_Form_Day') }}</label>
+                  <input type="text" name="day" placeholder="1-7">
+                </div>
+                <div class="field">
+                  <label>{{ t._('repModuleExtendedCDRs_Form_Time') }}</label>
+                  <input type="text" name="time" placeholder="09:35">
+                </div>
+                <div class="field">
+                  <label>Email</label>
+                  <input type="text" name="email" placeholder="test@test.ru test2@test.ru test3@test.ru">
+                </div>
+            </div>
+            <br>
+            <button class="ui button" data-action="save" type="button">Сохранить</button>
+          </form>
         </div>
        {% endfor %}
   </div>

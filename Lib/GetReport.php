@@ -23,6 +23,11 @@ use MikoPBX\Common\Models\Extensions;
 use MikoPBX\Common\Providers\PBXConfModulesProvider;
 use MikoPBX\Modules\Config\CDRConfigInterface;
 use Modules\ModuleUsersGroups\Models\GroupMembers;
+use Mpdf\Mpdf;
+use Mpdf\Output\Destination;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use stdClass;
 use DateTime;
 use MikoPBX\Common\Models\Sip;
@@ -30,9 +35,12 @@ use MikoPBX\Core\System\Util;
 use Modules\ModuleExtendedCDRs\bin\ConnectorDB;
 use Modules\ModuleExtendedCDRs\Models\CallHistory;
 
+require_once(dirname(__DIR__).'/vendor/autoload.php');
+
 class GetReport
 {
     /**
+     * Формирование журнала звонков.
      * @param string   $searchPhrase
      * @param int|null $offset
      * @param int|null $limit
@@ -40,6 +48,11 @@ class GetReport
      */
     public function history(string $searchPhrase = '', ?int $offset = null, ?int $limit = null):stdClass
     {
+        $tmpSearchPhrase = json_decode($searchPhrase, true);
+        $tmpSearchPhrase['dateRangeSelector'] = self::getDateRanges($tmpSearchPhrase['dateRangeSelector']);
+        $searchPhrase = json_encode($tmpSearchPhrase, JSON_UNESCAPED_SLASHES);
+        unset($tmpSearchPhrase);
+
         $view = (object)[
             'recordsFiltered'   => 0,
             'data'              => [],
@@ -269,12 +282,118 @@ class GetReport
         $view->data = $output;
         return $view;
     }
+    public static function exportHistoryXls($view):void
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $headers = [
+            Util::translate('repModuleExtendedCDRs_cdr_ColumnTypeState'),
+            Util::translate('cdr_ColumnDate'),
+            Util::translate('cdr_ColumnFrom'),
+            Util::translate('cdr_ColumnTo'),
+            Util::translate('repModuleExtendedCDRs_cdr_ColumnLine'),
+            Util::translate('repModuleExtendedCDRs_cdr_ColumnWaitTime'),
+            Util::translate('cdr_ColumnDuration'),
+            Util::translate('repModuleExtendedCDRs_cdr_ColumnCallState'),
+            'id'
+        ];
+        $sheet->fromArray($headers, NULL, 'A1');
+        $rowIndex = 2;
+        foreach ($view->data as $baseItem) {
+            foreach ($baseItem['4'] as $item) {
+                $sheet->setCellValue('A' . $rowIndex, htmlspecialchars($baseItem['typeCallDesc']));
+                $sheet->setCellValue('B' . $rowIndex, htmlspecialchars($item['start']));
+                $sheet->setCellValue('C' . $rowIndex, htmlspecialchars($item['src_num']));
+                $sheet->setCellValue('D' . $rowIndex, htmlspecialchars($item['dst_num']));
+                $sheet->setCellValue('E' . $rowIndex, htmlspecialchars($baseItem['line']));
+                $sheet->setCellValue('F' . $rowIndex, htmlspecialchars($item['waitTime']));
+                $sheet->setCellValue('G' . $rowIndex, htmlspecialchars($item['billsec']));
+                $sheet->setCellValue('H' . $rowIndex, htmlspecialchars($item['stateCall']));
+                $sheet->setCellValue('I' . $rowIndex, htmlspecialchars($baseItem['DT_RowId']));
+                $rowIndex++;
+            }
+        }
+        $highestRow = $sheet->getHighestRow();
+        $highestColumn = $sheet->getHighestColumn();
+        $highestColumnIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($highestColumn);
+        for ($col = 1; $col <= $highestColumnIndex; $col++) {
+            $maxLength = 0;
+            for ($row = 1; $row <= $highestRow; $row++) {
+                $cellValue = $sheet->getCellByColumnAndRow($col, $row)->getValue();
+                if ($cellValue !== null) {
+                    $maxLength = max($maxLength, strlen($cellValue));
+                }
+            }
+            $sheet->getColumnDimensionByColumn($col)->setWidth($maxLength + 2);
+        }
+        $writer = new Xlsx($spreadsheet);
 
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="calls_report.xlsx"');
+        header('Cache-Control: max-age=0');
+        $writer->save('php://output');
+    }
+    public static function exportHistoryPdf($view, $saveInFile = false):string
+    {
+        $tmpDir = '/tmp';
+        $mpdf = new Mpdf(['tempDir' => $tmpDir]);
+        $html  = '<table border="1" cellpadding="10" cellspacing="0" style="width: 100%;">';
+        $html .= '<tr>';
+
+        $html .= '<thead>'.
+            '<th>' . Util::translate('repModuleExtendedCDRs_cdr_ColumnTypeState') . '</th>'.
+            '<th>' . Util::translate('cdr_ColumnDate') . '</th>'.
+            '<th>' . Util::translate('cdr_ColumnFrom') . '</th>'.
+            '<th>' . Util::translate('cdr_ColumnTo') . '</th>'.
+            '<th>' . Util::translate('repModuleExtendedCDRs_cdr_ColumnLine') . '</th>'.
+            '<th>' . Util::translate('repModuleExtendedCDRs_cdr_ColumnWaitTime') . '</th>'.
+            '<th>' . Util::translate('cdr_ColumnDuration') . '</th>'.
+            '<th>' . Util::translate('repModuleExtendedCDRs_cdr_ColumnCallState') . '</th>'.
+            '<th>id</th>'.
+            '</thead>';
+        $html .= '<tbody>';
+
+        foreach ($view->data as $baseItem) {
+            foreach ($baseItem['4'] as $item){
+                $html .= '<tr>';
+                $html .= '<td>' . htmlspecialchars($baseItem['typeCallDesc']) . '</td>';
+                $html .= '<td>' . htmlspecialchars($item['start']) . '</td>';
+                $html .= '<td>' . htmlspecialchars($item['src_num']) . '</td>';
+                $html .= '<td>' . htmlspecialchars($item['dst_num']) . '</td>';
+                $html .= '<td>' . htmlspecialchars($baseItem['line']) . '</td>';
+                $html .= '<td>' . htmlspecialchars($item['waitTime']) . '</td>';
+                $html .= '<td>' . htmlspecialchars($item['billsec']) . '</td>';
+                $html .= '<td>' . htmlspecialchars($item['stateCall']) . '</td>';
+                $html .= '<td>' . htmlspecialchars($baseItem['DT_RowId']) . '</td>';
+                $html .= '</tr>';
+            }
+        }
+        $html .= '</tbody></table>';
+        $mpdf->WriteHTML($html);
+        $filename = $tmpDir.'/calls_report-'.time().'.pdf';
+
+        if($saveInFile === true){
+            $mpdf->Output($tmpDir.'/calls_report-'.time().'.pdf', Destination::FILE);
+        }else{
+            $mpdf->Output('calls_report.pdf', Destination::DOWNLOAD);
+        }
+
+        return $filename;
+    }
+
+    /**
+     * Формирование сводного отчета по сотрудникам.
+     * @param string   $searchPhrase
+     * @param int|null $offset
+     * @param int|null $limit
+     * @return stdClass
+     */
     public function outgoingEmployeeCalls(string $searchPhrase = '', ?int $offset = null, ?int $limit = null):stdClass
     {
-        $minBilSec = 1;
         $tmpSearchPhrase = json_decode($searchPhrase, true);
         $tmpSearchPhrase['typeCall'] = 'outgoing-calls';
+        $tmpSearchPhrase['dateRangeSelector'] = self::getDateRanges($tmpSearchPhrase['dateRangeSelector']);
+        $minBilSec = $tmpSearchPhrase['minBilSec']??0;
         $searchPhrase = json_encode($tmpSearchPhrase, JSON_UNESCAPED_SLASHES);
         unset($tmpSearchPhrase);
 
@@ -358,7 +477,86 @@ class GetReport
         $resultView->data = array_values($staffNumbers);
         return $resultView;
     }
+    public static function exportOutgoingEmployeeCallsPrintPdf($view, $saveInFile = false):string
+    {
+        $tmpDir = '/tmp';
+        $mpdf = new Mpdf(['tempDir' => $tmpDir]);
+        $html  = '<h3>Сводная статистика за период: '.json_decode($view->searchPhrase,true)['dateRangeSelector'].'</h3>';
+        $html .= '<table border="1" cellpadding="10" cellspacing="0" style="width: 100%;">';
+        $html .= '<tr>';
+        $html .= '<thead>' .
+            '<th>' . Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_callerId') . '</th>'.
+            '<th>' . Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_number') . '</th>'.
+            '<th>' . Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_billHourCalls') . '</th>'.
+            '<th>' . Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_billMinCalls') . '</th>'.
+            '<th>' . Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_billSecCalls') . '</th>'.
+            '<th>' . Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_countCalls') . '</th>'.
+            '</thead>';
+        $html .= '<tbody>';
+        foreach ($view->data as $index => $item) {
+            $rowStyle = ($index % 2 == 1) ? 'background-color: #f0f0f0;' : '';
+            $html .= '<tr>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['callerId']) . '</td>';
+            $html .= '<td style="background-color: #d3d3d3;">' . htmlspecialchars($item['number']) . '</td>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['billHourCalls']) . '</td>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['billMinCalls']) . '</td>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['billSecCalls']) . '</td>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['countCalls']) . '</td>';
+            $html .= '</tr>';
+        }
+        $html .= '</tbody></table>';
+        $mpdf->WriteHTML($html);
+        $filename = $tmpDir.'/outgoing-employee-calls-'.time().'.pdf';
+        if($saveInFile === true){
+            $mpdf->Output($filename, Destination::FILE);
+        }else{
+            $mpdf->Output('outgoing-employee-calls.pdf', Destination::DOWNLOAD);
+        }
+        return $filename;
+    }
+    public static function exportOutgoingEmployeeCallsPrintXls($view):void
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $headers = [
+            Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_callerId'),
+            Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_number'),
+            Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_billHourCalls'),
+            Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_billMinCalls'),
+            Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_billSecCalls'),
+            Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_countCalls'),
+        ];
+        $sheet->fromArray($headers, NULL, 'A1');
+        $rowIndex = 2;
+        foreach ($view->data as $item) {
+            $sheet->setCellValueExplicit('A' . $rowIndex, htmlspecialchars($item['callerId']), DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit('B' . $rowIndex, htmlspecialchars($item['number']), DataType::TYPE_STRING);
+            $sheet->setCellValue('C' . $rowIndex, htmlspecialchars($item['billHourCalls']));
+            $sheet->setCellValue('D' . $rowIndex, htmlspecialchars($item['billMinCalls']));
+            $sheet->setCellValue('E' . $rowIndex, htmlspecialchars($item['billSecCalls']));
+            $sheet->setCellValue('F' . $rowIndex, htmlspecialchars($item['countCalls']));
+            $rowIndex++;
+        }
+        $highestRow = $sheet->getHighestRow();
+        $highestColumn = $sheet->getHighestColumn();
+        $highestColumnIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($highestColumn);
+        for ($col = 1; $col <= $highestColumnIndex; $col++) {
+            $maxLength = 0;
+            for ($row = 1; $row <= $highestRow; $row++) {
+                $cellValue = $sheet->getCellByColumnAndRow($col, $row)->getValue();
+                if ($cellValue !== null) {
+                    $maxLength = max($maxLength, strlen($cellValue));
+                }
+            }
+            $sheet->getColumnDimensionByColumn($col)->setWidth($maxLength + 2);
+        }
+        $writer = new Xlsx($spreadsheet);
 
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="outgoing-employee-calls.xlsx"');
+        header('Cache-Control: max-age=0');
+        $writer->save('php://output');
+    }
 
     /**
      * Prepares query parameters for filtering CDR records.
@@ -499,5 +697,18 @@ class GetReport
         }
         // Retrieve CDR records based on the filtered parameters
         return ConnectorDB::invoke('getCdr', [$parameters]);
+    }
+
+    public function getDateRanges(string $srcPeriod):string
+    {
+        $dateRanges = [
+            'cal_Today' => (new DateTime())->format('d/m/Y') . ' - ' . (new DateTime())->format('d/m/Y'),
+            'cal_Yesterday' => (new DateTime())->modify('-1 day')->format('d/m/Y') . ' - ' . (new DateTime())->modify('-1 day')->format('d/m/Y'),
+            'cal_LastWeek' => (new DateTime())->modify('-6 days')->format('d/m/Y') . ' - ' . (new DateTime())->format('d/m/Y'),
+            'cal_Last30Days' => (new DateTime())->modify('-29 days')->format('d/m/Y') . ' - ' . (new DateTime())->format('d/m/Y'),
+            'cal_ThisMonth' => (new DateTime())->modify('first day of this month')->format('d/m/Y') . ' - ' . (new DateTime())->modify('last day of this month')->format('d/m/Y'),
+            'cal_LastMonth' => (new DateTime())->modify('first day of last month')->format('d/m/Y') . ' - ' . (new DateTime())->modify('last day of last month')->format('d/m/Y'),
+        ];
+        return $dateRanges[$srcPeriod]??$srcPeriod;
     }
 }

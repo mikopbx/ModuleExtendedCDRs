@@ -62,11 +62,37 @@ class ReportSettings extends ModulesModelsBase
      * @Column(type="integer", default="0", nullable=true)
      */
     public $minBillSec;
+
     /**
      * Список ID пользователей через запятую.
      * @Column(type="integer", default="0", nullable=true)
      */
     public $isMain = 0;
+
+    /**
+     * @Column(type="integer", default="0", nullable=true)
+     */
+    public $sendingScheduledReport = 0;
+
+    /**
+     * @Column(type="string", default="", nullable=true)
+     */
+    public $dateMonth;
+
+    /**
+     * @Column(type="string", default="", nullable=true)
+     */
+    public $day;
+
+    /**
+     * @Column(type="string", default="", nullable=true)
+     */
+    public $time;
+
+    /**
+     * @Column(type="string", default="", nullable=true)
+     */
+    public $email;
 
     public function initialize(): void
     {
