@@ -321,7 +321,8 @@ class ConnectorDB extends WorkerBase
                     'mime' => 'image/jpeg'
                 ]
             ],
-            'comment' => [md5($prettyFilename.'_'.trim(shell_exec("$soxPath $data->recordingfile")??''))            ]
+            'comment' => [md5($prettyFilename.'_'.trim(shell_exec("$soxPath $data->recordingfile")??''))            ],
+            'year'    => [date('Y', strtotime($data->start))],
         ];
         $tagWriter->WriteTags();
         unset($getID3, $tagWriter);
