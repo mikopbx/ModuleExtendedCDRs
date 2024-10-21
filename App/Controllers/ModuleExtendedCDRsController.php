@@ -230,7 +230,7 @@ class ModuleExtendedCDRsController extends BaseController
         ];
         foreach ($variants as $variant){
             $variant['searchText'] = rawurlencode($variant['searchText']);
-            if($variant['isMain'] === 1){
+            if((int)$variant['isMain'] === 1){
                 foreach (array_keys($mainReports) as $reportNameID){
                     $mainReports[$reportNameID]['isMain'] = false;
                 }

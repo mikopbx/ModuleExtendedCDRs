@@ -32,7 +32,7 @@ if($id === null){
     exit(1);
 }
 $settings = ReportSettings::findFirst(["id=:id:", 'bind' => ['id' => $id]]);
-if(!$settings || $settings->sendingScheduledReport !== 1 || empty($settings->email)){
+if(!$settings || (int)$settings->sendingScheduledReport !== 1 || empty($settings->email)){
     SystemMessages::sysLogMsg($ident, "sendingScheduledReport is not 1 OR empty email");
     exit(2);
 }

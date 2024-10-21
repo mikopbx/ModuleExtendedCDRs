@@ -33,6 +33,7 @@ use Phalcon\Db\Enum;
 use DateTime;
 use getID3;
 use getid3_writetags;
+use Throwable;
 
 require_once 'Globals.php';
 require_once(dirname(__DIR__).'/vendor/autoload.php');
@@ -508,9 +509,15 @@ class ConnectorDB extends WorkerBase
                 GROUP BY cdr_general.linkedid
             ) AS t
         ";
-        $result = $db->query($sql, $bindParams);
-        $result->setFetchMode(Enum::FETCH_ASSOC);
-        $row = $result->fetch();
+        try {
+            $result = $db->query($sql, $bindParams);
+            $result->setFetchMode(Enum::FETCH_ASSOC);
+            $row = $result->fetch();
+        }catch (Throwable $e) {
+            $row = [];
+            Util::sysLogMsg('ERROR- EXTENDED CDR', $sql.PHP_EOL.print_r($bindParams, true));
+        }
+
         return is_array($row)?$row:[];
     }
 
