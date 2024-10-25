@@ -37,6 +37,7 @@ class ApiController extends ModulesControllerBase
         }
         $gr = new GetReport();
         $view = $gr->history($searchPhrase);
+        $view->title = urldecode($this->request->get('title')??'');
         if($type === 'json'){
             $this->echoResponse((array)$view);
         }elseif($type === 'pdf'){
@@ -94,6 +95,7 @@ class ApiController extends ModulesControllerBase
         }
         $gr = new GetReport();
         $view = $gr->outgoingEmployeeCalls($searchPhrase);
+        $view->title = urldecode($this->request->get('title')??'');
         if($type === 'json'){
             $this->echoResponse((array)$view);
         }elseif($type === 'pdf'){

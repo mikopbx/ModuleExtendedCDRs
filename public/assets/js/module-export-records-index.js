@@ -975,8 +975,17 @@ var ModuleExtendedCDRs = {
   },
   startCreateExcelPDF: function startCreateExcelPDF(type) {
     var reportNameID = $('#currentReportNameID').val();
+    var currentVariantId = $('#currentVariantId').val();
+    var title = '';
+
+    if (currentVariantId === '') {
+      title = $("#".concat($('#currentReportNameID').val(), " div.content")).text().trim();
+    } else {
+      title = $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportNameID, "\"] div.title")).text().trim();
+    }
+
     var encodedSearch = encodeURIComponent(ModuleExtendedCDRs.getSearchText());
-    var url = "".concat(window.location.origin, "/pbxcore/api/modules/").concat(className, "/exportHistory?reportNameID=").concat(reportNameID, "&type=").concat(type, "&search=").concat(encodedSearch);
+    var url = "".concat(window.location.origin, "/pbxcore/api/modules/").concat(className, "/exportHistory?reportNameID=").concat(reportNameID, "&type=").concat(type, "&search=").concat(encodedSearch, "&title=") + encodeURIComponent(title);
     window.open(url, '_blank');
   },
   getMaxWidth: function getMaxWidth(data, key) {

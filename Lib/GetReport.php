@@ -350,20 +350,26 @@ class GetReport
     {
         $tmpDir = '/tmp';
         $mpdf = new Mpdf(['tempDir' => $tmpDir]);
-        $html = '<table border="1" cellpadding="10" cellspacing="0" style="width: 100%;">';
+        $html = '';
+        if(!empty($view->title)){
+            $html.= '<h2>' . $view->title . '</h2>';
+        }
+        $html.= '<h3>' . json_decode($view->searchPhrase, true)['dateRangeSelector'] . '</h3>';
+
+        $html .= '<table border="1" cellpadding="10" cellspacing="0" style="width: 100%;">';
         $html .= '<tr>';
 
-        $html .= '<thead>' . '<th>' . Util::translate(
-                'repModuleExtendedCDRs_cdr_ColumnTypeState'
-            ) . '</th>' . '<th>' . Util::translate('cdr_ColumnDate') . '</th>' . '<th>' . Util::translate(
-                'cdr_ColumnFrom'
-            ) . '</th>' . '<th>' . Util::translate('cdr_ColumnTo') . '</th>' . '<th>' . Util::translate(
-                'repModuleExtendedCDRs_cdr_ColumnLine'
-            ) . '</th>' . '<th>' . Util::translate(
-                'repModuleExtendedCDRs_cdr_ColumnWaitTime'
-            ) . '</th>' . '<th>' . Util::translate('cdr_ColumnDuration') . '</th>' . '<th>' . Util::translate(
-                'repModuleExtendedCDRs_cdr_ColumnCallState'
-            ) . '</th>' . '<th>id</th>' . '</thead>';
+        $html .= '<thead>' .
+            '<th>' . Util::translate('repModuleExtendedCDRs_cdr_ColumnTypeState') . '</th>' .
+            '<th>' . Util::translate('cdr_ColumnDate') . '</th>' .
+            '<th>' . Util::translate('cdr_ColumnFrom') . '</th>' .
+            '<th>' . Util::translate('cdr_ColumnTo') . '</th>' .
+            '<th>' . Util::translate('repModuleExtendedCDRs_cdr_ColumnLine') . '</th>' .
+            '<th>' . Util::translate('repModuleExtendedCDRs_cdr_ColumnWaitTime') . '</th>' .
+            '<th>' . Util::translate('cdr_ColumnDuration') . '</th>' .
+            '<th>' . Util::translate('repModuleExtendedCDRs_cdr_ColumnCallState') . '</th>' .
+            '<th>id</th>' .
+            '</thead>';
         $html .= '<tbody>';
 
         foreach ($view->data as $baseItem) {
@@ -502,25 +508,21 @@ class GetReport
     {
         $tmpDir = '/tmp';
         $mpdf = new Mpdf(['tempDir' => $tmpDir]);
-        $html = '<h3>Сводная статистика за период: ' . json_decode(
-                $view->searchPhrase,
-                true
-            )['dateRangeSelector'] . '</h3>';
+        $html = '';
+        if(!empty($view->title)){
+            $html.= '<h2>' . $view->title . '</h2>';
+        }
+        $html.= '<h3>' . json_decode($view->searchPhrase, true)['dateRangeSelector'] . '</h3>';
         $html .= '<table border="1" cellpadding="10" cellspacing="0" style="width: 100%;">';
         $html .= '<tr>';
-        $html .= '<thead>' . '<th>' . Util::translate(
-                'repModuleExtendedCDRs_outgoingEmployeeCalls_callerId'
-            ) . '</th>' . '<th>' . Util::translate(
-                'repModuleExtendedCDRs_outgoingEmployeeCalls_number'
-            ) . '</th>' . '<th>' . Util::translate(
-                'repModuleExtendedCDRs_outgoingEmployeeCalls_billHourCalls'
-            ) . '</th>' . '<th>' . Util::translate(
-                'repModuleExtendedCDRs_outgoingEmployeeCalls_billMinCalls'
-            ) . '</th>' . '<th>' . Util::translate(
-                'repModuleExtendedCDRs_outgoingEmployeeCalls_billSecCalls'
-            ) . '</th>' . '<th>' . Util::translate(
-                'repModuleExtendedCDRs_outgoingEmployeeCalls_countCalls'
-            ) . '</th>' . '</thead>';
+        $html .= '<thead>' . '<th>' . Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_callerId') . '</th>' .
+                    '<th>' . Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_number') . '</th>' .
+                    '<th>' . Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_billHourCalls') . '</th>' .
+                    '<th>' . Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_billMinCalls') . '</th>' .
+                    '<th>' . Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_billSecCalls') . '</th>' .
+                    '<th>' . Util::translate('repModuleExtendedCDRs_outgoingEmployeeCalls_countCalls') .
+                    '</th>' .
+                 '</thead>';
         $html .= '<tbody>';
         foreach ($view->data as $index => $item) {
             $rowStyle = ($index % 2 == 1) ? 'background-color: #f0f0f0;' : '';

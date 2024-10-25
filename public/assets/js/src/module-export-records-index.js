@@ -1017,9 +1017,17 @@ const ModuleExtendedCDRs = {
 	},
 
 	startCreateExcelPDF(type) {
-		const reportNameID = $('#currentReportNameID').val();
+		const reportNameID 	   = $('#currentReportNameID').val();
+		const currentVariantId = $('#currentVariantId').val();
+		let title = '';
+		if(currentVariantId === ''){
+			title= $(`#${$('#currentReportNameID').val()} div.content`).text().trim();
+		}else{
+			title=$(`a[data-variant-id="${currentVariantId}"][data-report-id="${reportNameID}"] div.title`).text().trim();
+		}
+
 		const encodedSearch = encodeURIComponent(ModuleExtendedCDRs.getSearchText());
-		const url = `${window.location.origin}/pbxcore/api/modules/${className}/exportHistory?reportNameID=${reportNameID}&type=${type}&search=${encodedSearch}`;
+		const url = `${window.location.origin}/pbxcore/api/modules/${className}/exportHistory?reportNameID=${reportNameID}&type=${type}&search=${encodedSearch}&title=`+encodeURIComponent(title);
 		window.open(url, '_blank');
 	},
 
