@@ -42,7 +42,7 @@ var ModuleExtendedCDRs = {
    * The call detail records table element.
    * @type {jQuery}
    */
-  $cdrTable: $('#cdr-table'),
+  $cdrTable: $('#CallDetails-table'),
   $outgoingEmployeeCalls: $('#OutgoingEmployeeCalls-table'),
 
   /**
@@ -587,8 +587,10 @@ var ModuleExtendedCDRs = {
       currentVariantId = $('#currentVariantId').val();
     }
 
+    $("[id$='_paginate']").hide();
     $("table[data-report-name!=\"\"]").hide();
     $("table[data-report-name=\"".concat(reportNameID, "\"]")).css('width', '').show();
+    $("#".concat(reportNameID, "-table_paginate")).show();
 
     if (reportNameID === 'CallDetails' && ModuleExtendedCDRs.dataTable.page !== undefined) {
       ModuleExtendedCDRs.dataTable.page.len(ModuleExtendedCDRs.calculatePageLength()).draw();

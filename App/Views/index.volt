@@ -188,7 +188,7 @@
          </tbody>
      </table>
      <br>
-     <table id="cdr-table" data-report-name="CallDetails" class="ui small very compact single line unstackable table ">
+     <table id="CallDetails-table" data-report-name="CallDetails" class="ui small very compact single line unstackable table ">
          <thead>
          <tr>
              <th class="one wide"></th>
