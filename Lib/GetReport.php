@@ -49,6 +49,7 @@ class GetReport
     public function history(string $searchPhrase = '', ?int $offset = null, ?int $limit = null): stdClass
     {
         $tmpSearchPhrase = json_decode($searchPhrase, true);
+        $minBilSec  = (int)($tmpSearchPhrase['minBilSec']??0);
         $tmpSearchPhrase['dateRangeSelector'] = self::getDateRanges($tmpSearchPhrase['dateRangeSelector']);
         $searchPhrase = json_encode($tmpSearchPhrase, JSON_UNESCAPED_SLASHES);
         unset($tmpSearchPhrase);
@@ -65,10 +66,8 @@ class GetReport
         if (empty($searchPhrase)) {
             return $view;
         }
-        [$start, $end, $numbers, $additionalNumbers] = $this->prepareConditionsForSearchPhrases(
-            $searchPhrase,
-            $parameters
-        );
+
+        [$start, $end, $numbers, $additionalNumbers] = $this->prepareConditionsForSearchPhrases($searchPhrase, $parameters);
         // If we couldn't understand the search phrase, return empty result
         if (empty($parameters['conditions'])) {
             $view->conditions = 'empty';
@@ -76,18 +75,12 @@ class GetReport
         }
         $additionalFilter = [];
         if (php_sapi_name() !== 'cli') {
-            PBXConfModulesProvider::hookModulesMethod(
-                CDRConfigInterface::APPLY_ACL_FILTERS_TO_CDR_QUERY,
-                [&$additionalFilter]
-            );
+            PBXConfModulesProvider::hookModulesMethod(CDRConfigInterface::APPLY_ACL_FILTERS_TO_CDR_QUERY, [&$additionalFilter]);
         }
         $view->additionalFilter = $additionalFilter;
         $view->baseNumberFilter = array_merge($numbers, $additionalNumbers, $additionalFilter);
 
-        $recordsFilteredReq = ConnectorDB::invoke(
-            'getCountCdr',
-            [$start, $end, $numbers, $additionalNumbers, $additionalFilter]
-        );
+        $recordsFilteredReq = ConnectorDB::invoke('getCountCdr', [$start, $end, $numbers, $additionalNumbers, $additionalFilter, $minBilSec]);
         $view->recordsFiltered = $recordsFilteredReq['cCalls'] ?? 0;
         $view->recordsInner = $recordsFilteredReq['cINNER'] ?? 0;
         $view->recordsOutgoing = $recordsFilteredReq['cOUTGOING'] ?? 0;
@@ -605,12 +598,14 @@ class GetReport
     private function prepareConditionsForSearchPhrases(string &$searchPhrase, array &$parameters): array
     {
         $searchPhrase = json_decode($searchPhrase, true);
+        $minBilSec  = (int)($searchPhrase['minBilSec']??0);
         $dateRangeSelector = $searchPhrase['dateRangeSelector'] ?? '';
         $typeCall = $searchPhrase['typeCall'] ?? '';
 
         $parameters['conditions'] = '';
         $start = '';
         $end = '';
+
         // Search date ranges
         if (preg_match_all("/\d{2}\/\d{2}\/\d{4}/", $dateRangeSelector, $matches)) {
             if (count($matches[0]) === 1) {
@@ -636,6 +631,15 @@ class GetReport
                 );
             }
         }
+
+
+        if($minBilSec>0){
+            if ($parameters['conditions'] !== '') {
+                $parameters['conditions'] .= ' AND ';
+            }
+            $parameters['conditions'] .= "billsec > $minBilSec ";
+        }
+
         if (stripos($typeCall, 'incoming') === 0) {
             if ($parameters['conditions'] !== '') {
                 $parameters['conditions'] .= ' AND ';

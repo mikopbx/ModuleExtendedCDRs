@@ -45,12 +45,7 @@
               <label>{{t._('repModuleExtendedCDRs_Form_titleReport')}}</label>
               <input type="text" name="title" placeholder="{{ t._('repModuleExtendedCDRs_Form_titleReport') }}...">
             </div>
-            {% if variantId == 'CallDetails' %}
-            <div class="field" style="display: none;">
-            {% else %}
             <div class="field">
-            {% endif %}
-
               <label>{{ t._('repModuleExtendedCDRs_Form_minBillSec') }}</label>
               <div class="ui right labeled input">
                 <input type="text" name="minBillSec" placeholder="0">

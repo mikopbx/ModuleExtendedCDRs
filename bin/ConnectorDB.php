@@ -434,9 +434,10 @@ class ConnectorDB extends WorkerBase
      * @param array  $numbers
      * @param array  $additionalNumbers
      * @param array  $additionalFilter
+     * @param int  $minBilSec
      * @return array
      */
-    public function getCountCdr(string $start, string $end, array $numbers, array $additionalNumbers, array $additionalFilter): array
+    public function getCountCdr(string $start, string $end, array $numbers, array $additionalNumbers, array $additionalFilter, int $minBilSec = 0): array
     {
         $bindParams = [
             ':start' => $start,
@@ -492,6 +493,12 @@ class ConnectorDB extends WorkerBase
         if (!$this->di->has(CdrDbProvider::SERVICE_NAME)) {
             $this->di->register(new CdrDbProvider());
         }
+
+        $billSecFilter = '';
+        if($minBilSec>0){
+            $billSecFilter = "billsec > $minBilSec AND ";
+        }
+
         $db = $this->di->getShared(CdrDbProvider::SERVICE_NAME);
         $sql = "
             SELECT 
@@ -506,7 +513,7 @@ class ConnectorDB extends WorkerBase
                     MAX(cdr_general.typeCall) AS typeCall, 
                     cdr_general.linkedid AS linkedid 
                 FROM cdr_general 
-                WHERE {$condition} 
+                WHERE {$billSecFilter} {$condition} 
                 GROUP BY cdr_general.linkedid
             ) AS t
         ";
