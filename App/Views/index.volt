@@ -91,7 +91,7 @@
   </div>
 </div>
 
-<form class="ui large grey  form" id="module-extended-cdr-form">
+<form class="ui grey form" id="module-extended-cdr-form">
     <div id="sync-progress" class="ui progress">
       <div class="bar"></div>
       <div class="label"></div>
@@ -197,7 +197,7 @@
              <th class="">{{ t._('cdr_ColumnTo') }}</th>
              <th class="one wide">{{ t._('repModuleExtendedCDRs_cdr_ColumnLine') }}</th>
              <th class="one wide">{{ t._('repModuleExtendedCDRs_cdr_ColumnWaitTime') }}</th>
-             <th class="one wide">{{ t._('cdr_ColumnDuration') }}</th>
+             <th class="three wide right aligned">{{ t._('cdr_ColumnDuration') }}</th>
              <th class="one wide right aligned">{{ t._('repModuleExtendedCDRs_cdr_ColumnCallState') }}</th>
          </tr>
          </thead>

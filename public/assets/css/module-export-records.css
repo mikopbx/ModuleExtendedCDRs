@@ -6,6 +6,21 @@
  *
  */
 
+td .ui.horizontal.list .item * {
+    margin-top: 0;
+}
+
+td .ui.horizontal.list .thumb {
+    width: 15px;
+    height: 15px;
+}
+td .ui.horizontal.list .track {
+    top: 7px;
+}
+td .ui.horizontal.list .track-fill {
+    top: 7px;
+}
+
 .custom-incoming-icon {
     display: inline-block;
     width: 24px;

@@ -707,11 +707,20 @@ const ModuleExtendedCDRs = {
 				<td class="right aligned">			
 				</td>
 				<td class="right aligned">${record.waitTime}</td>
-				<td class="right aligned">
-					<i class="ui icon play"></i>
-					<audio preload="metadata" id="audio-player-${record.id}" src="${srcAudio}" onplay="ModuleExtendedCDRs.audioPlayHandler(event)"></audio>
-					${record.billsec}
-					<i class="ui icon download" data-value="${srcDownloadAudio}" onclick="ModuleExtendedCDRs.audioPlayHandler(event)"></i>
+				<td class="right aligned" style="padding-right: 3">
+				  <div class="ui horizontal list" style="width: 100%; display: flex; align-items: center;">
+					<div class="item">
+					  <i class="ui icon play"></i>
+					</div>
+					<div class="item" style="margin-left:0; flex-grow: 1;">
+					  <div class="ui range cdr-player" data-value="${record.id}"></div>
+					</div>
+					<div class="item">
+					  ${record.billsec}
+					  <i class="ui icon download" data-value="${srcDownloadAudio}" onclick="ModuleExtendedCDRs.audioPlayHandler(event)"></i>
+					</div>
+				  </div>
+				  <audio preload="metadata" id="audio-player-${record.id}" src="${srcAudio}" onplay="ModuleExtendedCDRs.audioPlayHandler(event)"></audio>
 				</td>
 				<td class="right aligned" data-state-index="${record.stateCallIndex}">${record.stateCall}</td>
 			</tr>`
