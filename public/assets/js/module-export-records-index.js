@@ -2,6 +2,18 @@
 
 function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
 
+function _toConsumableArray(arr) { return _arrayWithoutHoles(arr) || _iterableToArray(arr) || _unsupportedIterableToArray(arr) || _nonIterableSpread(); }
+
+function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
+
+function _unsupportedIterableToArray(o, minLen) { if (!o) return; if (typeof o === "string") return _arrayLikeToArray(o, minLen); var n = Object.prototype.toString.call(o).slice(8, -1); if (n === "Object" && o.constructor) n = o.constructor.name; if (n === "Map" || n === "Set") return Array.from(o); if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen); }
+
+function _iterableToArray(iter) { if (typeof Symbol !== "undefined" && iter[Symbol.iterator] != null || iter["@@iterator"] != null) return Array.from(iter); }
+
+function _arrayWithoutHoles(arr) { if (Array.isArray(arr)) return _arrayLikeToArray(arr); }
+
+function _arrayLikeToArray(arr, len) { if (len == null || len > arr.length) len = arr.length; for (var i = 0, arr2 = new Array(len); i < len; i++) { arr2[i] = arr[i]; } return arr2; }
+
 /*
  * Copyright (C) MIKO LLC - All Rights Reserved
  * Unauthorized copying of this file, via any medium is strictly prohibited
@@ -13,7 +25,8 @@ var idUrl = 'module-extended-c-d-rs';
 var idForm = 'module-extended-cdr-form';
 var className = 'ModuleExtendedCDRs';
 var inputClassName = 'mikopbx-module-input';
-/* global globalRootUrl, globalTranslate, Form, Config */
+var listenedIDs = [];
+/* global globalRootUrl, globalTranslate, Form, Config, $ */
 
 var ModuleExtendedCDRs = {
   $formObj: $('#' + idForm),
@@ -29,7 +42,8 @@ var ModuleExtendedCDRs = {
    * The call detail records table element.
    * @type {jQuery}
    */
-  $cdrTable: $('#cdr-table'),
+  $cdrTable: $('#CallDetails-table'),
+  $outgoingEmployeeCalls: $('#OutgoingEmployeeCalls-table'),
 
   /**
    * The global search input element.
@@ -62,9 +76,78 @@ var ModuleExtendedCDRs = {
   validateRules: {},
 
   /**
+   * Field validation rules
+   * https://semantic-ui.com/behaviors/form.html
+   */
+  validateVariantRules: {
+    title: {
+      identifier: 'title',
+      rules: [{
+        type: 'empty',
+        prompt: globalTranslate.repModuleExtendedCDRs_Form_titleReportError
+      }]
+    },
+    minBillSec: {
+      identifier: 'minBillSec',
+      rules: [{
+        type: 'integer[0..1000]',
+        prompt: globalTranslate.repModuleExtendedCDRs_Form_titleReportError
+      }]
+    },
+    dateMonth: {
+      identifier: 'dateMonth',
+      rules: [{
+        type: 'integer[1..31]',
+        prompt: globalTranslate.repModuleExtendedCDRs_Form_DateMonthError
+      }]
+    },
+    day: {
+      identifier: 'day',
+      rules: [{
+        type: 'regExp[/^((([1-7])(,[1-7])*)|(([1-7])-([1-7])(/([1-7]))?)|(\\*\\/[1-7]))$/]',
+        prompt: globalTranslate.repModuleExtendedCDRs_Form_DayError
+      }]
+    },
+    time: {
+      identifier: 'time',
+      rules: [{
+        type: 'regExp[/^(0[0-9]|1[0-9]|2[0-3]):([0-5][0-9])$/]',
+        prompt: globalTranslate.repModuleExtendedCDRs_Form_TimeError
+      }]
+    },
+    email: {
+      identifier: 'email',
+      rules: [{
+        type: 'regExp[/^\\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})(\\s+[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})*\\s*$/]',
+        prompt: globalTranslate.repModuleExtendedCDRs_Form_EmailError
+      }]
+    }
+  },
+
+  /**
    * On page load we init some Semantic UI library
    */
   initialize: function initialize() {
+    //////
+    // Удаляем отступы контейнера.
+    $('#main-content-container').removeClass('container');
+    $('#module-status-toggle-segment').hide();
+    $('.ui.clearing.hidden.divider').remove();
+    $("h1.header i.puzzle.icon").removeClass('puzzle').addClass('th').css('cursor', 'pointer').popup({
+      inline: true,
+      popup: $('#menu-reports'),
+      target: "h1.ui.header",
+      position: 'bottom left',
+      hoverable: true,
+      delay: {
+        show: 300,
+        hide: 800
+      }
+    });
+    $('#content-frame').css('display', 'none'); // Окончание форматирования базовой страницы
+    //////
+
+    ModuleExtendedCDRs.changeReportVariant();
     ModuleExtendedCDRs.initializeDateRangeSelector(); // инициализируем чекбоксы и выподающие менюшки
 
     window[className].$checkBoxes.checkbox();
@@ -74,14 +157,192 @@ var ModuleExtendedCDRs = {
     window.addEventListener('ModuleStatusChanged', window[className].checkStatusToggle);
     window[className].initializeForm();
     $('.menu .item').tab();
+    $(document).on('click', '#menu-reports i.edit', function (e) {
+      e.stopPropagation();
+      var parent = $(this).parent();
+      $(e.target).parents('div.six.wide.column').children('h4').hide();
+      $(e.target).parents('div.six.wide.column').children('div').hide();
+      var reportId = $(this).parent().attr('data-report-id');
+      var form = $("form[data-report-id=\"".concat(reportId, "\"]"));
+      form.show();
+      form.form('set value', 'reportNameID', reportId);
+      form.form('set value', 'variantId', parent.attr('data-variant-id'));
+      form.form('set value', 'title', parent.find('div.content div.title').text().trim());
+      form.form('set value', 'minBillSec', parent.attr('data-min-bill-sec'));
+      form.form('set value', 'sendingScheduledReport', parent.attr('data-sending-scheduled-report') === '1');
+      form.form('set value', 'dateMonth', parent.attr('data-date-month'));
+      form.form('set value', 'day', parent.attr('data-day'));
+      form.form('set value', 'time', parent.attr('data-time'));
+      form.form('set value', 'email', parent.attr('data-email'));
+    });
+    $(document).on('click', '#menu-reports form button[data-action="save"]', function (e) {
+      e.stopPropagation();
+      var form = $(this).parent();
+      form.form({
+        fields: ModuleExtendedCDRs.validateVariantRules
+      });
+      var reportNameID = form.form('get value', 'reportNameID');
+      var variantId = form.form('get value', 'variantId');
+      var title = form.form('get value', 'title').trim();
+      var minBillSec = form.form('get value', 'minBillSec');
+      var sendingReport = form.form('get value', 'sendingScheduledReport') ? 1 : 0;
+      var dateMonth = form.form('get value', 'dateMonth');
+      var day = form.form('get value', 'day');
+      var time = form.form('get value', 'time');
+      var email = form.form('get value', 'email');
+
+      if (!form.form('is valid', 'title')) {
+        form.form('submit');
+        return;
+      }
+
+      if (!form.form('is valid', 'minBillSec')) {
+        form.form('submit');
+        return;
+      }
+
+      if (dateMonth && !form.form('is valid', 'dateMonth')) {
+        form.form('submit');
+        return;
+      }
+
+      if (day && !form.form('is valid', 'day')) {
+        form.form('submit');
+        return;
+      }
+
+      if (time && !form.form('is valid', 'time')) {
+        form.form('submit');
+        return;
+      }
+
+      if (email && !form.form('is valid', 'email')) {
+        form.form('submit');
+        return;
+      }
+
+      var parent = $("a[data-variant-id=\"".concat(variantId, "\"][data-report-id=\"").concat(reportNameID, "\"]"));
+      parent.find('div.content div.title').text(title);
+      parent.attr({
+        'data-min-bill-sec': minBillSec,
+        'data-sending-scheduled-report': sendingReport,
+        'data-date-month': dateMonth,
+        'data-day': day,
+        'data-time': time,
+        'data-email': email
+      });
+      var contentDiv = parent.find('div.content');
+      contentDiv.find('div.input').hide();
+      contentDiv.find('div.title').show();
+      parent.find('i.star').show();
+      form.hide();
+      $(e.target).parents('div.six.wide.column').children('h4').show();
+      $(e.target).parents('div.six.wide.column').children('div').show();
+      ModuleExtendedCDRs.changeReportVariant(reportNameID, variantId);
+      ModuleExtendedCDRs.saveSearchSettings();
+      ModuleExtendedCDRs.applyFilter();
+    });
+    $('#menu-reports i.copy').on('click', function (e) {
+      e.stopPropagation();
+      var reportId = $(this).parent().attr('id');
+      var timestamp = Date.now();
+      var parentTitle = $(this).parent().find('div.content').text().trim();
+      var html = "<i class=\"small star outline yellow icon\" style=\"display: none;padding-top: 3px\"></i>\n<i class=\"small edit outline icon\" style=\"padding-top: 3px\"></i>\n<i class=\"small trash alternate outline outline red icon\" style=\"padding-top: 3px\"></i>\n<div class=\"content\">\n\t<div class=\"title\">".concat(parentTitle, " (").concat(timestamp, ")</div>\n\t<div class=\"ui mini input fluid hidden\" style=\"display: none;\">\n\t  <input type=\"text\" value=\"").concat(parentTitle, " (").concat(timestamp, ")\">\n\t</div>\n</div>");
+      var newItem = $('<a>', {
+        "class": 'item',
+        html: html,
+        'data-report-id': reportId,
+        'data-is-main': '0',
+        'data-min-bill-sec': $(this).parent().attr('data-min-bill-sec'),
+        'data-search-text': $(this).parent().attr('data-search-text'),
+        'data-variant-id': timestamp
+      });
+      $(this).parent().siblings('.ui.link.list').append(newItem);
+      $("a[data-variant-id=\"".concat(timestamp, "\"][data-report-id=\"").concat(reportId, "\"] i.edit")).trigger('click');
+    });
+    $('#menu-reports i.star').on('click', function (e) {
+      e.stopPropagation();
+      var reportNameID = $(this).parent().attr('id');
+
+      if (reportNameID === undefined) {
+        reportNameID = $(this).parent().attr('data-report-id');
+      }
+
+      var variantId = $(this).parent().attr('data-variant-id');
+      var self = $(this);
+      $.ajax({
+        url: "".concat(globalRootUrl).concat(idUrl, "/saveMainVariantReport"),
+        type: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        data: {
+          'reportNameID': reportNameID,
+          'variantId': variantId
+        },
+        success: function success(response) {
+          $('#menu-reports i.star').addClass('outline');
+          self.removeClass('outline');
+        },
+        error: function error(xhr, status, _error) {
+          console.error(_error);
+        }
+      });
+    });
+    $(document).on('click', '#menu-reports i.trash', function (e) {
+      e.stopPropagation();
+      var reportNameID = $(this).parent().attr('data-report-id');
+      var variantId = $(this).parent().attr('data-variant-id');
+      var self = $(this);
+      $.ajax({
+        url: "".concat(globalRootUrl).concat(idUrl, "/removeVariantReport"),
+        type: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        data: {
+          'reportNameID': reportNameID,
+          'variantId': variantId
+        },
+        success: function success(response) {
+          self.parent().remove();
+        },
+        error: function error(xhr, status, _error2) {
+          console.error(_error2);
+        }
+      });
+    });
     $('#typeCall.menu a.item').on('click', function (e) {
       ModuleExtendedCDRs.applyFilter();
     });
     $('#createExcelButton').on('click', function (e) {
-      ModuleExtendedCDRs.startCreateExcel();
+      ModuleExtendedCDRs.startCreateExcelPDF('xlsx');
+    });
+    $('#createPdfButton').on('click', function (e) {
+      ModuleExtendedCDRs.startCreateExcelPDF('pdf');
+    });
+    $('#downloadRecords').on('click', function (e) {
+      var encodedSearch = encodeURIComponent(ModuleExtendedCDRs.getSearchText());
+      var url = "".concat(window.location.origin, "/pbxcore/api/modules/").concat(className, "/downloads?search=").concat(encodedSearch);
+      window.open(url, '_blank');
     });
     $('#saveSearchSettings').on('click', function (e) {
       ModuleExtendedCDRs.saveSearchSettings();
+    });
+    $("div.column h4").on('click', function (e) {
+      var reportId = $(this).attr('id');
+      $("h1.header i.th.icon").popup('hide');
+      ModuleExtendedCDRs.changeReportVariant(reportId);
+      ModuleExtendedCDRs.applyFilter();
+    });
+    $(document).on('click', 'div.column div.link.list a.item div.title', function (e) {
+      var reportId = $(e.target).closest('a').attr('data-report-id');
+      var variantId = $(e.target).closest('a').attr('data-variant-id');
+      $("h1.header i.th.icon").popup('hide');
+      ModuleExtendedCDRs.changeReportVariant(reportId, variantId);
+      ModuleExtendedCDRs.applyFilter();
     });
     ModuleExtendedCDRs.$globalSearch.on('keyup', function (e) {
       if (e.keyCode === 13 || e.keyCode === 8 || ModuleExtendedCDRs.$globalSearch.val().length === 0) {
@@ -94,12 +355,58 @@ var ModuleExtendedCDRs = {
         return false;
       }
     });
+    ModuleExtendedCDRs.$outgoingEmployeeCalls.dataTable({
+      search: {
+        search: ModuleExtendedCDRs.getSearchText()
+      },
+      serverSide: true,
+      processing: true,
+      info: false,
+      columnDefs: [{
+        defaultContent: "",
+        targets: "_all"
+      }],
+      ajax: {
+        url: "".concat(globalRootUrl).concat(idUrl, "/getOutgoingEmployeeCalls"),
+        type: 'POST'
+      },
+      paging: true,
+      sDom: 'rtip',
+      deferRender: true,
+      pageLength: ModuleExtendedCDRs.calculatePageLength(),
+
+      /**
+       * Constructs the CDR row.
+       * @param {HTMLElement} row - The row element.
+       * @param {Array} data - The row data.
+       */
+      createdRow: function createdRow(row, data) {
+        $('td', row).eq(0).html(data.callerId);
+        $('td', row).eq(1).html(data.number).addClass('active');
+        $('td', row).eq(2).html(data.billHourCalls);
+        $('td', row).eq(3).html(data.billMinCalls);
+        $('td', row).eq(4).html(data.billSecCalls);
+        $('td', row).eq(5).html(data.countCalls);
+      },
+      drawCallback: function drawCallback(settings) {
+        var pagination = $(this).closest('.dataTables_wrapper').find('.dataTables_paginate');
+
+        if (settings._iDisplayLength >= settings.fnRecordsDisplay()) {
+          pagination.hide();
+        } else {
+          pagination.show();
+        }
+      },
+      language: SemanticLocalization.dataTableLocalisation,
+      ordering: false
+    });
     ModuleExtendedCDRs.$cdrTable.dataTable({
       search: {
         search: ModuleExtendedCDRs.getSearchText()
       },
       serverSide: true,
       processing: true,
+      info: false,
       columnDefs: [{
         defaultContent: "-",
         targets: "_all"
@@ -128,6 +435,7 @@ var ModuleExtendedCDRs = {
       paging: true,
       sDom: 'rtip',
       deferRender: true,
+      stripeClasses: ['striped'],
       pageLength: ModuleExtendedCDRs.calculatePageLength(),
 
       /**
@@ -142,6 +450,8 @@ var ModuleExtendedCDRs = {
           detailedIcon = '<i class="icon caret down"></i>';
         }
 
+        data.typeCall = "".concat(data.typeCall);
+
         if (data.typeCall === '1') {
           $('td', row).eq(0).html('<i class="custom-outgoing-icon-15x15"></i>' + detailedIcon);
         } else if (data.typeCall === '2') {
@@ -153,9 +463,7 @@ var ModuleExtendedCDRs = {
         }
 
         $('td', row).eq(1).html(data[0]).addClass('right aligned');
-        ;
         $('td', row).eq(2).html(data[1]).attr('data-phone', data[1]).addClass('need-update').addClass('right aligned');
-        ;
         $('td', row).eq(3).html(data[2]).attr('data-phone', data[2]).addClass('need-update');
         var duration = data[3];
 
@@ -178,8 +486,22 @@ var ModuleExtendedCDRs = {
       /**
        * Draw event - fired once the table has completed a draw.
        */
-      drawCallback: function drawCallback() {
+      drawCallback: function drawCallback(settings) {
         Extensions.updatePhonesRepresent('need-update');
+        listenedIDs.forEach(function (id) {
+          var element = $("[id=\"".concat(id, "\"]"));
+
+          if (element.length) {
+            element.removeClass('warning').addClass('positive');
+          }
+        });
+        var pagination = $(this).closest('.dataTables_wrapper').find('.dataTables_paginate');
+
+        if (settings._iDisplayLength >= settings.fnRecordsDisplay()) {
+          pagination.hide();
+        } else {
+          pagination.show();
+        }
       },
       language: SemanticLocalization.dataTableLocalisation,
       ordering: false
@@ -189,14 +511,12 @@ var ModuleExtendedCDRs = {
       ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
     });
     ModuleExtendedCDRs.$cdrTable.on('click', 'tr.negative', function (e) {
-      var filter = $(e.target).attr('data-phone');
-
-      if (filter !== undefined && filter !== '') {
-        ModuleExtendedCDRs.$globalSearch.val(filter);
-        ModuleExtendedCDRs.applyFilter();
-        return;
-      }
-
+      // let filter = $(e.target).attr('data-phone');
+      // if (filter !== undefined && filter !== '') {
+      // 	ModuleExtendedCDRs.$globalSearch.val(filter)
+      // 	ModuleExtendedCDRs.applyFilter();
+      // 	return;
+      // }
       var ids = $(e.target).attr('data-ids');
 
       if (ids !== undefined && ids !== '') {
@@ -210,15 +530,13 @@ var ModuleExtendedCDRs = {
       if (ids !== undefined && ids !== '') {
         window.location = "".concat(globalRootUrl, "system-diagnostic/index/?filename=asterisk/verbose&filter=").concat(ids);
         return;
-      }
+      } // let filter = $(e.target).attr('data-phone');
+      // if (filter !== undefined && filter !== '') {
+      // 	ModuleExtendedCDRs.$globalSearch.val(filter)
+      // 	ModuleExtendedCDRs.applyFilter();
+      // 	return;
+      // }
 
-      var filter = $(e.target).attr('data-phone');
-
-      if (filter !== undefined && filter !== '') {
-        ModuleExtendedCDRs.$globalSearch.val(filter);
-        ModuleExtendedCDRs.applyFilter();
-        return;
-      }
 
       var tr = $(e.target).closest('tr');
       var row = ModuleExtendedCDRs.dataTable.row(tr);
@@ -240,10 +558,100 @@ var ModuleExtendedCDRs = {
           return new CDRPlayer(id);
         });
         Extensions.updatePhonesRepresent('need-update');
+        listenedIDs.forEach(function (id) {
+          var element = $("[id=\"".concat(id, "\"]"));
+
+          if (element.length) {
+            element.removeClass('warning').addClass('positive');
+          }
+
+          element = $("[data-row-id=\"".concat(id, "\"]"));
+
+          if (element.length) {
+            element.removeClass('warning').addClass('positive');
+          }
+        });
       }
     });
+    ModuleExtendedCDRs.updateSettings();
+    ModuleExtendedCDRs.applyFilter();
     window[className].updateSyncState();
     setInterval(window[className].updateSyncState, 5000);
+  },
+  changeReportVariant: function changeReportVariant() {
+    var reportNameID = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : '';
+    var currentVariantId = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : '';
+
+    if (reportNameID === '') {
+      reportNameID = $('#currentReportNameID').val();
+      currentVariantId = $('#currentVariantId').val();
+    }
+
+    $("[id$='_paginate']").hide();
+    $("table[data-report-name!=\"\"]").hide();
+    $("table[data-report-name=\"".concat(reportNameID, "\"]")).css('width', '').show();
+    $("#".concat(reportNameID, "-table_paginate")).show();
+
+    if (reportNameID === 'CallDetails' && ModuleExtendedCDRs.dataTable.page !== undefined) {
+      ModuleExtendedCDRs.dataTable.page.len(ModuleExtendedCDRs.calculatePageLength()).draw();
+    }
+
+    $('#currentReportNameID').val(reportNameID);
+    $('#currentVariantId').val(currentVariantId);
+    var variantName = '';
+
+    if (currentVariantId !== '') {
+      variantName = $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportNameID, "\"] div.title")).text().trim();
+    } else {
+      variantName = $("h4#".concat(reportNameID, " div.content")).text().trim();
+    }
+
+    $("h1.header div.content").contents().filter(function () {
+      return this.nodeType === 3 && this.nodeValue.trim() !== '';
+    }).each(function () {
+      this.nodeValue = variantName;
+    });
+    ModuleExtendedCDRs.updateSettings();
+  },
+  updateSettings: function updateSettings() {
+    var currentVariantId = $('#currentVariantId').val();
+    var reportNameID = $('#currentReportNameID').val();
+    var settings = {};
+
+    if (currentVariantId === '') {
+      settings = JSON.parse(decodeURIComponent($("#".concat(reportNameID)).attr('data-search-text')));
+    } else {
+      settings = JSON.parse(decodeURIComponent($("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportNameID, "\"]")).attr('data-search-text')));
+    }
+
+    if (settings.dateRangeSelector !== undefined && settings.dateRangeSelector !== '') {
+      var periods = ModuleExtendedCDRs.getStandardPeriods();
+      var defPeriod = [moment(), moment()];
+
+      if (periods[settings.dateRangeSelector] !== undefined) {
+        defPeriod = periods[settings.dateRangeSelector];
+      }
+
+      ModuleExtendedCDRs.$dateRangeSelector.attr('data-start', defPeriod[0].format('YYYY/MM/DD'));
+      ModuleExtendedCDRs.$dateRangeSelector.attr('data-end', moment(defPeriod[1].format('YYYYMMDD')).endOf('day').format('YYYY/MM/DD'));
+      ModuleExtendedCDRs.$dateRangeSelector.val("".concat(defPeriod[0].format('DD/MM/YYYY'), " - ").concat(defPeriod[1].format('DD/MM/YYYY')));
+    }
+
+    if (settings.globalSearch !== undefined) {
+      ModuleExtendedCDRs.$globalSearch.val(settings.globalSearch);
+    }
+
+    $('#additionalFilter').dropdown('clear');
+
+    if (settings.additionalFilter !== undefined) {
+      $('#additionalFilter').dropdown('set selected', settings.additionalFilter.split(' '));
+    }
+
+    if (settings.typeCall !== undefined) {
+      $('#typeCall.menu a.item').tab('change tab', settings.typeCall);
+    } else {
+      $('#typeCall.menu a.item').tab('change tab', 'all-calls');
+    }
   },
 
   /**
@@ -289,24 +697,44 @@ var ModuleExtendedCDRs = {
       var srcDownloadAudio = '';
 
       if (!(record.recordingfile === undefined || record.recordingfile === null || record.recordingfile.length === 0)) {
-        var recordFileName = "record_".concat(record.src_num, "_to_").concat(record.dst_num, "_from_").concat(data[0]);
-        recordFileName.replace(/[^\w\s!?]/g, '');
-        recordFileName = encodeURIComponent(recordFileName);
+        var recordFileName = encodeURIComponent(record.prettyFilename);
         var recordFileUri = encodeURIComponent(record.recordingfile);
         srcAudio = "/pbxcore/api/cdr/v2/playback?view=".concat(recordFileUri);
         srcDownloadAudio = "/pbxcore/api/cdr/v2/playback?view=".concat(recordFileUri, "&download=1&filename=").concat(recordFileName, ".mp3");
       }
 
-      htmlPlayer += "\n\t\t\t<tr id=\"".concat(record.id, "\" data-row-id=\"").concat(id, "-detailed\" class=\"warning detailed odd shown\" role=\"row\">\n\t\t\t\t<td></td>\n\t\t\t\t<td class=\"right aligned\">").concat(record.start, "</td>\n\t\t\t\t<td data-phone=\"").concat(record.src_num, "\" class=\"right aligned need-update\">").concat(record.src_num, "</td>\n\t\t\t   \t<td data-phone=\"").concat(record.dst_num, "\" class=\"left aligned need-update\">").concat(record.dst_num, "</td>\n\t\t\t\t<td class=\"right aligned\">\t\t\t\n\t\t\t\t</td>\n\t\t\t\t<td class=\"right aligned\">").concat(record.waitTime, "</td>\n\t\t\t\t<td class=\"right aligned\">\n\t\t\t\t\t<i class=\"ui icon play\"></i>\n\t\t\t\t\t<audio preload=\"metadata\" id=\"audio-player-").concat(record.id, "\" src=\"").concat(srcAudio, "\"></audio>\n\t\t\t\t\t").concat(record.billsec, "\n\t\t\t\t\t<i class=\"ui icon download\" data-value=\"").concat(srcDownloadAudio, "\"></i>\n\t\t\t\t</td>\n\t\t\t\t<td class=\"right aligned\" data-state-index=\"").concat(record.stateCallIndex, "\">").concat(record.stateCall, "</td>\n\t\t\t</tr>");
+      htmlPlayer += "\n\t\t\t<tr id=\"".concat(record.id, "\" data-row-id=\"").concat(id, "-detailed\" class=\"warning detailed odd shown\" role=\"row\">\n\t\t\t\t<td></td>\n\t\t\t\t<td class=\"right aligned\">").concat(record.start, "</td>\n\t\t\t\t<td data-phone=\"").concat(record.src_num, "\" class=\"right aligned need-update\">").concat(record.src_num, "</td>\n\t\t\t   \t<td data-phone=\"").concat(record.dst_num, "\" class=\"left aligned need-update\">").concat(record.dst_num, "</td>\n\t\t\t\t<td class=\"right aligned\">\t\t\t\n\t\t\t\t</td>\n\t\t\t\t<td class=\"right aligned\">").concat(record.waitTime, "</td>\n\t\t\t\t<td class=\"right aligned\" style=\"padding-right: 3\">\n\t\t\t\t  <div class=\"ui horizontal list\" style=\"width: 100%; display: flex; align-items: center;\">\n\t\t\t\t\t<div class=\"item\">\n\t\t\t\t\t  <i class=\"ui icon play\"></i>\n\t\t\t\t\t</div>\n\t\t\t\t\t<div class=\"item\" style=\"margin-left:0; flex-grow: 1;\">\n\t\t\t\t\t  <div class=\"ui range cdr-player\" data-value=\"").concat(record.id, "\"></div>\n\t\t\t\t\t</div>\n\t\t\t\t\t<div class=\"item\">\n\t\t\t\t\t  ").concat(record.billsec, "\n\t\t\t\t\t  <i class=\"ui icon download\" data-value=\"").concat(srcDownloadAudio, "\" onclick=\"ModuleExtendedCDRs.audioPlayHandler(event)\"></i>\n\t\t\t\t\t</div>\n\t\t\t\t  </div>\n\t\t\t\t  <audio preload=\"metadata\" id=\"audio-player-").concat(record.id, "\" src=\"").concat(srcAudio, "\" onplay=\"ModuleExtendedCDRs.audioPlayHandler(event)\"></audio>\n\t\t\t\t</td>\n\t\t\t\t<td class=\"right aligned\" data-state-index=\"").concat(record.stateCallIndex, "\">").concat(record.stateCall, "</td>\n\t\t\t</tr>");
     });
     return htmlPlayer;
+  },
+  audioPlayHandler: function audioPlayHandler(event) {
+    var detailRow = $(event.target).closest('tr');
+    detailRow.removeClass('warning');
+    detailRow.addClass('positive');
+    var callIdDetail = detailRow.attr('data-row-id');
+    listenedIDs.push(callIdDetail);
+    var callId = callIdDetail.replace('-detailed', '');
+    var allPositive = true;
+    $('[data-row-id="' + callIdDetail + '"]').each(function () {
+      if (!$(this).hasClass('positive')) {
+        allPositive = false;
+        return false;
+      }
+    });
+
+    if (allPositive) {
+      $("[id=\"".concat(callId, "\"]")).addClass('positive');
+      listenedIDs.push(callId);
+    }
+
+    listenedIDs = _toConsumableArray(new Set(listenedIDs));
   },
   calculatePageLength: function calculatePageLength() {
     // Calculate row height
     var rowHeight = ModuleExtendedCDRs.$cdrTable.find('tbody > tr').first().outerHeight(); // Calculate window height and available space for table
 
     var windowHeight = window.innerHeight;
-    var headerFooterHeight = 400 + 50; // Estimate height for header, footer, and other elements
+    var headerFooterHeight = 400; // Estimate height for header, footer, and other elements
     // Calculate new page length
 
     return Math.max(Math.floor((windowHeight - headerFooterHeight) / rowHeight), 5);
@@ -362,8 +790,8 @@ var ModuleExtendedCDRs = {
             }
           }
         },
-        error: function error(xhr, status, _error) {
-          console.error("Ошибка запроса", status, _error);
+        error: function error(xhr, status, _error3) {
+          console.error("Ошибка запроса", status, _error3);
         }
       });
     });
@@ -385,8 +813,8 @@ var ModuleExtendedCDRs = {
         console.log("Успешный запрос", response);
         $('#sync-rules tr#' + id).remove();
       },
-      error: function error(xhr, status, _error2) {
-        console.error("Ошибка запроса", status, _error2);
+      error: function error(xhr, status, _error4) {
+        console.error("Ошибка запроса", status, _error4);
       }
     });
   },
@@ -449,16 +877,47 @@ var ModuleExtendedCDRs = {
    */
   applyFilter: function applyFilter() {
     var text = ModuleExtendedCDRs.getSearchText();
+    listenedIDs = [];
     ModuleExtendedCDRs.dataTable.search(text).draw();
+    ModuleExtendedCDRs.$outgoingEmployeeCalls.DataTable().search(text).draw();
     ModuleExtendedCDRs.$globalSearch.closest('div').addClass('loading');
   },
   getSearchText: function getSearchText() {
+    var retStandardPeriod = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : false;
+    var disableGlobalSearch = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : false;
+    var dateRangeSelector = '';
+
+    if (retStandardPeriod === true) {
+      var periods = ModuleExtendedCDRs.getStandardPeriods();
+      $.each(periods, function (index, value) {
+        if (ModuleExtendedCDRs.$dateRangeSelector.val() === "".concat(value[0].format('DD/MM/YYYY'), " - ").concat(value[1].format('DD/MM/YYYY'))) {
+          dateRangeSelector = index;
+        }
+      });
+    } else {
+      dateRangeSelector = ModuleExtendedCDRs.$dateRangeSelector.val();
+    }
+
+    var reportNameID = $('#currentReportNameID').val();
+    var currentVariantId = $('#currentVariantId').val();
+    var minBilSec = $("h4#".concat(reportNameID)).attr('data-min-bill-sec');
+
+    if (currentVariantId !== '') {
+      minBilSec = $("a[data-report-id=\"".concat(reportNameID, "\"][data-variant-id=\"").concat(currentVariantId, "\"]")).attr('data-min-bill-sec');
+    }
+
     var filter = {
-      dateRangeSelector: ModuleExtendedCDRs.$dateRangeSelector.val(),
+      dateRangeSelector: dateRangeSelector,
+      minBilSec: minBilSec,
       globalSearch: ModuleExtendedCDRs.$globalSearch.val(),
       typeCall: $('#typeCall a.item.active').attr('data-tab'),
       additionalFilter: $('#additionalFilter').dropdown('get value').replace(/,/g, ' ')
     };
+
+    if (disableGlobalSearch === true) {
+      filter.globalSearch = '';
+    }
+
     return JSON.stringify(filter);
   },
   getStandardPeriods: function getStandardPeriods() {
@@ -472,17 +931,28 @@ var ModuleExtendedCDRs = {
     };
   },
   saveSearchSettings: function saveSearchSettings() {
-    var periods = ModuleExtendedCDRs.getStandardPeriods();
-    var dateRangeSelector = '';
-    $.each(periods, function (index, value) {
-      if (ModuleExtendedCDRs.$dateRangeSelector.val() === "".concat(value[0].format('DD/MM/YYYY'), " - ").concat(value[1].format('DD/MM/YYYY'))) {
-        dateRangeSelector = index;
-      }
-    });
-    var settings = {
-      'additionalFilter': $('#additionalFilter').dropdown('get value').replace(/,/g, ' '),
-      'dateRangeSelector': dateRangeSelector
+    var search = ModuleExtendedCDRs.getSearchText(true, true);
+    var currentVariantId = $('#currentVariantId').val();
+    var reportId = $('#currentReportNameID').val();
+    var variantName = '';
+    var data = {
+      'search[value]': search,
+      'reportNameID': reportId,
+      'variantId': currentVariantId,
+      'variantName': variantName
     };
+
+    if (currentVariantId !== '') {
+      var parent = $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportId, "\"]"));
+      data.variantName = parent.find('div.title').text().trim();
+      data.minBillSec = parent.attr('data-min-bill-sec').trim();
+      data.sendingScheduledReport = parent.attr('data-sending-scheduled-report').trim();
+      data.dateMonth = parent.attr('data-date-month').trim();
+      data.day = parent.attr('data-day').trim();
+      data.time = parent.attr('data-time').trim();
+      data.email = parent.attr('data-email').trim();
+    }
+
     $.ajax({
       url: "".concat(globalRootUrl).concat(idUrl, "/saveSearchSettings"),
       type: 'POST',
@@ -490,95 +960,33 @@ var ModuleExtendedCDRs = {
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
         'X-Requested-With': 'XMLHttpRequest'
       },
-      data: {
-        'search[value]': JSON.stringify(settings)
-      },
+      data: data,
       success: function success(response) {
-        console.log(response);
+        if (currentVariantId === '') {
+          $("#".concat($('#currentReportNameID').val())).attr('data-search-text', encodeURIComponent(search));
+        } else {
+          $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportId, "\"]")).attr('data-search-text', encodeURIComponent(search));
+        }
       },
-      error: function error(xhr, status, _error3) {
-        console.error(_error3);
+      error: function error(xhr, status, _error5) {
+        console.error(_error5);
       }
     });
   },
-  startCreateExcel: function startCreateExcel() {
-    var text = ModuleExtendedCDRs.getSearchText();
-    $.ajax({
-      url: "".concat(globalRootUrl).concat(idUrl, "/getHistory"),
-      type: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'X-Requested-With': 'XMLHttpRequest'
-      },
-      data: {
-        'search[value]': text
-      },
-      success: function success(response) {
-        var flattenedData = [{
-          start: '',
-          src_num: '',
-          dst_num: '',
-          billsec: '',
-          stateCall: '',
-          typeCall: '',
-          line: '',
-          waitTime: ''
-        }];
-        $.each(response.data, function (index, item) {
-          var baseRecord = {
-            start: item['0'],
-            src_num: item['1'],
-            dst_num: item['2'],
-            billsec: item['3'],
-            stateCall: item['stateCall'],
-            typeCall: item['typeCallDesc'],
-            line: item['line'],
-            waitTime: item['waitTime']
-          }; // Добавляем основной элемент
+  startCreateExcelPDF: function startCreateExcelPDF(type) {
+    var reportNameID = $('#currentReportNameID').val();
+    var currentVariantId = $('#currentVariantId').val();
+    var title = '';
 
-          flattenedData.push(baseRecord); // Если есть вложенные данные, добавляем их сразу после основного элемента
+    if (currentVariantId === '') {
+      title = $("#".concat($('#currentReportNameID').val(), " div.content")).text().trim();
+    } else {
+      title = $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportNameID, "\"] div.title")).text().trim();
+    }
 
-          if (item['4'] && item['4'].length > 0) {
-            $.each(item['4'], function (i, nestedItem) {
-              // Проверяем, совпадают ли значения start, src_num и dst_num с основной записью
-              if (nestedItem.start !== item['0'] || nestedItem.src_num !== item['1'] || nestedItem.dst_num !== item['2']) {
-                flattenedData.push({
-                  start: nestedItem.start || item['0'],
-                  src_num: nestedItem.src_num || item['1'],
-                  dst_num: nestedItem.dst_num || item['2'],
-                  billsec: nestedItem.billsec || item['3'],
-                  stateCall: nestedItem.stateCall,
-                  typeCall: item['typeCallDesc'],
-                  line: item['line'],
-                  waitTime: nestedItem.waitTime // Другие свойства можно добавить здесь
-
-                });
-              }
-            });
-          }
-        });
-        var columns = ["typeCall", "start", "src_num", "dst_num", "line", "waitTime", "billsec", "stateCall"];
-        var worksheet = XLSX.utils.json_to_sheet(flattenedData, {
-          header: columns,
-          skipHeader: true // Пропускаем автоматическое создание заголовков из ключей объекта
-
-        });
-        XLSX.utils.sheet_add_aoa(worksheet, [[globalTranslate.repModuleExtendedCDRs_cdr_ColumnTypeState, globalTranslate.cdr_ColumnDate, globalTranslate.cdr_ColumnFrom, globalTranslate.cdr_ColumnTo, globalTranslate.repModuleExtendedCDRs_cdr_ColumnLine, globalTranslate.repModuleExtendedCDRs_cdr_ColumnWaitTime, globalTranslate.cdr_ColumnDuration, globalTranslate.repModuleExtendedCDRs_cdr_ColumnCallState]], {
-          origin: "A1"
-        });
-        worksheet['!cols'] = columns.map(function (col) {
-          return {
-            wch: 8 + ModuleExtendedCDRs.getMaxWidth(flattenedData, col)
-          };
-        });
-        var workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "cdr");
-        XLSX.writeFile(workbook, "history.xlsx");
-      },
-      error: function error(xhr, status, _error4) {
-        console.error(_error4);
-      }
-    });
+    var encodedSearch = encodeURIComponent(ModuleExtendedCDRs.getSearchText());
+    var url = "".concat(window.location.origin, "/pbxcore/api/modules/").concat(className, "/exportHistory?reportNameID=").concat(reportNameID, "&type=").concat(type, "&search=").concat(encodedSearch, "&title=") + encodeURIComponent(title);
+    window.open(url, '_blank');
   },
   getMaxWidth: function getMaxWidth(data, key) {
     // Получаем максимальную длину содержимого в столбце

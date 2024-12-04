@@ -34,9 +34,6 @@ use Modules\ModuleExtendedCDRs\Models\ModuleExtendedCDRs;
 use GuzzleHttp\Client;
 use GuzzleHttp\HandlerStack;
 
-use Phalcon\Logger\Adapter\Stream;
-use Phalcon\Logger\Formatter\Line as LineFormatter;
-
 require_once 'Globals.php';
 
 class SyncRecords extends WorkerBase

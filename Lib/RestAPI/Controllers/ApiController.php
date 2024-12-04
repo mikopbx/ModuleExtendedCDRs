@@ -9,72 +9,70 @@
 
 namespace Modules\ModuleExtendedCDRs\Lib\RestAPI\Controllers;
 
-use MikoPBX\Common\Providers\CDRDatabaseProvider;
 use MikoPBX\Core\System\Util;
 use MikoPBX\PBXCoreREST\Controllers\Modules\ModulesControllerBase;
-use Modules\ModuleExtendedCDRs\Lib\XlsxWriter;
-use Modules\ModuleExtendedCDRs\Lib\HistoryParser;
+use Modules\ModuleExtendedCDRs\Lib\GetReport;
+use Modules\ModuleExtendedCDRs\Models\ReportSettings;
 
 class ApiController extends ModulesControllerBase
 {
 
     /**
+     * curl 'http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory?reportNameID=OutgoingEmployeeCalls&type=json&search=%7B%22dateRangeSelector%22%3A%2221%2F10%2F2024%20-%2021%2F10%2F2024%22%2C%22minBilSec%22%3A%220%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22outgoing-calls%22%2C%22additionalFilter%22%3A%22%22%7D'
+     * curl -H 'Cookie: PHPSESSID=5ada41f50486a5792cb3520f0922b7e9' 'https://boffart.miko.ru/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory?type=json&search=%7B%22dateRangeSelector%22%3A%2201%2F10%2F2024+-+31%2F10%2F2024%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22all-calls%22%2C%22additionalFilter%22%3A%22%22%7D'
+     * @return void
+     */
+    public function exportHistory()
+    {
+        $reportNameID   = $this->request->get('reportNameID');
+        if(ReportSettings::REPORT_OUTGOING_EMPLOYEE_CALLS  === $reportNameID){
+            $this->exportOutgoingEmployeeCalls();
+            return;
+        }
+        $type           = $this->request->get('type');
+        $searchPhrase   = $this->request->get('search');
+        if(!is_string($searchPhrase)){
+            $this->response->sendRaw();
+            return;
+        }
+        $gr = new GetReport();
+        $view = $gr->history($searchPhrase);
+        $view->title = urldecode($this->request->get('title')??'');
+        if($type === 'json'){
+            $this->echoResponse((array)$view);
+        }elseif($type === 'pdf'){
+            GetReport::exportHistoryPdf($view);
+        }elseif ($type === 'xlsx'){
+            GetReport::exportHistoryXls($view);
+        }
+        $this->response->sendRaw();
+    }
+
+    /**
+     * Скачивание tar архива.
+     * https://boffart.miko.ru/pbxcore/api/modules/ModuleExtendedCDRs/downloads?search=%7B%22dateRangeSelector%22%3A%2212%2F09%2F2024%2B-%2B11%2F10%2F2024%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22%22%2C%22additionalFilter%22%3A%22%22%7D
      * @return void
      */
     public function downloads():void
     {
-        $startDate  = new \DateTime($_GET['start']??Util::getNowDate());
-        $endDate    = new \DateTime($_GET['end']??Util::getNowDate());
-        $needBreak = false;
-        $type = $_GET['type']??'';
+        $searchPhrase   = $this->request->get('search');
+        $gr = new GetReport();
+        $view = $gr->history($searchPhrase);
 
-        $dateInterval = [];
-        while ($needBreak === false){
-            $start = $startDate->format('Y-m-d H:i:s');
-            $startDate->modify('+8 days - 1 seconds');
-            if($endDate->getTimestamp() <= $startDate->getTimestamp()){
-                $startDate = $endDate;
-                $needBreak = true;
-            }
-            $dateInterval[] = [
-                'start' => $start,
-                'end'   => $startDate->format('Y-m-d H:i:s'),
-            ];
-            $startDate->modify('+ 1 seconds');
-        }
         $pathLN = Util::which('ln');
         $tmpDir = '/storage/usbdisk1/mikopbx/tmp/ExportCdr/flist-export-'.microtime(true);
         shell_exec("mkdir -p $tmpDir");
-        foreach ($dateInterval as $interval){
-            $filter = [
-                'billsec > 0 AND start BETWEEN :startTime: AND :endTime: AND (src_num IN ({ids:array}) OR dst_num IN ({ids:array}) ) ',
-                'columns' => 'id,start,answer,src_num,dst_num,src_chan,dst_chan,endtime,linkedid,recordingfile,dialstatus,UNIQUEID',
-                'bind' => [
-                    'startTime' => $interval['start'],
-                    'endTime'   => $interval['end'],
-                    'ids' => explode(  ' ', $_GET['numbers']??''),
-                ],
-                'limit' => 2000
-            ];
-            $data = CDRDatabaseProvider::getCdr($filter);
-            foreach ($data as $cdr){
-                $isInner = strpos("{$cdr['src_chan']}.{$cdr['dst_chan']}", 'SIP-') === false;
-                if($type === 'inner' && !$isInner){
+        foreach ($view->data as $baseItem) {
+            foreach ($baseItem['4'] as $item){
+                if(!file_exists($item['recordingfile'])){
                     continue;
                 }
-                if ($type === 'out' && $isInner){
-                    continue;
-                }
-                $dateFormatter =  new \DateTime($cdr['start']);
-                $startCall = $dateFormatter->format('Y-m-d_H-i-s');
-                $newFilename = "{$startCall}__{$cdr['src_num']}-{$cdr['dst_num']}_".basename($cdr['recordingfile']);
-                shell_exec("$pathLN -s {$cdr['recordingfile']} $tmpDir/$newFilename");
+                shell_exec("$pathLN -s {$item['recordingfile']} $tmpDir/{$item['prettyFilename']}.mp3");
             }
         }
-
         $this->response->setHeader('Content-Description', 'tar file');
         $this->response->setHeader('Content-type', 'application/x-tar');
-        $this->response->setHeader('Content-Disposition', "attachment; filename=download-".$type."-".time().".tar");
+        $this->response->setHeader('Content-Disposition', "attachment; filename=download-".time().".tar");
         $this->response->setHeader('Content-Transfer-Encoding', 'binary');
         $pathBusybox = Util::which('busybox');
         $this->response->sendRaw();
@@ -82,6 +80,31 @@ class ApiController extends ModulesControllerBase
         shell_exec($pathBusybox.' rm -rf '.$tmpDir);
     }
 
+    /**
+     * curl -H 'Cookie: PHPSESSID=5ada41f50486a5792cb3520f0922b7e9' 'https://boffart.miko.ru/pbxcore/api/modules/ModuleExtendedCDRs/exportOutgoingEmployeeCalls?type=json&search=%7B%22dateRangeSelector%22%3A%2201%2F10%2F2024+-+31%2F10%2F2024%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22all-calls%22%2C%22additionalFilter%22%3A%22%22%7D'
+     * curl 'http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/exportOutgoingEmployeeCalls?type=json&search=%7B%22dateRangeSelector%22%3A%2201%2F10%2F2024%20-%2031%2F10%2F2024%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22outgoing-calls%22%2C%22additionalFilter%22%3A%22204%20203%22%7D'
+     * @return void
+     */
+    public function exportOutgoingEmployeeCalls()
+    {
+        $type           = $this->request->get('type');
+        $searchPhrase   = $this->request->get('search');
+        if(!is_string($searchPhrase)){
+            $this->response->sendRaw();
+            return;
+        }
+        $gr = new GetReport();
+        $view = $gr->outgoingEmployeeCalls($searchPhrase);
+        $view->title = urldecode($this->request->get('title')??'');
+        if($type === 'json'){
+            $this->echoResponse((array)$view);
+        }elseif($type === 'pdf'){
+            GetReport::exportOutgoingEmployeeCallsPrintPdf($view);
+        }elseif ($type === 'xlsx'){
+            GetReport::exportOutgoingEmployeeCallsPrintXls($view);
+        }
+        $this->response->sendRaw();
+    }
     /**
      * Вывод ответа сервера.
      * @param $result

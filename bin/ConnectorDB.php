@@ -31,8 +31,12 @@ use Modules\ModuleExtendedCDRs\Models\CallHistory;
 use Modules\ModuleExtendedCDRs\Models\ModuleExtendedCDRs;
 use Phalcon\Db\Enum;
 use DateTime;
+use getID3;
+use getid3_writetags;
+use Throwable;
 
 require_once 'Globals.php';
+require_once(dirname(__DIR__).'/vendor/autoload.php');
 
 class ConnectorDB extends WorkerBase
 {
@@ -238,6 +242,7 @@ class ConnectorDB extends WorkerBase
         unset($arrKeys['id']);
         foreach ($cdrData as $cdr){
             foreach ($cdr['rows'] as $row){
+                /** @var CallHistory $dbData */
                 $dbData = CallHistory::findFirst("UNIQUEID='{$row['UNIQUEID']}'");
                 if(!$dbData){
                     $dbData = new CallHistory();
@@ -254,6 +259,7 @@ class ConnectorDB extends WorkerBase
                     }
                     $dbData->$key = $value;
                 }
+                $this->updateMp3Tags($dbData);
                 $this->setCallType($dbData);
                 $dbData->save();
                 unset($dbData);
@@ -272,6 +278,60 @@ class ConnectorDB extends WorkerBase
             }
             $this->updateSettings($this->cdrOffset);
         }
+    }
+
+    /**
+     * Устанавливает тег title для mp3 файла
+     * @param CallHistory $data
+     * @return void
+     */
+    private function updateMp3Tags(CallHistory $data):void
+    {
+        if(!file_exists($data->recordingfile)){
+            return;
+        }
+
+        $cover_image = dirname(__DIR__).'/public/assets/img/mikopbx-picture.jpg';
+        $cover_image_custom = dirname(__DIR__,2).'/ModuleExtendedCDRs-logo-mp3.jpg';
+        if(file_exists($cover_image_custom)){
+            $cover_image = $cover_image_custom;
+        }
+
+        $getID3    = new getID3();
+        $tagWriter = new getid3_writetags();
+
+        $tagWriter->filename          = $data->recordingfile;
+        $tagWriter->tagformats        = ['id3v2.3'];
+        $tagWriter->overwrite_tags    = true;
+        $tagWriter->tag_encoding      = 'UTF-8';
+        $tagWriter->remove_other_tags = false;
+
+        $formattedDate  = date('Y-m-d-H_i', strtotime($data->start));
+        $uid            = str_replace('mikopbx-', '', $data->linkedid);
+        $prettyFilename = "$uid-$formattedDate-$data->src_num-$data->dst_num";
+
+        $soxPath = Util::which('soxi');
+        $tagWriter->tag_data = [
+            'title'   => [$prettyFilename],
+            'attached_picture' => [
+                [
+                    'data' => file_get_contents($cover_image),
+                    'picturetypeid' => 0x03,
+                    'description' => 'MikoPBX',
+                    'mime' => 'image/jpeg'
+                ]
+            ],
+            'comment' => [md5($prettyFilename.'_'.trim(shell_exec("$soxPath $data->recordingfile")??''))            ],
+            'year'    => [date('Y', strtotime($data->start))],
+        ];
+        $tagWriter->WriteTags();
+        unset($getID3, $tagWriter);
+
+        $dirLink = str_replace('/monitor/', '/pretty-monitor/', dirname($data->recordingfile,2));
+        $mkdirPath = Util::which('mkdir');
+        $lnPath = Util::which('ln');
+        shell_exec("$mkdirPath -p $dirLink; $lnPath -s $data->recordingfile $dirLink/$prettyFilename.mp3");
+
     }
 
     /**
@@ -373,9 +433,11 @@ class ConnectorDB extends WorkerBase
      * @param string $end
      * @param array  $numbers
      * @param array  $additionalNumbers
+     * @param array  $additionalFilter
+     * @param int  $minBilSec
      * @return array
      */
-    public function getCountCdr(string $start, string $end, array $numbers, array $additionalNumbers): array
+    public function getCountCdr(string $start, string $end, array $numbers, array $additionalNumbers, array $additionalFilter, int $minBilSec = 0): array
     {
         $bindParams = [
             ':start' => $start,
@@ -394,6 +456,7 @@ class ConnectorDB extends WorkerBase
             );
             $condition .= " AND (cdr_general.dstIndex IN ($placeholders) OR cdr_general.srcIndex IN ($placeholders))";
         }
+
         if (!empty($additionalNumbers)) {
             foreach ($additionalNumbers as $value) {
                 $bindParams[":IndexAdd$value"] = $value;
@@ -407,9 +470,35 @@ class ConnectorDB extends WorkerBase
             $condition .= " AND (cdr_general.dstIndex IN ($placeholders) OR cdr_general.srcIndex IN ($placeholders))";
         }
 
+        $extFilter = $additionalFilter['bind']['filteredExtensions']??[];
+        if(!empty($extFilter)){
+            foreach ($extFilter as &$value) {
+                $value = self::getPhoneIndex($value);
+                $bindParams[":IndexAdd$value"] = $value;
+            }
+            unset($value);
+            $placeholders = implode(
+                ', ',
+                array_map(static function ($value){
+                    return ":IndexAdd$value";
+                }, $extFilter)
+            );
+            $condition .= ' AND '. str_replace(
+                ['{filteredExtensions:array}', 'dst_num', 'src_num', 'AND ()'],
+                [$placeholders, 'cdr_general.dstIndex', 'cdr_general.srcIndex', ''],
+                $additionalFilter['conditions']??''
+            );
+        }
+
         if (!$this->di->has(CdrDbProvider::SERVICE_NAME)) {
             $this->di->register(new CdrDbProvider());
         }
+
+        $billSecFilter = '';
+        if($minBilSec>0){
+            $billSecFilter = "billsec > $minBilSec AND ";
+        }
+
         $db = $this->di->getShared(CdrDbProvider::SERVICE_NAME);
         $sql = "
             SELECT 
@@ -424,13 +513,19 @@ class ConnectorDB extends WorkerBase
                     MAX(cdr_general.typeCall) AS typeCall, 
                     cdr_general.linkedid AS linkedid 
                 FROM cdr_general 
-                WHERE {$condition} 
+                WHERE {$billSecFilter} {$condition} 
                 GROUP BY cdr_general.linkedid
             ) AS t
         ";
-        $result = $db->query($sql, $bindParams);
-        $result->setFetchMode(Enum::FETCH_ASSOC);
-        $row = $result->fetch();
+        try {
+            $result = $db->query($sql, $bindParams);
+            $result->setFetchMode(Enum::FETCH_ASSOC);
+            $row = $result->fetch();
+        }catch (Throwable $e) {
+            $row = [];
+            Util::sysLogMsg('ERROR- EXTENDED CDR', $sql.PHP_EOL.print_r($bindParams, true));
+        }
+
         return is_array($row)?$row:[];
     }
 

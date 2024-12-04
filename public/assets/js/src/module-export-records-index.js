@@ -9,8 +9,9 @@ const idUrl     = 'module-extended-c-d-rs';
 const idForm    = 'module-extended-cdr-form';
 const className = 'ModuleExtendedCDRs';
 const inputClassName = 'mikopbx-module-input';
+let listenedIDs = [];
 
-/* global globalRootUrl, globalTranslate, Form, Config */
+/* global globalRootUrl, globalTranslate, Form, Config, $ */
 const ModuleExtendedCDRs = {
 	$formObj: $('#'+idForm),
 	$checkBoxes: $('#'+idForm+' .ui.checkbox'),
@@ -25,7 +26,8 @@ const ModuleExtendedCDRs = {
 	 * The call detail records table element.
 	 * @type {jQuery}
 	 */
-	$cdrTable: $('#cdr-table'),
+	$cdrTable: $('#CallDetails-table'),
+	$outgoingEmployeeCalls: $('#OutgoingEmployeeCalls-table'),
 
 	/**
 	 * The global search input element.
@@ -58,26 +60,300 @@ const ModuleExtendedCDRs = {
 	validateRules: {
 	},
 	/**
+	 * Field validation rules
+	 * https://semantic-ui.com/behaviors/form.html
+	 */
+	validateVariantRules: {
+		title: {
+			identifier: 'title',
+			rules: [
+				{
+					type   : 'empty',
+					prompt : globalTranslate.repModuleExtendedCDRs_Form_titleReportError
+				}
+			]
+		},
+		minBillSec: {
+			identifier: 'minBillSec',
+			rules: [
+				{
+					type   : 'integer[0..1000]',
+					prompt : globalTranslate.repModuleExtendedCDRs_Form_titleReportError
+				}
+			]
+		},
+		dateMonth: {
+			identifier: 'dateMonth',
+			rules: [
+				{
+					type   : 'integer[1..31]',
+					prompt : globalTranslate.repModuleExtendedCDRs_Form_DateMonthError
+				}
+			]
+		},
+		day: {
+			identifier: 'day',
+			rules: [
+				{
+					type   : 'regExp[/^((([1-7])(,[1-7])*)|(([1-7])-([1-7])(/([1-7]))?)|(\\*\\/[1-7]))$/]',
+					prompt : globalTranslate.repModuleExtendedCDRs_Form_DayError
+				}
+			]
+		},
+		time: {
+			identifier: 'time',
+			rules: [
+				{
+					type   : 'regExp[/^(0[0-9]|1[0-9]|2[0-3]):([0-5][0-9])$/]',
+					prompt : globalTranslate.repModuleExtendedCDRs_Form_TimeError
+				}
+			]
+		},
+		email: {
+			identifier: 'email',
+			rules: [
+				{
+					type   : 'regExp[/^\\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})(\\s+[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})*\\s*$/]',
+					prompt : globalTranslate.repModuleExtendedCDRs_Form_EmailError
+				}
+			]
+		}
+	},
+	/**
 	 * On page load we init some Semantic UI library
 	 */
 	initialize() {
+		//////
+		// Удаляем отступы контейнера.
+		$('#main-content-container').removeClass('container');
+		$('#module-status-toggle-segment').hide();
+		$('.ui.clearing.hidden.divider').remove();
+		$("h1.header i.puzzle.icon")
+			.removeClass('puzzle')
+			.addClass('th')
+			.css('cursor', 'pointer')
+			.popup({
+				inline     : true,
+				popup: $('#menu-reports'),
+				target   : "h1.ui.header",
+				position: 'bottom left',
+				hoverable: true,
+				delay: {
+					show: 300,
+					hide: 800
+				}
+			}
+		);
+		$('#content-frame').css('display', 'none');
+		// Окончание форматирования базовой страницы
+		//////
+		ModuleExtendedCDRs.changeReportVariant();
 		ModuleExtendedCDRs.initializeDateRangeSelector();
+
 		// инициализируем чекбоксы и выподающие менюшки
 		window[className].$checkBoxes.checkbox();
 		window[className].$dropDowns.dropdown({onChange: ModuleExtendedCDRs.applyFilter});
-
 		window.addEventListener('ModuleStatusChanged', window[className].checkStatusToggle);
-		window[className].initializeForm();
 
+		window[className].initializeForm();
 		$('.menu .item').tab();
+
+		$(document).on('click', '#menu-reports i.edit', function(e) {
+			e.stopPropagation();
+			let parent =$(this).parent();
+			$(e.target).parents('div.six.wide.column').children('h4').hide();
+			$(e.target).parents('div.six.wide.column').children('div').hide();
+
+			let reportId = $(this).parent().attr('data-report-id');
+			let form = $(`form[data-report-id="${reportId}"]`);
+			form.show();
+
+			form.form('set value', 'reportNameID', reportId);
+			form.form('set value', 'variantId', parent.attr('data-variant-id'));
+
+			form.form('set value', 'title', parent.find('div.content div.title').text().trim());
+			form.form('set value', 'minBillSec', parent.attr('data-min-bill-sec'));
+			form.form('set value', 'sendingScheduledReport', parent.attr('data-sending-scheduled-report') === '1');
+			form.form('set value', 'dateMonth', parent.attr('data-date-month'));
+			form.form('set value', 'day', parent.attr('data-day'));
+			form.form('set value', 'time', parent.attr('data-time'));
+			form.form('set value', 'email', parent.attr('data-email'));
+		});
+		$(document).on('click', '#menu-reports form button[data-action="save"]', function(e) {
+			e.stopPropagation();
+			let form = $(this).parent();
+			form.form({fields: ModuleExtendedCDRs.validateVariantRules});
+
+			let reportNameID  = form.form('get value', 'reportNameID');
+			let variantId     = form.form('get value', 'variantId');
+			let title         = form.form('get value', 'title').trim();
+			let minBillSec    = form.form('get value', 'minBillSec');
+			let sendingReport = form.form('get value', 'sendingScheduledReport') ? 1 : 0;
+			let dateMonth     = form.form('get value', 'dateMonth');
+			let day           = form.form('get value', 'day');
+			let time          = form.form('get value', 'time');
+			let email         = form.form('get value', 'email');
+
+			if (!form.form('is valid', 'title')) {
+				form.form('submit');
+				return;
+			}
+			if (!form.form('is valid', 'minBillSec')) {
+				form.form('submit');
+				return;
+			}
+			if (dateMonth && !form.form('is valid', 'dateMonth')) {
+				form.form('submit');
+				return;
+			}
+			if (day && !form.form('is valid', 'day')) {
+				form.form('submit');
+				return;
+			}
+			if (time && !form.form('is valid', 'time')) {
+				form.form('submit');
+				return;
+			}
+			if (email && !form.form('is valid', 'email')) {
+				form.form('submit');
+				return;
+			}
+
+			let parent = $(`a[data-variant-id="${variantId}"][data-report-id="${reportNameID}"]`);
+			parent.find('div.content div.title').text(title);
+			parent.attr({
+				'data-min-bill-sec': minBillSec,
+				'data-sending-scheduled-report': sendingReport,
+				'data-date-month': dateMonth,
+				'data-day': day,
+				'data-time': time,
+				'data-email': email
+			});
+
+			let contentDiv = parent.find('div.content');
+			contentDiv.find('div.input').hide();
+			contentDiv.find('div.title').show();
+			parent.find('i.star').show();
+			form.hide();
+
+			$(e.target).parents('div.six.wide.column').children('h4').show();
+			$(e.target).parents('div.six.wide.column').children('div').show();
+
+			ModuleExtendedCDRs.changeReportVariant(reportNameID, variantId);
+			ModuleExtendedCDRs.saveSearchSettings();
+			ModuleExtendedCDRs.applyFilter();
+		});
+		$('#menu-reports i.copy').on('click', function (e) {
+			e.stopPropagation();
+			let reportId = $(this).parent().attr('id');
+			let timestamp = Date.now();
+			let parentTitle = $(this).parent().find('div.content').text().trim();
+			let html = `<i class="small star outline yellow icon" style="display: none;padding-top: 3px"></i>
+<i class="small edit outline icon" style="padding-top: 3px"></i>
+<i class="small trash alternate outline outline red icon" style="padding-top: 3px"></i>
+<div class="content">
+	<div class="title">${parentTitle} (${timestamp})</div>
+	<div class="ui mini input fluid hidden" style="display: none;">
+	  <input type="text" value="${parentTitle} (${timestamp})">
+	</div>
+</div>`;
+			let newItem = $('<a>', {
+				class: 'item',
+				html: html,
+				'data-report-id': reportId,
+				'data-is-main': '0',
+				'data-min-bill-sec': $(this).parent().attr('data-min-bill-sec'),
+				'data-search-text': $(this).parent().attr('data-search-text'),
+				'data-variant-id': timestamp
+			});
+			$(this).parent().siblings('.ui.link.list').append(newItem);
+			$(`a[data-variant-id="${timestamp}"][data-report-id="${reportId}"] i.edit`).trigger('click');
+		});
+		$('#menu-reports i.star').on('click', function (e) {
+			e.stopPropagation();
+			let reportNameID = $(this).parent().attr('id');
+			if(reportNameID === undefined){
+				reportNameID = $(this).parent().attr('data-report-id');
+			}
+			let variantId = $(this).parent().attr('data-variant-id');
+
+			let self = $(this);
+			$.ajax({
+				url: `${globalRootUrl}${idUrl}/saveMainVariantReport`,
+				type: 'POST',
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+					'X-Requested-With': 'XMLHttpRequest',
+				},
+				data: {
+					'reportNameID': reportNameID,
+					'variantId': 	variantId
+				},
+				success: function(response) {
+					$('#menu-reports i.star').addClass('outline');
+					self.removeClass('outline');
+				},
+				error: function(xhr, status, error) {
+					console.error(error);
+				}
+			});
+
+		});
+
+		$(document).on('click', '#menu-reports i.trash', function(e) {
+			e.stopPropagation();
+			let reportNameID = $(this).parent().attr('data-report-id');
+			let variantId 	 = $(this).parent().attr('data-variant-id');
+			let self = $(this);
+			$.ajax({
+				url: `${globalRootUrl}${idUrl}/removeVariantReport`,
+				type: 'POST',
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+					'X-Requested-With': 'XMLHttpRequest',
+				},
+				data: {
+					'reportNameID': reportNameID,
+					'variantId': 	variantId
+				},
+				success: function(response) {
+					self.parent().remove();
+				},
+				error: function(xhr, status, error) {
+					console.error(error);
+				}
+			});
+
+		});
 		$('#typeCall.menu a.item').on('click', function (e) {
 			ModuleExtendedCDRs.applyFilter();
 		});
 		$('#createExcelButton').on('click', function (e) {
-			ModuleExtendedCDRs.startCreateExcel();
+			ModuleExtendedCDRs.startCreateExcelPDF('xlsx');
+		});
+		$('#createPdfButton').on('click', function (e) {
+			ModuleExtendedCDRs.startCreateExcelPDF('pdf');
+		});
+		$('#downloadRecords').on('click', function (e) {
+			const encodedSearch = encodeURIComponent(ModuleExtendedCDRs.getSearchText());
+			const url = `${window.location.origin}/pbxcore/api/modules/${className}/downloads?search=${encodedSearch}`;
+			window.open(url, '_blank');
 		});
 		$('#saveSearchSettings').on('click', function (e) {
 			ModuleExtendedCDRs.saveSearchSettings();
+		});
+		$("div.column h4").on('click', function (e) {
+			let reportId = $(this).attr('id');
+			$("h1.header i.th.icon").popup('hide');
+			ModuleExtendedCDRs.changeReportVariant(reportId);
+			ModuleExtendedCDRs.applyFilter();
+		});
+		$(document).on('click', 'div.column div.link.list a.item div.title', function(e) {
+			let reportId = $(e.target).closest('a').attr('data-report-id');
+			let variantId = $(e.target).closest('a').attr('data-variant-id');
+			$("h1.header i.th.icon").popup('hide');
+			ModuleExtendedCDRs.changeReportVariant(reportId, variantId);
+			ModuleExtendedCDRs.applyFilter();
 		});
 
 		ModuleExtendedCDRs.$globalSearch.on('keyup', (e) => {
@@ -94,7 +370,49 @@ const ModuleExtendedCDRs = {
 				return false;
 			}
 		});
+		ModuleExtendedCDRs.$outgoingEmployeeCalls.dataTable({
+			search: {
+				search: ModuleExtendedCDRs.getSearchText(),
+			},
+			serverSide: true,
+			processing: true,
+			info: false,
+			columnDefs: [
+				{ defaultContent: "",  targets: "_all"},
+			],
+			ajax: {
+				url: `${globalRootUrl}${idUrl}/getOutgoingEmployeeCalls`,
+				type: 'POST'
+			},
+			paging: true,
+			sDom: 'rtip',
+			deferRender: true,
+			pageLength: ModuleExtendedCDRs.calculatePageLength(),
 
+			/**
+			 * Constructs the CDR row.
+			 * @param {HTMLElement} row - The row element.
+			 * @param {Array} data - The row data.
+			 */
+			createdRow(row, data) {
+				$('td', row).eq(0).html(data.callerId);
+				$('td', row).eq(1).html(data.number).addClass('active');
+				$('td', row).eq(2).html(data.billHourCalls);
+				$('td', row).eq(3).html(data.billMinCalls);
+				$('td', row).eq(4).html(data.billSecCalls);
+				$('td', row).eq(5).html(data.countCalls);
+			},
+			drawCallback(settings) {
+				let pagination = $(this).closest('.dataTables_wrapper').find('.dataTables_paginate');
+				if (settings._iDisplayLength >= settings.fnRecordsDisplay()) {
+					pagination.hide();
+				} else {
+					pagination.show();
+				}
+			},
+			language: SemanticLocalization.dataTableLocalisation,
+			ordering: false,
+		});
 
 		ModuleExtendedCDRs.$cdrTable.dataTable({
 			search: {
@@ -102,8 +420,9 @@ const ModuleExtendedCDRs = {
 			},
 			serverSide: true,
 			processing: true,
+			info: false,
 			columnDefs: [
-				{ defaultContent: "-",  targets: "_all"},
+				{defaultContent: "-", targets: "_all"},
 			],
 			ajax: {
 				url: `${globalRootUrl}${idUrl}/getHistory`,
@@ -128,6 +447,7 @@ const ModuleExtendedCDRs = {
 			paging: true,
 			sDom: 'rtip',
 			deferRender: true,
+			stripeClasses: ['striped'],
 			pageLength: ModuleExtendedCDRs.calculatePageLength(),
 
 			/**
@@ -140,6 +460,7 @@ const ModuleExtendedCDRs = {
 				if (data.DT_RowClass.indexOf("detailed") >= 0) {
 					detailedIcon = '<i class="icon caret down"></i>';
 				}
+				data.typeCall = `${data.typeCall}`;
 				if(data.typeCall === '1'){
 					$('td', row).eq(0).html('<i class="custom-outgoing-icon-15x15"></i>'+detailedIcon);
 				}else if(data.typeCall === '2'){
@@ -150,11 +471,11 @@ const ModuleExtendedCDRs = {
 					$('td', row).eq(0).html(''+detailedIcon);
 				}
 
-				$('td', row).eq(1).html(data[0]).addClass('right aligned');;
+				$('td', row).eq(1).html(data[0]).addClass('right aligned');
 				$('td', row).eq(2)
 					.html(data[1])
 					.attr('data-phone',data[1])
-					.addClass('need-update').addClass('right aligned');;
+					.addClass('need-update').addClass('right aligned');
 				$('td', row).eq(3)
 					.html(data[2])
 					.attr('data-phone',data[2])
@@ -179,8 +500,20 @@ const ModuleExtendedCDRs = {
 			/**
 			 * Draw event - fired once the table has completed a draw.
 			 */
-			drawCallback() {
+			drawCallback(settings) {
 				Extensions.updatePhonesRepresent('need-update');
+				listenedIDs.forEach(function(id) {
+					let element = $(`[id="${id}"]`);
+					if (element.length) {
+						element.removeClass('warning').addClass('positive');
+					}
+				});
+				let pagination = $(this).closest('.dataTables_wrapper').find('.dataTables_paginate');
+				if (settings._iDisplayLength >= settings.fnRecordsDisplay()) {
+					pagination.hide();
+				} else {
+					pagination.show();
+				}
 			},
 			language: SemanticLocalization.dataTableLocalisation,
 			ordering: false,
@@ -189,20 +522,19 @@ const ModuleExtendedCDRs = {
 		ModuleExtendedCDRs.dataTable.on('draw', () => {
 			ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
 		});
-
 		ModuleExtendedCDRs.$cdrTable.on('click', 'tr.negative', (e) => {
-			let filter = $(e.target).attr('data-phone');
-			if (filter !== undefined && filter !== '') {
-				ModuleExtendedCDRs.$globalSearch.val(filter)
-				ModuleExtendedCDRs.applyFilter();
-				return;
-			}
+			// let filter = $(e.target).attr('data-phone');
+			// if (filter !== undefined && filter !== '') {
+			// 	ModuleExtendedCDRs.$globalSearch.val(filter)
+			// 	ModuleExtendedCDRs.applyFilter();
+			// 	return;
+			// }
+
 			let ids = $(e.target).attr('data-ids');
 			if (ids !== undefined && ids !== '') {
 				window.location = `${globalRootUrl}system-diagnostic/index/?filename=asterisk/verbose&filter=${ids}`;
 			}
 		});
-
 		// Add event listener for opening and closing details
 		ModuleExtendedCDRs.$cdrTable.on('click', 'tr.detailed', (e) => {
 			let ids = $(e.target).attr('data-ids');
@@ -210,12 +542,12 @@ const ModuleExtendedCDRs = {
 				window.location = `${globalRootUrl}system-diagnostic/index/?filename=asterisk/verbose&filter=${ids}`;
 				return;
 			}
-			let filter = $(e.target).attr('data-phone');
-			if (filter !== undefined && filter !== '') {
-				ModuleExtendedCDRs.$globalSearch.val(filter)
-				ModuleExtendedCDRs.applyFilter();
-				return;
-			}
+			// let filter = $(e.target).attr('data-phone');
+			// if (filter !== undefined && filter !== '') {
+			// 	ModuleExtendedCDRs.$globalSearch.val(filter)
+			// 	ModuleExtendedCDRs.applyFilter();
+			// 	return;
+			// }
 
 			const tr = $(e.target).closest('tr');
 			const row = ModuleExtendedCDRs.dataTable.row(tr);
@@ -235,13 +567,91 @@ const ModuleExtendedCDRs = {
 					return new CDRPlayer(id);
 				});
 				Extensions.updatePhonesRepresent('need-update');
+
+				listenedIDs.forEach(function(id) {
+					let element = $(`[id="${id}"]`);
+					if (element.length) {
+						element.removeClass('warning').addClass('positive');
+					}
+					element = $(`[data-row-id="${id}"]`);
+					if (element.length) {
+						element.removeClass('warning').addClass('positive');
+					}
+				});
 			}
 		});
+
+		ModuleExtendedCDRs.updateSettings();
+		ModuleExtendedCDRs.applyFilter();
 
 		window[className].updateSyncState();
 		setInterval(window[className].updateSyncState, 5000);
 	},
+	changeReportVariant(reportNameID = '', currentVariantId=''){
+		if(reportNameID === ''){
+			reportNameID = $('#currentReportNameID').val();
+			currentVariantId = $('#currentVariantId').val();
+		}
 
+		$("[id$='_paginate']").hide();
+		$(`table[data-report-name!=""]`).hide();
+		$(`table[data-report-name="${reportNameID}"]`).css('width', '').show();
+		$(`#${reportNameID}-table_paginate`).show();
+
+		if(reportNameID === 'CallDetails' && ModuleExtendedCDRs.dataTable.page !== undefined){
+			ModuleExtendedCDRs.dataTable.page.len(ModuleExtendedCDRs.calculatePageLength()).draw();
+		}
+
+		$('#currentReportNameID').val(reportNameID);
+		$('#currentVariantId').val(currentVariantId);
+
+		let variantName = '';
+		if(currentVariantId !==''){
+			variantName = $(`a[data-variant-id="${currentVariantId}"][data-report-id="${reportNameID}"] div.title`).text().trim();
+		}else{
+			variantName = $(`h4#${reportNameID} div.content`).text().trim();
+		}
+		$("h1.header div.content").contents().filter(function() {
+			return this.nodeType === 3 && this.nodeValue.trim() !== '';
+		}).each(function() {
+			this.nodeValue = variantName;
+		});
+
+		ModuleExtendedCDRs.updateSettings();
+	},
+	updateSettings(){
+		let currentVariantId = $('#currentVariantId').val();
+		let reportNameID = $('#currentReportNameID').val();
+		let settings = {};
+		if(currentVariantId === ''){
+			settings = JSON.parse(decodeURIComponent($(`#${reportNameID}`).attr('data-search-text')));
+		}else{
+			settings = JSON.parse(decodeURIComponent($(`a[data-variant-id="${currentVariantId}"][data-report-id="${reportNameID}"]`).attr('data-search-text')));
+		}
+		if(settings.dateRangeSelector !== undefined && settings.dateRangeSelector !== ''){
+			let periods = ModuleExtendedCDRs.getStandardPeriods();
+			let defPeriod = [moment(),moment()];
+			if(periods[settings.dateRangeSelector] !== undefined){
+				defPeriod = periods[settings.dateRangeSelector];
+			}
+			ModuleExtendedCDRs.$dateRangeSelector.attr('data-start', defPeriod[0].format('YYYY/MM/DD'));
+			ModuleExtendedCDRs.$dateRangeSelector.attr('data-end', moment(defPeriod[1].format('YYYYMMDD')).endOf('day').format('YYYY/MM/DD'));
+			ModuleExtendedCDRs.$dateRangeSelector.val(`${defPeriod[0].format('DD/MM/YYYY')} - ${defPeriod[1].format('DD/MM/YYYY') }`);
+		}
+		if(settings.globalSearch !== undefined) {
+			ModuleExtendedCDRs.$globalSearch.val(settings.globalSearch)
+		}
+
+		$('#additionalFilter').dropdown('clear');
+		if(settings.additionalFilter !== undefined){
+			$('#additionalFilter').dropdown('set selected', settings.additionalFilter.split(' '));
+		}
+		if(settings.typeCall !== undefined){
+			$('#typeCall.menu a.item').tab('change tab', settings.typeCall)
+		}else{
+			$('#typeCall.menu a.item').tab('change tab', 'all-calls')
+		}
+	},
 	/**
 	 *
 	 */
@@ -282,9 +692,7 @@ const ModuleExtendedCDRs = {
 			let srcAudio = '';
 			let srcDownloadAudio = '';
 			if (!(record.recordingfile === undefined || record.recordingfile === null || record.recordingfile.length === 0)) {
-				let recordFileName = `record_${record.src_num}_to_${record.dst_num}_from_${data[0]}`;
-				recordFileName.replace(/[^\w\s!?]/g, '');
-				recordFileName = encodeURIComponent(recordFileName);
+				let recordFileName = encodeURIComponent(record.prettyFilename);
 				const recordFileUri = encodeURIComponent(record.recordingfile);
 				srcAudio = `/pbxcore/api/cdr/v2/playback?view=${recordFileUri}`;
 				srcDownloadAudio = `/pbxcore/api/cdr/v2/playback?view=${recordFileUri}&download=1&filename=${recordFileName}.mp3`;
@@ -299,25 +707,58 @@ const ModuleExtendedCDRs = {
 				<td class="right aligned">			
 				</td>
 				<td class="right aligned">${record.waitTime}</td>
-				<td class="right aligned">
-					<i class="ui icon play"></i>
-					<audio preload="metadata" id="audio-player-${record.id}" src="${srcAudio}"></audio>
-					${record.billsec}
-					<i class="ui icon download" data-value="${srcDownloadAudio}"></i>
+				<td class="right aligned" style="padding-right: 3">
+				  <div class="ui horizontal list" style="width: 100%; display: flex; align-items: center;">
+					<div class="item">
+					  <i class="ui icon play"></i>
+					</div>
+					<div class="item" style="margin-left:0; flex-grow: 1;">
+					  <div class="ui range cdr-player" data-value="${record.id}"></div>
+					</div>
+					<div class="item">
+					  ${record.billsec}
+					  <i class="ui icon download" data-value="${srcDownloadAudio}" onclick="ModuleExtendedCDRs.audioPlayHandler(event)"></i>
+					</div>
+				  </div>
+				  <audio preload="metadata" id="audio-player-${record.id}" src="${srcAudio}" onplay="ModuleExtendedCDRs.audioPlayHandler(event)"></audio>
 				</td>
 				<td class="right aligned" data-state-index="${record.stateCallIndex}">${record.stateCall}</td>
 			</tr>`
 		});
 		return htmlPlayer;
 	},
+	audioPlayHandler(event) {
+		let detailRow = $(event.target).closest('tr');
+		detailRow.removeClass('warning');
+		detailRow.addClass('positive');
 
+		let callIdDetail = detailRow.attr('data-row-id');
+		listenedIDs.push(callIdDetail);
+
+		let callId = callIdDetail.replace('-detailed', '');
+
+		let allPositive = true;
+		$('[data-row-id="' + callIdDetail + '"]').each(function() {
+			if (!$(this).hasClass('positive')) {
+				allPositive = false;
+				return false;
+			}
+		});
+
+		if (allPositive) {
+			$(`[id="${callId}"]`).addClass('positive');
+			listenedIDs.push(callId);
+		}
+
+		listenedIDs = [...new Set(listenedIDs)];
+	},
 	calculatePageLength() {
 		// Calculate row height
 		let rowHeight = ModuleExtendedCDRs.$cdrTable.find('tbody > tr').first().outerHeight();
 
 		// Calculate window height and available space for table
 		const windowHeight = window.innerHeight;
-		const headerFooterHeight = 400 + 50; // Estimate height for header, footer, and other elements
+		const headerFooterHeight = 400 ; // Estimate height for header, footer, and other elements
 
 		// Calculate new page length
 		return Math.max(Math.floor((windowHeight - headerFooterHeight) / rowHeight), 5);
@@ -490,18 +931,42 @@ const ModuleExtendedCDRs = {
 	 */
 	applyFilter() {
 		const text  = ModuleExtendedCDRs.getSearchText();
-
+		listenedIDs = [];
 		ModuleExtendedCDRs.dataTable.search(text).draw();
+		ModuleExtendedCDRs.$outgoingEmployeeCalls.DataTable().search(text).draw();
+
 		ModuleExtendedCDRs.$globalSearch.closest('div').addClass('loading');
 	},
 
-	getSearchText() {
+	getSearchText(retStandardPeriod = false, disableGlobalSearch = false) {
+		let dateRangeSelector = '';
+		if(retStandardPeriod === true){
+			let periods = ModuleExtendedCDRs.getStandardPeriods();
+			$.each(periods,function(index,value){
+				if(ModuleExtendedCDRs.$dateRangeSelector.val() ===  `${value[0].format('DD/MM/YYYY')} - ${value[1].format('DD/MM/YYYY')}`){
+					dateRangeSelector = index;
+				}
+			});
+		}else{
+			dateRangeSelector = ModuleExtendedCDRs.$dateRangeSelector.val();
+		}
+
+		let reportNameID = $('#currentReportNameID').val();
+		let currentVariantId = $('#currentVariantId').val();
+		let minBilSec = $(`h4#${reportNameID}`).attr('data-min-bill-sec');
+		if(currentVariantId !== ''){
+			minBilSec = $(`a[data-report-id="${reportNameID}"][data-variant-id="${currentVariantId}"]`).attr('data-min-bill-sec');
+		}
 		const filter = {
-			dateRangeSelector: ModuleExtendedCDRs.$dateRangeSelector.val(),
+			dateRangeSelector: dateRangeSelector,
+			minBilSec: minBilSec,
 			globalSearch: ModuleExtendedCDRs.$globalSearch.val(),
 			typeCall: $('#typeCall a.item.active').attr('data-tab'),
 			additionalFilter: $('#additionalFilter').dropdown('get value').replace(/,/g,' '),
 		};
+		if(disableGlobalSearch === true){
+			filter.globalSearch = '';
+		}
 		return JSON.stringify(filter);
 	},
 
@@ -517,17 +982,28 @@ const ModuleExtendedCDRs = {
 	},
 
 	saveSearchSettings() {
-		let periods = ModuleExtendedCDRs.getStandardPeriods();
-		let dateRangeSelector = '';
-		$.each(periods,function(index,value){
-			if(ModuleExtendedCDRs.$dateRangeSelector.val() ===  `${value[0].format('DD/MM/YYYY')} - ${value[1].format('DD/MM/YYYY')}`){
-				dateRangeSelector = index;
-			}
-		});
-		const settings = {
-			'additionalFilter' : $('#additionalFilter').dropdown('get value').replace(/,/g,' '),
-			'dateRangeSelector' : dateRangeSelector
+		let search = ModuleExtendedCDRs.getSearchText(true, true);
+		let currentVariantId = $('#currentVariantId').val();
+		let reportId = $('#currentReportNameID').val();
+		let variantName = '';
+		let data = {
+			'search[value]': search,
+			'reportNameID': reportId,
+			'variantId': 	currentVariantId,
+			'variantName': 	variantName
 		};
+		if(currentVariantId !== ''){
+			let parent = $(`a[data-variant-id="${currentVariantId}"][data-report-id="${reportId}"]`);
+			data.variantName = parent.find('div.title').text().trim();
+
+			data.minBillSec = parent.attr('data-min-bill-sec').trim();
+			data.sendingScheduledReport = parent.attr('data-sending-scheduled-report').trim();
+			data.dateMonth = parent.attr('data-date-month').trim();
+			data.day = parent.attr('data-day').trim();
+			data.time = parent.attr('data-time').trim();
+			data.email = parent.attr('data-email').trim();
+		}
+
 		$.ajax({
 			url: `${globalRootUrl}${idUrl}/saveSearchSettings`,
 			type: 'POST',
@@ -535,11 +1011,13 @@ const ModuleExtendedCDRs = {
 				'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
 				'X-Requested-With': 'XMLHttpRequest',
 			},
-			data: {
-				'search[value]': JSON.stringify(settings),
-			},
+			data: data,
 			success: function(response) {
-				console.log(response);
+				if(currentVariantId === ''){
+					$(`#${$('#currentReportNameID').val()}`).attr('data-search-text', encodeURIComponent(search));
+				}else{
+					$(`a[data-variant-id="${currentVariantId}"][data-report-id="${reportId}"]`).attr('data-search-text', encodeURIComponent(search));
+				}
 			},
 			error: function(xhr, status, error) {
 				console.error(error);
@@ -547,106 +1025,19 @@ const ModuleExtendedCDRs = {
 		});
 	},
 
-	startCreateExcel() {
-		const text  = ModuleExtendedCDRs.getSearchText();
+	startCreateExcelPDF(type) {
+		const reportNameID 	   = $('#currentReportNameID').val();
+		const currentVariantId = $('#currentVariantId').val();
+		let title = '';
+		if(currentVariantId === ''){
+			title= $(`#${$('#currentReportNameID').val()} div.content`).text().trim();
+		}else{
+			title=$(`a[data-variant-id="${currentVariantId}"][data-report-id="${reportNameID}"] div.title`).text().trim();
+		}
 
-		$.ajax({
-			url: `${globalRootUrl}${idUrl}/getHistory`,
-			type: 'POST',
-			headers: {
-				'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-				'X-Requested-With': 'XMLHttpRequest',
-			},
-			data: {
-				'search[value]': text,
-			},
-			success: function(response) {
-				const flattenedData = [
-					{
-						start: '',
-						src_num: '',
-						dst_num: '',
-						billsec: '',
-						stateCall: '',
-						typeCall: '',
-						line: '',
-						waitTime: '',
-					}
-				];
-
-				$.each(response.data, function(index, item) {
-					const baseRecord = {
-						start: item['0'],
-						src_num: item['1'],
-						dst_num: item['2'],
-						billsec: item['3'],
-						stateCall: item['stateCall'],
-						typeCall: item['typeCallDesc'],
-						line: item['line'],
-						waitTime: item['waitTime'],
-					};
-
-					// Добавляем основной элемент
-					flattenedData.push(baseRecord);
-
-					// Если есть вложенные данные, добавляем их сразу после основного элемента
-					if (item['4'] && item['4'].length > 0) {
-						$.each(item['4'], function(i, nestedItem) {
-							// Проверяем, совпадают ли значения start, src_num и dst_num с основной записью
-							if (nestedItem.start !== item['0'] || nestedItem.src_num !== item['1'] || nestedItem.dst_num !== item['2']) {
-								flattenedData.push({
-									start: nestedItem.start || item['0'],
-									src_num: nestedItem.src_num || item['1'],
-									dst_num: nestedItem.dst_num || item['2'],
-									billsec: nestedItem.billsec || item['3'],
-									stateCall: nestedItem.stateCall,
-									typeCall: item['typeCallDesc'],
-									line: item['line'],
-									waitTime: nestedItem.waitTime
-									// Другие свойства можно добавить здесь
-								});
-							}
-						});
-					}
-				});
-
-				let columns = [
-					"typeCall",
-					"start",
-					"src_num",
-					"dst_num",
-					"line",
-					"waitTime",
-					"billsec",
-					"stateCall"
-				];
-				const worksheet = XLSX.utils.json_to_sheet(flattenedData,{
-					header: columns,
-					skipHeader: true  // Пропускаем автоматическое создание заголовков из ключей объекта
-				});
-				XLSX.utils.sheet_add_aoa(worksheet, [[
-					globalTranslate.repModuleExtendedCDRs_cdr_ColumnTypeState,
-					globalTranslate.cdr_ColumnDate,
-					globalTranslate.cdr_ColumnFrom,
-					globalTranslate.cdr_ColumnTo,
-					globalTranslate.repModuleExtendedCDRs_cdr_ColumnLine,
-					globalTranslate.repModuleExtendedCDRs_cdr_ColumnWaitTime,
-					globalTranslate.cdr_ColumnDuration,
-					globalTranslate.repModuleExtendedCDRs_cdr_ColumnCallState,
-				]], {origin: "A1"});
-
-				worksheet['!cols'] =  columns.map(col => ({
-					wch: 8 + ModuleExtendedCDRs.getMaxWidth(flattenedData, col)
-				}));
-
-				const workbook = XLSX.utils.book_new();
-				XLSX.utils.book_append_sheet(workbook, worksheet, "cdr");
-				XLSX.writeFile(workbook, "history.xlsx");
-			},
-			error: function(xhr, status, error) {
-				console.error(error);
-			}
-		});
+		const encodedSearch = encodeURIComponent(ModuleExtendedCDRs.getSearchText());
+		const url = `${window.location.origin}/pbxcore/api/modules/${className}/exportHistory?reportNameID=${reportNameID}&type=${type}&search=${encodedSearch}&title=`+encodeURIComponent(title);
+		window.open(url, '_blank');
 	},
 
 	getMaxWidth(data, key) {
@@ -904,6 +1295,7 @@ const ModuleExtendedCDRs = {
 		table.find('tbody > tr:first').before(rowTemplate);
 		window[className].drowSelectGroup(idTable);
 	},
+
 	/**
 	 * Обновление select элементов.
 	 * @param tableId

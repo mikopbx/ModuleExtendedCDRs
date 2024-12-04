@@ -27,7 +27,6 @@ use MikoPBX\Core\System\Util;
 use MikoPBX\Core\Workers\WorkerCdr;
 use Modules\ModuleExtendedCDRs\bin\ConnectorDB;
 use Modules\ModuleExtendedCDRs\Models\CallHistory;
-use Phalcon\Di;
 
 class HistoryParser
 {
@@ -74,7 +73,7 @@ class HistoryParser
                 SystemMessages::sysLogMsg('HistoryParser:SELECT_CDR_TUBE', 'Error parse response.');
             }
 
-            $di = Di::getDefault();
+            $di = MikoPBXVersion::getDefaultDi();
             if($di !== null){
                 $findPath = Util::which('find');
                 $downloadCacheDir = $di->getShared('config')->path('www.downloadCacheDir');

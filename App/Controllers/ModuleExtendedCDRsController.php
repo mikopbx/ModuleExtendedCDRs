@@ -7,24 +7,31 @@
  */
 namespace Modules\ModuleExtendedCDRs\App\Controllers;
 use MikoPBX\AdminCabinet\Controllers\BaseController;
+use MikoPBX\AdminCabinet\Controllers\SessionController;
 use MikoPBX\Common\Models\CallQueues;
 use MikoPBX\Common\Models\Extensions;
 use MikoPBX\Common\Models\Sip;
 use MikoPBX\Common\Providers\PBXConfModulesProvider;
+use MikoPBX\Common\Providers\SessionProvider;
 use MikoPBX\Core\System\Util;
 use MikoPBX\Modules\Config\CDRConfigInterface;
 use MikoPBX\Modules\PbxExtensionUtils;
 use Modules\ModuleExtendedCDRs\App\Forms\ModuleExtendedCDRsForm;
 use Modules\ModuleExtendedCDRs\bin\ConnectorDB;
 use Modules\ModuleExtendedCDRs\Lib\CacheManager;
+use Modules\ModuleExtendedCDRs\Lib\GetReport;
 use Modules\ModuleExtendedCDRs\Lib\HistoryParser;
 use Modules\ModuleExtendedCDRs\Models\CallHistory;
 use Modules\ModuleExtendedCDRs\Models\ExportRules;
 use Modules\ModuleExtendedCDRs\Models\ModuleExtendedCDRs;
 use MikoPBX\Common\Models\Providers;
+use Modules\ModuleExtendedCDRs\Models\ReportSettings;
 use Modules\ModuleUsersGroups\Models\GroupMembers;
 use Modules\ModuleUsersGroups\Models\UsersGroups;
 use DateTime;
+use Modules\ModuleUsersUI\Lib\Constants;
+use Modules\ModuleUsersUI\Models\AccessGroups;
+use Modules\ModuleUsersUI\Models\UsersCredentials;
 
 class ModuleExtendedCDRsController extends BaseController
 {
@@ -37,7 +44,6 @@ class ModuleExtendedCDRsController extends BaseController
     public function initialize(): void
     {
         $this->moduleDir = PbxExtensionUtils::getModuleDir($this->moduleUniqueID);
-        $this->view->logoImagePath = "{$this->url->get()}assets/img/cache/{$this->moduleUniqueID}/logo.svg";
         $this->view->submitMode = null;
         parent::initialize();
     }
@@ -105,7 +111,6 @@ class ModuleExtendedCDRsController extends BaseController
         $footerCollection->addJs('js/pbx/main/form.js', true);
         $footerCollection->addJs('js/vendor/datatable/dataTables.semanticui.js', true);
         $footerCollection->addJs("js/cache/{$this->moduleUniqueID}/module-export-records-index.js", true);
-        $footerCollection->addJs("js/cache/{$this->moduleUniqueID}/xlsx.full.min.js", true);
         $footerCollection->addJs('js/vendor/jquery.tablednd.min.js', true);
         $footerCollection->addJs('js/vendor/semantic/modal.min.js', true);
         $footerCollection->addJs('js/pbx/CallDetailRecords/call-detail-records-player.js', true);
@@ -118,6 +123,7 @@ class ModuleExtendedCDRsController extends BaseController
         $headerCollectionCSS = $this->assets->collection('headerCSS');
         $headerCollectionCSS->addCss("css/cache/{$this->moduleUniqueID}/module-export-records.css", true);
         $headerCollectionCSS->addCss('css/vendor/semantic/progress.min.css', true);
+        $headerCollectionCSS->addCss('css/vendor/semantic/list.css', true);
         $headerCollectionCSS->addCss('css/vendor/datatable/dataTables.semanticui.min.css', true);
         $headerCollectionCSS->addCss('css/vendor/semantic/modal.min.css', true);
 
@@ -162,11 +168,8 @@ class ModuleExtendedCDRsController extends BaseController
         }
         $this->view->rules = ExportRules::find()->toArray();
 
-        try {
-            $searchSettings = json_decode($settings->searchSettings, true, 512, JSON_THROW_ON_ERROR);
-        }catch (\Exception $e){
-            $searchSettings = [];
-        }
+        $searchSettings = [];
+        $this->getVariantsReports($searchSettings);
         $filterNumbers = explode(' ', $searchSettings['additionalFilter']??'');
         $additionalFilter = [];
         foreach ($this->view->groups as $group){
@@ -184,7 +187,7 @@ class ModuleExtendedCDRsController extends BaseController
             foreach ($filterNumbers as $number){
                 if($user['number'] === $number){
                     $additionalFilter[] = [
-                        'name'   => $user['callerid'],
+                        'name'   => $user['callerid']."($number)",
                         'number' => $number
                     ];
                 }
@@ -193,6 +196,115 @@ class ModuleExtendedCDRsController extends BaseController
         $this->view->dateRangeSelector      = $searchSettings['dateRangeSelector']??'';
         $this->view->additionalFilter       = $additionalFilter;
         $this->view->additionalFilterString = implode(',',array_column($additionalFilter, 'number'));
+        $this->view->accessData  = $this->getUserData();
+
+    }
+
+    private function getVariantsReports(&$searchSettings)
+    {
+        $mainReports = [
+            ReportSettings::REPORT_MAIN => [
+                'searchText' => '{}',
+                'minBillSec' => 0,
+                'isMain' => 1,
+                'variantName' => Util::translate('BreadcrumbModuleExtendedCDRs')
+            ],
+            ReportSettings::REPORT_OUTGOING_EMPLOYEE_CALLS => [
+                'searchText' => '{}',
+                'minBillSec' => 0,
+                'isMain' => 0,
+                'variantName' => Util::translate('repModuleExtendedCDRs_'.ReportSettings::REPORT_OUTGOING_EMPLOYEE_CALLS)
+            ],
+        ];
+        $filterVariantReport = [
+            'userID=:userID:',
+            'bind' => ['userID' => $this->getUserData()['userId']],
+            'order'=> 'isMain DESC,id ASC,variantId ASC'
+        ];
+        $variants = ReportSettings::find($filterVariantReport)->toArray();
+        $currentReportNameID = ReportSettings::REPORT_MAIN;
+        $currentVariantId    = null;
+        $resultVariants      = [
+            ReportSettings::REPORT_MAIN => [],
+            ReportSettings::REPORT_OUTGOING_EMPLOYEE_CALLS => [],
+        ];
+        foreach ($variants as $variant){
+            $variant['searchText'] = rawurlencode($variant['searchText']);
+            if((int)$variant['isMain'] === 1){
+                foreach (array_keys($mainReports) as $reportNameID){
+                    $mainReports[$reportNameID]['isMain'] = false;
+                }
+                $currentReportNameID = $variant['reportNameID'];
+                $currentVariantId    = $variant['variantId'];
+            }
+            if(empty($variant['variantId'])){
+                $mainReports[$variant['reportNameID']]['searchText'] = $variant['searchText'];
+                $mainReports[$variant['reportNameID']]['minBillSec'] = $variant['minBillSec'];
+                $mainReports[$variant['reportNameID']]['isMain']     = $variant['isMain'];
+                continue;
+            }
+            $resultVariants[$variant['reportNameID']][] = $variant;
+            if($currentVariantId !== null){
+                continue;
+            }
+            try {
+                $searchSettings      = json_decode($variant['searchText'], true, 512, JSON_THROW_ON_ERROR);
+            }catch (\Exception $e){
+                unset($e);
+            }
+        }
+        $this->view->mainReports = $mainReports;
+        $this->view->variants = $resultVariants;
+        $this->view->currentReportNameID    = $currentReportNameID;
+        $this->view->currentVariantId       = $currentVariantId;
+    }
+
+    private function getUserData():array
+    {
+        $accessData = (object)[
+            'userId' => 0,
+            'userNumber' => '',
+            'roleId' => '',
+            'roleName' => '',
+            'fullAccess' => '1',
+            'username' => '',
+        ];
+
+        if(PbxExtensionUtils::isEnabled('ModuleUsersUI')){
+            $session = $this->getDI()->get(SessionProvider::SERVICE_NAME)->get(SessionController::SESSION_ID);
+            $roleId  = str_replace(Constants::MODULE_ROLE_PREFIX,'', $session[SessionController::ROLE]??'');
+
+            $accessData->roleId     = $roleId;
+            $roleData = AccessGroups::findFirst(['id=:id:', 'bind' => ['id' => $roleId]]);
+            if($roleData){
+                $accessData->roleName   = $roleData->name;
+                $accessData->fullAccess = $roleData->fullAccess;
+            }
+            $accessData->username = $session[SessionController::USER_NAME]??'';
+            $filterCred = [
+                'user_login=:user_login:',
+                'bind' => [
+                    'user_login' => $session[SessionController::USER_NAME]??""
+                ]
+            ];
+            $credUI = UsersCredentials::findFirst($filterCred);
+            if($credUI){
+                $accessData->userId = $credUI->user_id;
+                $filterExten = [
+                    'type=:type: AND userid=:userid:',
+                    'bind' => [
+                        'type'   => Extensions::TYPE_SIP,
+                        'userid' => $credUI->user_id,
+                    ]
+                ];
+                $ext = Extensions::findFirst($filterExten);
+                if($ext){
+                    $accessData->userNumber = $ext->number;
+                    $accessData->cid = $ext->callerid;
+                }
+            }
+        }
+        return (array)$accessData;
     }
 
     /**
@@ -356,16 +468,98 @@ class ModuleExtendedCDRsController extends BaseController
         echo json_encode($result);
     }
 
+    public function saveMainVariantReportAction(): void
+    {
+        $reportNameID = $this->request->getPost('reportNameID')??ReportSettings::REPORT_MAIN;
+        $variantId    = $this->request->getPost('variantId')??'';
+        $accessData   = $this->getUserData();
+        $this->view->accessData   = $accessData;
+
+        $filter = [
+            'userID=:userID:',
+            'bind' => [
+                'userID' => $accessData['userId'],
+            ]
+        ];
+        $reportsData = ReportSettings::find($filter);
+
+        $mainFound = false;
+        foreach ($reportsData as $reportSettings) {
+            if($reportNameID === $reportSettings->reportNameID && $reportSettings->variantId === $variantId){
+                $reportSettings->isMain = true;
+                $mainFound = true;
+            }else{
+                $reportSettings->isMain = false;
+            }
+            $reportSettings->save();
+        }
+        if($mainFound === false){
+            $this->view->wasAddNewReport = 1;
+            $report = new ReportSettings();
+            $report->reportNameID = $reportNameID;
+            $report->userID = $accessData['userId'];
+            $report->variantId = $variantId;
+            $report->isMain = true;
+            $report->sendingScheduledReport = 0;
+            $report->searchText = '{"dateRangeSelector":"cal_ThisMonth","globalSearch":"","typeCall":"all-calls","additionalFilter":""}';
+            $report->save();
+        }
+    }
+    public function removeVariantReportAction(): void{
+        $reportNameID = $this->request->getPost('reportNameID')??ReportSettings::REPORT_MAIN;
+        $variantId    = $this->request->getPost('variantId')??'';
+        $accessData   = $this->getUserData();
+        $this->view->accessData   = $accessData;
+
+        $filter = [
+            'userID=:userID: AND reportNameID=:reportNameID: AND variantId=:variantId:',
+            'bind' => [
+                'userID' => $accessData['userId'],
+                'reportNameID' => $reportNameID,
+                'variantId' => $variantId
+            ]
+        ];
+        $reportsData = ReportSettings::findFirst($filter);
+        if($reportsData){
+            $reportsData->delete();
+        }
+    }
     public function saveSearchSettingsAction(): void
     {
         $searchPhrase = $this->request->getPost('search');
+        $reportNameID = $this->request->getPost('reportNameID')??ReportSettings::REPORT_MAIN;
+        $variantId    = $this->request->getPost('variantId')??'';
+        $variantName  = $this->request->getPost('variantName')??'';
+        $accessData   = $this->getUserData();
         $this->view->searchPhrase = $searchPhrase['value'];
-        $settings = ModuleExtendedCDRs::findFirst();
-        if(!$settings){
-            $settings = new ModuleExtendedCDRs();
+        $this->view->accessData   = $accessData;
+
+        $filter = [
+            'userID=:userID: AND reportNameID=:reportNameID: AND variantId=:variantId:',
+            'bind' => [
+                'userID' => $accessData['userId'],
+                'reportNameID' => $reportNameID,
+                'variantId' => $variantId
+            ]
+        ];
+        $reportData = ReportSettings::findFirst($filter);
+        if(!$reportData){
+            $reportData = new ReportSettings();
+            $reportData->userID = $accessData['userId'];
+            $reportData->reportNameID = $reportNameID;
+            $reportData->variantId = $variantId;
         }
-        $settings->searchSettings = $searchPhrase['value']??'';
-        $settings->save();
+        $reportData->variantName = $variantName;
+        $reportData->searchText = $searchPhrase['value']??'';
+
+        $reportData->minBillSec = $this->request->getPost('minBillSec')??'';
+        $reportData->sendingScheduledReport = $this->request->getPost('sendingScheduledReport')??'0';
+        $reportData->dateMonth = $this->request->getPost('dateMonth')??'';
+        $reportData->day = $this->request->getPost('day')??'';
+        $reportData->time = $this->request->getPost('time')??'';
+        $reportData->email = $this->request->getPost('email')??'';
+
+        $this->view->resSave = $reportData->save();
     }
 
     /**
@@ -384,361 +578,30 @@ class ModuleExtendedCDRsController extends BaseController
      */
     public function getHistoryAction(): void
     {
-        $currentPage    = $this->request->getPost('draw');
-        $position       = $this->request->getPost('start');
-        $recordsPerPage = $this->request->getPost('length');
-        $searchPhrase   = $this->request->getPost('search');
+        $this->view->draw = $this->request->get('draw');
+        $searchPhrase     = $this->request->get('search');
+        $length           = is_numeric($this->request->get('length'))?(int)$this->request->get('length'):null;
 
-        $this->view->draw = $currentPage;
-        $this->view->recordsFiltered = 0;
-        $this->view->data = [];
-        $this->view->searchPhrase = $searchPhrase['value'];
-
-        $parameters = [];
-        $parameters['columns'] = 'COUNT(DISTINCT(linkedid)) as rows';
-        // Count the number of unique calls considering filters
-        if (empty($searchPhrase['value'])) {
-            return;
+        $gr = new GetReport();
+        $view = $gr->history($searchPhrase['value']??'',  $this->request->get('start'), $length);
+        foreach ($view as $key => $value) {
+            $this->view->$key = $value;
         }
-        [$start, $end, $numbers, $additionalNumbers] = $this->prepareConditionsForSearchPhrases($searchPhrase['value'], $parameters);
-        // If we couldn't understand the search phrase, return empty result
-        if (empty($parameters['conditions'])) {
-            $this->view->conditions = 'empty';
-
-            return;
-        }
-        $recordsFilteredReq = ConnectorDB::invoke('getCountCdr', [$start, $end, $numbers, $additionalNumbers]);
-        $this->view->recordsFiltered = $recordsFilteredReq['cCalls'] ?? 0;
-        $this->view->recordsInner    = $recordsFilteredReq['cINNER'] ?? 0;
-        $this->view->recordsOutgoing = $recordsFilteredReq['cOUTGOING'] ?? 0;
-        $this->view->recordsIncoming = $recordsFilteredReq['cINCOMING'] ?? 0;
-        $this->view->recordsMissed   = $recordsFilteredReq['cMISSED'] ?? 0;
-
-        // Find all LinkedIDs that match the specified filter
-        $parameters['columns'] = 'DISTINCT(linkedid) as linkedid';
-        $parameters['order']   = ['start desc'];
-
-        if(!empty($recordsPerPage)){
-            $parameters['limit']   = $recordsPerPage;
-        }
-        if(!empty($position)){
-            $parameters['offset']  = $position;
-        }
-
-        $selectedLinkedIds = $this->selectCDRRecordsWithFilters($parameters);
-        $arrIDS = [];
-        foreach ($selectedLinkedIds as $item) {
-            $arrIDS[] = $item['linkedid'];
-        }
-        if (empty($arrIDS)) {
-            return;
-        }
-
-        // Retrieve all detailed records for processing and merging
-        if (count($arrIDS) === 1) {
-            $parameters = [
-                'conditions' => 'linkedid = :ids:',
-                'columns' => 'id,disposition,start,answer,endtime,src_num,dst_num,billsec,recordingfile,did,dst_chan,linkedid,is_app,verbose_call_id,typeCall,waitTime,line,stateCall',
-                'bind' => [
-                    'ids' => $arrIDS[0],
-                ],
-                'order' => ['linkedid desc', 'start asc', 'id asc'],
-            ];
-        } else {
-            $parameters = [
-                'conditions' => 'linkedid IN ({ids:array})',
-                'columns' => 'id,disposition,start,answer,endtime,src_num,dst_num,billsec,recordingfile,did,dst_chan,linkedid,is_app,verbose_call_id,typeCall,waitTime,line,stateCall',
-                'bind' => [
-                    'ids' => $arrIDS,
-                ],
-                'order' => ['linkedid desc', 'start asc', 'id asc'],
-            ];
-        }
-
-        $selectedRecords = $this->selectCDRRecordsWithFilters($parameters);
-        $arrCdr = [];
-        $objectLinkedCallRecord = (object)[
-            'linkedid'      => '',
-            'disposition'   => '',
-            'start'         => '',
-            'endtime'       => '',
-            'src_num'       => '',
-            'dst_num'       => '',
-            'billsec'       => 0,
-            'typeCall'      => '',
-            'stateCall'     => '',
-            'waitTime'      => '',
-            'line'          => '',
-            'answered'      => [],
-            'detail'        => [],
-            'ids'           => [],
-            'did'           => ''
-        ];
-
-        $providers = Sip::find("type='friend'");
-        $providerName = [];
-        foreach ($providers as $provider){
-            $providerName[$provider->uniqid] = $provider->description;
-        }
-        unset($providers);
-
-        $statsCall = [
-            CallHistory::CALL_STATE_OK              => Util::translate('repModuleExtendedCDRs_cdr_CALL_STATE_OK', false),
-            CallHistory::CALL_STATE_TRANSFER        => Util::translate('repModuleExtendedCDRs_cdr_CALL_STATE_TRANSFER', false),
-            CallHistory::CALL_STATE_MISSED          => Util::translate('repModuleExtendedCDRs_cdr_CALL_STATE_MISSED', false),
-            CallHistory::CALL_STATE_OUTGOING_FAIL   => Util::translate('repModuleExtendedCDRs_cdr_CALL_STATE_OUTGOING_FAIL', false),
-            CallHistory::CALL_STATE_RECALL_CLIENT   => Util::translate('repModuleExtendedCDRs_cdr_CALL_STATE_RECALL_CLIENT', false),
-            CallHistory::CALL_STATE_RECALL_USER     => Util::translate('repModuleExtendedCDRs_cdr_CALL_STATE_RECALL_USER', false),
-            CallHistory::CALL_STATE_APPLICATION     => Util::translate('repModuleExtendedCDRs_cdr_CALL_STATE_APPLICATION', false),
-        ];
-        $typeCallNames = [
-            CallHistory::CALL_TYPE_INNER =>  Util::translate('repModuleExtendedCDRs_cdr_CALL_TYPE_INNER', false),
-            CallHistory::CALL_TYPE_OUTGOING =>  Util::translate('repModuleExtendedCDRs_cdr_CALL_TYPE_OUTGOING', false),
-            CallHistory::CALL_TYPE_INCOMING =>  Util::translate('repModuleExtendedCDRs_cdr_CALL_TYPE_INCOMING', false),
-            CallHistory::CALL_TYPE_MISSED =>  Util::translate('repModuleExtendedCDRs_cdr_CALL_TYPE_MISSED', false),
-        ];
-
-        foreach ($selectedRecords as $arrRecord) {
-            $record = (object)$arrRecord;
-            if (!array_key_exists($record->linkedid, $arrCdr)) {
-                $arrCdr[$record->linkedid] = clone $objectLinkedCallRecord;
-            }
-            if ($record->is_app !== '1'
-                && $record->billsec > 0
-                && ($record->disposition === 'ANSWER' || $record->disposition === 'ANSWERED')) {
-                $disposition = 'ANSWERED';
-            } else {
-                $disposition = 'NOANSWER';
-            }
-            $linkedRecord = $arrCdr[$record->linkedid];
-            $linkedRecord->linkedid     = $record->linkedid;
-            $linkedRecord->typeCall     = $record->typeCall;
-            $linkedRecord->typeCallDesc = $typeCallNames[$record->typeCall];
-            $linkedRecord->waitTime     = 1*$record->waitTime;
-            $linkedRecord->line         = $providerName[$record->line]??$record->line;
-            $linkedRecord->disposition = $linkedRecord->disposition !== 'ANSWERED' ? $disposition : 'ANSWERED';
-            $linkedRecord->start = $linkedRecord->start === '' ? $record->start : $linkedRecord->start;
-            if($record->stateCall === CallHistory::CALL_STATE_OK){
-                $linkedRecord->stateCall = $statsCall[$record->stateCall];
-                $linkedRecord->stateCallIndex = $record->stateCall;
-            }elseif($record->stateCall !== CallHistory::CALL_STATE_APPLICATION){
-                $linkedRecord->stateCall = ($linkedRecord->stateCall === '') ? $statsCall[$record->stateCall] : $linkedRecord->stateCall;
-                $linkedRecord->stateCallIndex = $linkedRecord->stateCall === '' ? $record->stateCall : $linkedRecord->stateCall;
-            }
-
-            if($linkedRecord->typeCall === CallHistory::CALL_TYPE_INCOMING){
-                $linkedRecord->did =  ($linkedRecord->did === '') ? $record->did : $linkedRecord->did;
-            }
-
-            $linkedRecord->endtime = max($record->endtime , $linkedRecord->endtime);
-            $linkedRecord->src_num = $linkedRecord->src_num === '' ? $record->src_num : $linkedRecord->src_num;
-            $linkedRecord->dst_num = $linkedRecord->dst_num === '' ? $record->dst_num : $linkedRecord->dst_num;
-            $linkedRecord->billsec += (int)$record->billsec;
-            $isAppWithRecord = ($record->is_app === '1' && file_exists($record->recordingfile));
-            if ($disposition === 'ANSWERED' || $isAppWithRecord) {
-                if($record->is_app === '1'){
-                    $waitTime = 0;
-                }else{
-                    $waitTime = strtotime($record->answer) - strtotime($record->start);
-                }
-                $linkedRecord->answered[] = [
-                    'id'            => $record->id,
-                    'start'         => date('d-m-Y H:i:s', strtotime($record->start)),
-                    'waitTime'      => gmdate( $waitTime < 3600 ? 'i:s' : 'G:i:s', $waitTime),
-                    'billsec'       => gmdate( $record->billsec < 3600 ? 'i:s' : 'G:i:s', $record->billsec),
-                    'src_num'       => $record->src_num,
-                    'dst_num'       => $record->dst_num,
-                    'recordingfile' => $record->recordingfile,
-                    'stateCall'     => $statsCall[$record->stateCall],
-                    'stateCallIndex'=> $record->stateCall,
-                ];
-            }else{
-                $waitTime = strtotime($record->endtime) - strtotime($record->start);
-                $linkedRecord->answered[] = [
-                    'id'            => $record->id,
-                    'start'         => date('d-m-Y H:i:s', strtotime($record->start)),
-                    'waitTime'      => gmdate( $waitTime < 3600 ? 'i:s' : 'G:i:s', $waitTime),
-                    'billsec'       => gmdate( 'i:s', 0),
-                    'src_num'       => $record->src_num,
-                    'dst_num'       => $record->dst_num,
-                    'recordingfile' => '',
-                    'stateCall'     => $statsCall[$record->stateCall],
-                    'stateCallIndex'=> $record->stateCall,
-                ];
-            }
-            $linkedRecord->detail[] = $record;
-            if (!empty($record->verbose_call_id)) {
-                $linkedRecord->ids[] = $record->verbose_call_id;
-            }
-        }
-        $output = [];
-        foreach ($arrCdr as $cdr) {
-            $timing = gmdate($cdr->billsec < 3600 ? 'i:s' : 'G:i:s', $cdr->billsec);
-            if('ANSWERED' !== $cdr->disposition){
-                // Это пропущенный.
-                $cdr->waitTime = strtotime($cdr->endtime) - strtotime($cdr->start);
-            }
-            $additionalClass = (empty($cdr->answered))?'ui':'detailed';
-            $output[] = [
-                date('d-m-Y H:i:s', strtotime($cdr->start)),
-                $cdr->src_num,
-                $cdr->dst_num,
-                $timing === '00:00' ? '' : $timing,
-                $cdr->answered,
-                $cdr->disposition,
-                'waitTime'    => gmdate( $cdr->waitTime < 3600 ? 'i:s' : 'G:i:s', $cdr->waitTime),
-                'stateCall'   => $cdr->stateCall,
-                'typeCall'    => $cdr->typeCall,
-                'typeCallDesc'=> $cdr->typeCallDesc,
-                'line'        => $cdr->line,
-                'did'         => $cdr->did,
-                'DT_RowId'    => $cdr->linkedid,
-                'DT_RowClass' => trim($additionalClass.' '.('NOANSWER' === $cdr->disposition ? 'negative' : '')),
-                'ids'         => rawurlencode(implode('&', array_unique($cdr->ids))),
-            ];
-        }
-
-        $this->view->data = $output;
     }
 
     /**
-     * Prepares query parameters for filtering CDR records.
-     *
-     * @param string $searchPhrase The search phrase entered by the user.
-     * @param array $parameters The CDR query parameters.
-     * @return array
+     * Запрос отвчета по исходящим сотрудников
+     * @return void
      */
-    private function prepareConditionsForSearchPhrases(string &$searchPhrase, array &$parameters): array
+    public function getOutgoingEmployeeCallsAction(): void
     {
-        $searchPhrase = json_decode($searchPhrase, true);
-        $dateRangeSelector = $searchPhrase['dateRangeSelector']??'';
-        $typeCall = $searchPhrase['typeCall']??'';
-
-        $parameters['conditions'] = '';
-        $start = ''; $end = '';
-        // Search date ranges
-        if (preg_match_all("/\d{2}\/\d{2}\/\d{4}/", $dateRangeSelector, $matches)) {
-            if (count($matches[0]) === 1) {
-                $date = DateTime::createFromFormat('d/m/Y', $matches[0][0]);
-                $start = $date->format('Y-m-d');
-                $end = $date->modify('+1 day')->format('Y-m-d');
-                $parameters['conditions'] .= 'start BETWEEN :dateFromPhrase1: AND :dateFromPhrase2:';
-                $parameters['bind']['dateFromPhrase1'] = $start;
-                $parameters['bind']['dateFromPhrase2'] = $end;
-                $searchPhrase = str_replace($matches[0][0], "", $searchPhrase);
-            } elseif (count($matches[0]) === 2) {
-                $parameters['conditions'] .= 'start BETWEEN :dateFromPhrase1: AND :dateFromPhrase2:';
-                $date = DateTime::createFromFormat('d/m/Y', $matches[0][0]);
-                $start = $date->format('Y-m-d');
-                $parameters['bind']['dateFromPhrase1'] = $start;
-                $date = DateTime::createFromFormat('d/m/Y', $matches[0][1]);
-                $end = $date->modify('+1 day')->format('Y-m-d');
-                $parameters['bind']['dateFromPhrase2'] = $end;
-                $searchPhrase = str_replace(
-                    [$matches[0][0], $matches[0][1]],
-                    '',
-                    $searchPhrase
-                );
-            }
+        $this->view->draw = $this->request->get('draw');
+        $searchPhrase     = $this->request->get('search');
+        $length           = is_numeric($this->request->get('length'))?(int)$this->request->get('length'):null;
+        $gr = new GetReport();
+        $view = $gr->outgoingEmployeeCalls($searchPhrase['value']??'',  $this->request->get('start'), $length);
+        foreach ($view as $key => $value) {
+            $this->view->$key = $value;
         }
-        if(stripos($typeCall, 'incoming') === 0){
-            if($parameters['conditions'] !== ''){
-                $parameters['conditions'] .= ' AND ';
-            }
-            $parameters['conditions'].= "typeCall=:typeCall:";
-            $parameters['bind']['typeCall'] = CallHistory::CALL_TYPE_INCOMING;
-        }elseif (stripos($typeCall, 'missed') === 0){
-            if($parameters['conditions'] !== ''){
-                $parameters['conditions'] .= ' AND ';
-            }
-            $parameters['conditions'].= "typeCall=:typeCall:";
-            $parameters['bind']['typeCall'] = CallHistory::CALL_TYPE_MISSED;
-        }elseif (stripos($typeCall, 'outgoing') === 0){
-            if($parameters['conditions'] !== ''){
-                $parameters['conditions'] .= ' AND ';
-            }
-            $parameters['conditions'].= "typeCall=:typeCall:";
-            $parameters['bind']['typeCall'] = CallHistory::CALL_TYPE_OUTGOING;
-        }
-
-        $additionalFilter = $searchPhrase['additionalFilter']??'';
-        // Search phone numbers
-        $searchPhrase = str_replace(['(', ')', '-', '+'], '', $searchPhrase);
-        $groupNumber = [];
-        if( class_exists('\Modules\ModuleUsersGroups\Models\UsersGroups')
-            && preg_match_all('/(?:\s|^)group_(\d+)\b/', $additionalFilter, $matches)){
-            $filter = [
-                'group_id IN ({group_id:array})',
-                'bind' => [
-                    'group_id' => array_unique($matches[1])
-                ],
-                'columns' => 'user_id'
-            ];
-            $uIds = array_column(GroupMembers::find($filter)->toArray(), 'user_id');
-            if(!empty($uIds)){
-                $filter = [
-                    'type=:type: AND userid IN ({userid:array})',
-                    'bind' => [
-                        'type'    => Extensions::TYPE_SIP,
-                        'userid'  => $uIds,
-                    ],
-                    'columns' => 'number,userid'
-
-                ];
-                $groupNumber = array_column(Extensions::find($filter)->toArray(), 'number');
-            }
-        }
-
-        $additionalNumbers = [];
-        if(preg_match_all('/(?<=\s|^)\d+(?=\s|$)/', $additionalFilter, $matches)){
-            $additionalNumbers = $matches[0];
-        }
-        $additionalNumbers = array_merge($additionalNumbers, $groupNumber);
-        foreach ($additionalNumbers as $index => $value){
-            $additionalNumbers[$index] = ConnectorDB::getPhoneIndex($value);
-        }
-
-        $globalNumbers = [];
-        $globalSearch = $searchPhrase['globalSearch']??'';
-        if(preg_match_all('/(?<=\s|^)\d+(?=\s|$)/', $globalSearch, $matches)){
-            $globalNumbers = $matches[0];
-        }
-        foreach ($globalNumbers as $index => $value){
-            $globalNumbers[$index] = ConnectorDB::getPhoneIndex($value);
-        }
-
-        if(!empty($globalNumbers)){
-            if($parameters['conditions'] !== ''){
-                $parameters['conditions'] .= ' AND ';
-            }
-            $parameters['conditions'] .= '(srcIndex IN ({globalNumbers:array}) OR dstIndex IN ({globalNumbers:array}))';
-            $parameters['bind']['globalNumbers'] = array_unique($globalNumbers);
-        }
-
-        if(!empty($additionalNumbers)){
-            if($parameters['conditions'] !== ''){
-                $parameters['conditions'] .= ' AND ';
-            }
-            $parameters['conditions'] .= '(srcIndex IN ({additionslNumbers:array}) OR dstIndex IN ({additionslNumbers:array}))';
-            $parameters['bind']['additionslNumbers'] = array_unique($additionalNumbers);
-        }
-
-        return [$start, $end, $globalNumbers, $additionalNumbers];
     }
-
-    /**
-     * Select CDR records with filters based on the provided parameters.
-     *
-     * @param array $parameters The parameters for filtering CDR records.
-     * @return array The selected CDR records.
-     */
-    private function selectCDRRecordsWithFilters(array $parameters): array
-    {
-        // Apply ACL filters to CDR query using hook method
-        PBXConfModulesProvider::hookModulesMethod(CDRConfigInterface::APPLY_ACL_FILTERS_TO_CDR_QUERY, [&$parameters]);
-
-        // Retrieve CDR records based on the filtered parameters
-        return ConnectorDB::invoke('getCdr', [$parameters]);;
-    }
-
 }
