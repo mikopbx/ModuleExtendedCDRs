@@ -137,30 +137,42 @@ class HistoryParser
                 $newOffset = max((int)$cdr['id'], $newOffset);
                 $cdr['srcIndex'] = ConnectorDB::getPhoneIndex($cdr['src_num']);
                 $cdr['dstIndex'] = ConnectorDB::getPhoneIndex($cdr['dst_num']);
+
+                $srcInner = self::isInnerCdr($cdr, 'src', $innerNumbers);
+                $dstInner = self::isInnerCdr($cdr, 'dst', $innerNumbers);
                 if(!isset($resultRows[$cdr['linkedid']])){
-                    $srcInner = self::isInnerCdr($cdr, 'src', $innerNumbers);
-                    $dstInner = self::isInnerCdr($cdr, 'dst', $innerNumbers);
                     if(($srcInner && !$dstInner) || (stripos( $cdr['src_chan'], 'local/') !== false
                         && stripos( $cdr['dst_chan'], 'pjsip/sip') !== false)){
                         // Автодиалер звонки.
                         $typeCall = CallHistory::CALL_TYPE_OUTGOING;
-                        $line = $cdr['to_account'];
                     }elseif($srcInner && ($cdr['is_app'] === '1' || $dstInner)){
                         $typeCall = CallHistory::CALL_TYPE_INNER;
-                        $line = '';
                     }else{
                         $typeCall = CallHistory::CALL_TYPE_INCOMING;
-                        $line = $cdr['from_account'];
                     }
                     $resultRows[$cdr['linkedid']]['typeCall'] = $typeCall;
                     $resultRows[$cdr['linkedid']]['answered'] = 0;
                     $resultRows[$cdr['linkedid']]['waitTime'] = '';
+                }
+
+                $line = $resultRows[$cdr['linkedid']]['line']??'';
+                if(empty($line)){
+                    if(($srcInner && !$dstInner) || (stripos( $cdr['src_chan'], 'local/') !== false
+                            && stripos( $cdr['dst_chan'], 'pjsip/sip') !== false)){
+                        // Автодиалер звонки.
+                        $line = $cdr['to_account'];
+                    }elseif($srcInner && ($cdr['is_app'] === '1' || $dstInner)){
+                        $line = '';
+                    }else{
+                        $line = $cdr['from_account'];
+                    }
                     $resultRows[$cdr['linkedid']]['line']     = $line;
                 }
+
                 if( $cdr['is_app'] !== '1' && $cdr['billsec'] !== '0' ){
                     $resultRows[$cdr['linkedid']]['answered'] = 1;
                     if($resultRows[$cdr['linkedid']]['waitTime'] === ''){
-                        $resultRows[$cdr['linkedid']]['waitTime'] = strtotime($cdr['answer']) - strtotime($cdr['start']);
+                        $resultRows[$cdr['linkedid']]['waitTime'] = max(strtotime($cdr['answer']) - strtotime($cdr['start']), 0);
                     }
                     if (empty($resultRows[$cdr['linkedid']]['line'])
                         && $resultRows[$cdr['linkedid']]['typeCall'] === CallHistory::CALL_TYPE_OUTGOING){
