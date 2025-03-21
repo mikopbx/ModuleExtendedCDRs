@@ -111,7 +111,7 @@ class GetReport
         if (count($arrIDS) === 1) {
             $parameters = [
                 'conditions' => 'linkedid = :ids:',
-                'columns' => 'id,disposition,start,answer,endtime,src_num,dst_num,billsec,recordingfile,did,dst_chan,linkedid,is_app,verbose_call_id,typeCall,waitTime,line,stateCall',
+                'columns' => 'id,disposition,start,answer,endtime,src_num,dst_num,billsec,recordingfile,did,dst_chan,linkedid,is_app,verbose_call_id,typeCall,waitTime,line,stateCall,UNIQUEID',
                 'bind' => [
                     'ids' => $arrIDS[0],
                 ],
@@ -120,7 +120,7 @@ class GetReport
         } else {
             $parameters = [
                 'conditions' => 'linkedid IN ({ids:array})',
-                'columns' => 'id,disposition,start,answer,endtime,src_num,dst_num,billsec,recordingfile,did,dst_chan,linkedid,is_app,verbose_call_id,typeCall,waitTime,line,stateCall',
+                'columns' => 'id,disposition,start,answer,endtime,src_num,dst_num,billsec,recordingfile,did,dst_chan,linkedid,is_app,verbose_call_id,typeCall,waitTime,line,stateCall,UNIQUEID',
                 'bind' => [
                     'ids' => $arrIDS,
                 ],
@@ -129,6 +129,12 @@ class GetReport
         }
 
         $selectedRecords = $this->selectCDRRecordsWithFilters($parameters);
+        $view->data = $this->prepareCdrData($selectedRecords);
+        return $view;
+    }
+
+    private function prepareCdrData($selectedRecords):array
+    {
         $arrCdr = [];
         $objectLinkedCallRecord = (object)[
             'linkedid' => '',
@@ -142,6 +148,7 @@ class GetReport
             'stateCall' => '',
             'waitTime' => '',
             'line' => '',
+            'lineId' => '',
             'answered' => [],
             'detail' => [],
             'ids' => [],
@@ -188,7 +195,7 @@ class GetReport
             if (!array_key_exists($record->linkedid, $arrCdr)) {
                 $arrCdr[$record->linkedid] = clone $objectLinkedCallRecord;
             }
-            if ($record->is_app !== '1' && $record->billsec > 0 && ($record->disposition === 'ANSWER' || $record->disposition === 'ANSWERED')) {
+            if (intval($record->is_app) !== 1 && intval($record->billsec) > 0 && ($record->disposition === 'ANSWER' || $record->disposition === 'ANSWERED')) {
                 $disposition = 'ANSWERED';
             } else {
                 $disposition = 'NOANSWER';
@@ -197,8 +204,13 @@ class GetReport
             $linkedRecord->linkedid = $record->linkedid;
             $linkedRecord->typeCall = $record->typeCall;
             $linkedRecord->typeCallDesc = $typeCallNames[$record->typeCall];
-            $linkedRecord->waitTime = 1 * $record->waitTime;
-            $linkedRecord->line = $providerName[$record->line] ?? $record->line;
+            $linkedRecord->waitTime = intval($record->waitTime);
+
+            $newLine = $providerName[$record->line] ?? $record->line;
+            if(!empty($newLine)){
+                $linkedRecord->line = $providerName[$record->line] ?? $record->line;
+                $linkedRecord->lineId = $record->line;
+            }
             $linkedRecord->disposition = $linkedRecord->disposition !== 'ANSWERED' ? $disposition : 'ANSWERED';
             $linkedRecord->start = $linkedRecord->start === '' ? $record->start : $linkedRecord->start;
             if ($record->stateCall === CallHistory::CALL_STATE_OK) {
@@ -231,30 +243,36 @@ class GetReport
                 $linkedRecord->answered[] = [
                     'id' => $record->id,
                     'start' => date('d-m-Y H:i:s', strtotime($record->start)),
+                    'endtime' => date('d-m-Y H:i:s', strtotime($record->endtime)),
                     'waitTime' => gmdate($waitTime < 3600 ? 'i:s' : 'G:i:s', $waitTime),
                     'billsec' => gmdate($record->billsec < 3600 ? 'i:s' : 'G:i:s', $record->billsec),
                     'billSecInt' => $record->billsec,
+                    'durationInt' => strtotime($record->endtime) - strtotime($record->start),
                     'src_num' => $record->src_num,
                     'dst_num' => $record->dst_num,
                     'recordingfile' => $record->recordingfile,
                     'prettyFilename' => $prettyFilename,
                     'stateCall' => $statsCall[$record->stateCall],
                     'stateCallIndex' => $record->stateCall,
+                    'uid' => $record->UNIQUEID,
                 ];
             } else {
                 $waitTime = strtotime($record->endtime) - strtotime($record->start);
                 $linkedRecord->answered[] = [
                     'id' => $record->id,
                     'start' => date('d-m-Y H:i:s', strtotime($record->start)),
+                    'endtime' => date('d-m-Y H:i:s', strtotime($record->endtime)),
                     'waitTime' => gmdate($waitTime < 3600 ? 'i:s' : 'G:i:s', $waitTime),
                     'billsec' => gmdate('i:s', 0),
                     'billSecInt' => 0,
+                    'durationInt' => $waitTime,
                     'src_num' => $record->src_num,
                     'dst_num' => $record->dst_num,
                     'recordingfile' => '',
                     'prettyFilename' => '',
                     'stateCall' => $statsCall[$record->stateCall],
                     'stateCallIndex' => $record->stateCall,
+                    'uid' => $record->UNIQUEID,
                 ];
             }
             $linkedRecord->detail[] = $record;
@@ -282,6 +300,7 @@ class GetReport
                 'typeCall' => $cdr->typeCall,
                 'typeCallDesc' => $cdr->typeCallDesc,
                 'line' => $cdr->line,
+                'lineId' => $cdr->lineId,
                 'did' => $cdr->did,
                 'billsec' => $cdr->billsec,
                 'DT_RowId' => $cdr->linkedid,
@@ -290,8 +309,7 @@ class GetReport
             ];
         }
 
-        $view->data = $output;
-        return $view;
+        return $output;
     }
 
     public static function exportHistoryXls($view): void
@@ -588,6 +606,145 @@ class GetReport
         header('Content-Disposition: attachment; filename="outgoing-employee-calls.xlsx"');
         header('Cache-Control: max-age=0');
         $writer->save('php://output');
+    }
+
+    public function historyDetail($dateFrom, $dateTo, $phoneNumbers, $excludeNumbers):array
+    {
+        $parameters = $this->getParametersQueue($dateFrom, $dateTo, $phoneNumbers, $excludeNumbers);
+        if(empty($parameters)){
+            return [];
+        }
+        $selectedLinkedIds = $this->selectCDRRecordsWithFilters($parameters);
+        $arrIDS = [];
+        foreach ($selectedLinkedIds as $item) {
+            $arrIDS[] = $item['linkedid'];
+        }
+        if (empty($arrIDS)) {
+            return [];
+        }
+        // Retrieve all detailed records for processing and merging
+        if (count($arrIDS) === 1) {
+            $conditions = 'linkedid = :ids:';
+            $ids = $arrIDS[0];
+
+        } else {
+            $conditions = 'linkedid IN ({ids:array})';
+            $ids = $arrIDS;
+        }
+        $parameters = [
+            'conditions' => $conditions,
+            'columns' => 'id,disposition,start,answer,endtime,src_num,dst_num,billsec,recordingfile,did,dst_chan,linkedid,is_app,verbose_call_id,typeCall,waitTime,line,stateCall,UNIQUEID',
+            'bind' => [
+                'ids' => $ids,
+            ],
+            'order' => ['linkedid desc', 'start asc', 'id asc'],
+        ];
+
+        $selectedRecords = $this->selectCDRRecordsWithFilters($parameters);
+        $results = $this->prepareCdrData($selectedRecords);
+
+        $typeCallNames = [
+            CallHistory::CALL_TYPE_INNER    => 'INNER',
+            CallHistory::CALL_TYPE_OUTGOING => 'OUT',
+            CallHistory::CALL_TYPE_INCOMING => 'IN',
+            CallHistory::CALL_TYPE_MISSED   => 'IN',
+        ];
+        $output = [];
+
+        foreach ($phoneNumbers as $index => $phone){
+            $phoneNumbers[$index] = ConnectorDB::getPhoneIndex($phone);
+        }
+        foreach ($excludeNumbers as $index => $phone){
+            $excludeNumbers[$index] = ConnectorDB::getPhoneIndex($phone);
+        }
+
+        foreach ($results as $callData) {
+            foreach ($callData[4] as $cdrData){
+                $srcIndex = ConnectorDB::getPhoneIndex($cdrData['src_num']);
+                $dstIndex = ConnectorDB::getPhoneIndex($cdrData['dst_num']);
+                if(in_array($srcIndex, $excludeNumbers) || in_array($dstIndex, $excludeNumbers) ){
+                    continue;
+                }
+                if(!in_array($srcIndex, $phoneNumbers) && !in_array($dstIndex, $phoneNumbers) ){
+                    continue;
+                }
+                $output[] = [
+                    'CallID'        => $callData['DT_RowId'],
+                    'CallRecordID'  => $cdrData['uid'],
+                    'recordingfile' => $cdrData['recordingfile'],
+                    'prettyFilename'=> $cdrData['prettyFilename'],
+                    'NumFromGeneral'=> $callData[1],
+                    'NumFrom'       => $cdrData['src_num'],
+                    'NumTo'         => $cdrData['dst_num'],
+                    'Direction'     => $typeCallNames[$callData['typeCall']],
+                    'Status'        => $cdrData['billSecInt']>0? 'ANSWERED' : 'NOANSWER',// CallHistory::CALL_STATE_OK === "$cdrData[dst_num]" ? 'ANSWERED' : 'NOANSWER',
+                    'Duration'      => $cdrData['durationInt'],
+                    'Billsec'       => $cdrData['billSecInt'],
+                    'CallDateStart' => $cdrData['start'],
+                    'CallDateEnd'   => $cdrData['endtime'],
+                    'Provider'      => $callData['line'],
+                    'ProviderId'      => $callData['lineId'],
+                ];
+            }
+        }
+        return $output;
+    }
+
+    /**
+     * @param $dateFrom
+     * @param $dateTo
+     * @param $phoneNumbers
+     * @param $excludeNumbers
+     * @return array
+     */
+    private function getParametersQueue($dateFrom, $dateTo, $phoneNumbers, $excludeNumbers): array
+    {
+        $parameters = [
+            'columns' => 'linkedid',
+        ];
+        $dateRangeSelector = "$dateFrom - $dateTo";
+        $start = null;
+        $end = null;
+        if (preg_match_all("/\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}/", $dateRangeSelector, $matches)) {
+            if (count($matches[0]) === 2) {
+                $parameters['conditions'] .= 'start BETWEEN :dateFromPhrase1: AND :dateFromPhrase2:';
+                $date = DateTime::createFromFormat('d.m.Y H:i', $matches[0][0]);
+                $start = $date->format('Y-m-d H:i');
+                $parameters['bind']['dateFromPhrase1'] = $start;
+                $date = DateTime::createFromFormat('d.m.Y H:i', $matches[0][1]);
+                $end = $date->modify('+1 day')->format('Y-m-d H:i');
+                $parameters['bind']['dateFromPhrase2'] = $end;
+            }
+        }
+        if(!$start && !$end){
+            return [];
+        }
+
+        foreach ($phoneNumbers as $index => $value) {
+            $phoneNumbers[$index] = ConnectorDB::getPhoneIndex($value);
+        }
+        foreach ($excludeNumbers as $index => $value) {
+            $excludeNumbers[$index] = ConnectorDB::getPhoneIndex($value);
+        }
+
+        if (!empty($phoneNumbers)) {
+            if ($parameters['conditions'] !== '') {
+                $parameters['conditions'] .= ' AND ';
+            }
+            $parameters['conditions'] .= '(srcIndex IN ({globalNumbers:array}) OR dstIndex IN ({globalNumbers:array}))';
+            $parameters['bind']['globalNumbers'] = array_unique($phoneNumbers);
+        }
+
+        if (!empty($excludeNumbers)) {
+            if ($parameters['conditions'] !== '') {
+                $parameters['conditions'] .= ' AND ';
+            }
+            $parameters['conditions'] .= '(srcIndex NOT IN ({excludeNumbers:array}) OR dstIndex NOT IN ({excludeNumbers:array}))';
+            $parameters['bind']['excludeNumbers'] = array_unique($excludeNumbers);
+        }
+
+        $parameters['order'] = ['linkedid desc', 'start asc', 'id asc'];
+        return $parameters;
     }
 
     /**

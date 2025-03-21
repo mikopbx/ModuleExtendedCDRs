@@ -9,6 +9,7 @@
 
 namespace Modules\ModuleExtendedCDRs\Lib\RestAPI\Controllers;
 
+use MikoPBX\Core\System\Processes;
 use MikoPBX\Core\System\Util;
 use MikoPBX\PBXCoreREST\Controllers\Modules\ModulesControllerBase;
 use Modules\ModuleExtendedCDRs\Lib\GetReport;
@@ -16,6 +17,54 @@ use Modules\ModuleExtendedCDRs\Models\ReportSettings;
 
 class ApiController extends ModulesControllerBase
 {
+
+    /**
+     * Пример передачи параметров (без urlencode):
+     * DateFrom=19.03.2025 00:00&DateTo=19.03.2025 23:00&PhoneNumbers[]=203&PhoneNumbers[]=201&ExcludeNumbers[]=74952292333&ExcludeNumbers[]=74952295555
+     *
+     * Пример локального запроса (без авторизации всегда)
+     * curl "http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/exportHistoryDetail?DateFrom=19.03.2025+00%3A00&DateTo=19.03.2025+23%3A00&PhoneNumbers%5B%5D=203&PhoneNumbers%5B%5D=201&ExcludeNumbers%5B%5D=74952292333&ExcludeNumbers%5B%5D=74952295555"
+     * @return void
+     */
+    public function exportHistoryDetail(){
+        $gr = new GetReport();
+        $dateFrom       = $this->request->get('DateFrom');
+        $dateTo         = $this->request->get('DateTo');
+        $phoneNumbers   = $this->request->get('PhoneNumbers');
+        $excludeNumbers = $this->request->get('ExcludeNumbers');
+
+        $view = $gr->historyDetail($dateFrom, $dateTo, $phoneNumbers, $excludeNumbers);
+        $this->echoResponse($view);
+        $this->response->sendRaw();
+    }
+
+    /**
+     * Скачивание записи разговора.
+     * /pbxcore/api/cdr/records MIKO AJAM
+     * curl -O 'http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/records?view=/storage/usbdisk1/mikopbx/astspool/monitor/2025/03/20/18/mikopbx-1742482882.0_cE7dn8.mp3'
+     */
+    public function recordsAction(): void
+    {
+        $filename  = $this->request->get('view');
+        if(!file_exists($filename) || Processes::mwExec("/usr/bin/soxi '$filename'") !== 0){
+            $this->sendError(404);
+            return;
+        }
+        $size = filesize($filename);
+        $fp = fopen($filename, 'rb');
+        if ($fp) {
+            $this->response->setHeader('Content-Description', 'mp3 file');
+            $this->response->setHeader('Content-Disposition', 'attachment; filename=' . basename($filename));
+            $this->response->setHeader('Content-type', 'audio/mpeg');
+            $this->response->setHeader('Content-Transfer-Encoding', 'binary');
+            $this->response->setContentLength($size);
+            $this->response->sendHeaders();
+            fpassthru($fp);
+        } else {
+            $this->sendError(404);
+        }
+    }
+
 
     /**
      * curl 'http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory?reportNameID=OutgoingEmployeeCalls&type=json&search=%7B%22dateRangeSelector%22%3A%2221%2F10%2F2024%20-%2021%2F10%2F2024%22%2C%22minBilSec%22%3A%220%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22outgoing-calls%22%2C%22additionalFilter%22%3A%22%22%7D'
