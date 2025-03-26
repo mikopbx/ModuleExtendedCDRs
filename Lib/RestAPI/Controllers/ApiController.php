@@ -12,6 +12,7 @@ namespace Modules\ModuleExtendedCDRs\Lib\RestAPI\Controllers;
 use MikoPBX\Core\System\Processes;
 use MikoPBX\Core\System\Util;
 use MikoPBX\PBXCoreREST\Controllers\Modules\ModulesControllerBase;
+use Modules\ModuleExtendedCDRs\bin\ConnectorDB;
 use Modules\ModuleExtendedCDRs\Lib\GetReport;
 use Modules\ModuleExtendedCDRs\Models\ReportSettings;
 
@@ -42,10 +43,17 @@ class ApiController extends ModulesControllerBase
      * Скачивание записи разговора.
      * /pbxcore/api/cdr/records MIKO AJAM
      * curl -O 'http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/records?view=/storage/usbdisk1/mikopbx/astspool/monitor/2025/03/20/18/mikopbx-1742482882.0_cE7dn8.mp3'
+     * curl -o test.mp3 'http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/records?CallRecordID=mikopbx-1742368258.4_a9Gp8D'
      */
     public function recordsAction(): void
     {
-        $filename  = $this->request->get('view');
+        $id       = (string)$this->request->get('CallRecordID');
+        $filename = (string)$this->request->get('view');
+
+        if(!file_exists($filename) && !empty($id)){
+            [$filename] = ConnectorDB::invoke('getRecordingPathByID', [$id]);
+        }
+
         if(!file_exists($filename) || Processes::mwExec("/usr/bin/soxi '$filename'") !== 0){
             $this->sendError(404);
             return;

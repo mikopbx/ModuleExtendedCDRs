@@ -281,6 +281,20 @@ class ConnectorDB extends WorkerBase
     }
 
     /**
+     * Возвращает путь к файлу записи по ID.
+     * @param string $id
+     * @return string
+     */
+    public function getRecordingPathByID(string $id):array
+    {
+        $dbData = CallHistory::findFirst(["UNIQUEID='$id'", 'columns' => 'recordingfile']);
+        if($dbData){
+            return [$dbData->recordingfile];
+        }
+        return [''];
+    }
+
+    /**
      * Устанавливает тег title для mp3 файла
      * @param CallHistory $data
      * @return void
