@@ -637,7 +637,7 @@ class GetReport
             'bind' => [
                 'ids' => $ids,
             ],
-            'order' => ['linkedid desc', 'start asc', 'id asc'],
+            'order' => ['linkedid asc', 'start asc', 'id asc'],
         ];
 
         $selectedRecords = $this->selectCDRRecordsWithFilters($parameters);
@@ -662,10 +662,10 @@ class GetReport
             foreach ($callData[4] as $cdrData){
                 $srcIndex = ConnectorDB::getPhoneIndex($cdrData['src_num']);
                 $dstIndex = ConnectorDB::getPhoneIndex($cdrData['dst_num']);
-                if(in_array($srcIndex, $excludeNumbers) || in_array($dstIndex, $excludeNumbers) ){
+                if(!empty($excludeNumbers) && (in_array($srcIndex, $excludeNumbers) || in_array($dstIndex, $excludeNumbers)) ){
                     continue;
                 }
-                if(!in_array($srcIndex, $phoneNumbers) && !in_array($dstIndex, $phoneNumbers) ){
+                if(!empty($phoneNumbers) && !in_array($srcIndex, $phoneNumbers) && !in_array($dstIndex, $phoneNumbers) ){
                     continue;
                 }
                 $output[] = [
@@ -677,7 +677,7 @@ class GetReport
                     'NumFrom'       => $cdrData['src_num'],
                     'NumTo'         => $cdrData['dst_num'],
                     'Direction'     => $typeCallNames[$callData['typeCall']],
-                    'Status'        => $cdrData['billSecInt']>0? 'ANSWERED' : 'NOANSWER',// CallHistory::CALL_STATE_OK === "$cdrData[dst_num]" ? 'ANSWERED' : 'NOANSWER',
+                    'Status'        => $cdrData['billSecInt']>0? 'ANSWERED' : 'NOANSWER',
                     'Duration'      => $cdrData['durationInt'],
                     'Billsec'       => $cdrData['billSecInt'],
                     'CallDateStart' => $cdrData['start'],

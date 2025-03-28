@@ -31,8 +31,8 @@ class ApiController extends ModulesControllerBase
         $gr = new GetReport();
         $dateFrom       = $this->request->get('DateFrom');
         $dateTo         = $this->request->get('DateTo');
-        $phoneNumbers   = $this->request->get('PhoneNumbers');
-        $excludeNumbers = $this->request->get('ExcludeNumbers');
+        $phoneNumbers   = $this->request->get('PhoneNumbers')??[];
+        $excludeNumbers = $this->request->get('ExcludeNumbers')??[];
 
         $view = $gr->historyDetail($dateFrom, $dateTo, $phoneNumbers, $excludeNumbers);
         $this->echoResponse($view);
