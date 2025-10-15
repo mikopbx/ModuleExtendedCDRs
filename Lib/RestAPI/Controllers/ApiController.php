@@ -81,6 +81,8 @@ class ApiController extends ModulesControllerBase
      */
     public function exportHistory()
     {
+        ini_set('memory_limit', '2024M');
+        ini_set('pcre.backtrack_limit', '10000000');
         $reportNameID   = $this->request->get('reportNameID');
         if(ReportSettings::REPORT_OUTGOING_EMPLOYEE_CALLS  === $reportNameID){
             $this->exportOutgoingEmployeeCalls();
@@ -144,6 +146,8 @@ class ApiController extends ModulesControllerBase
      */
     public function exportOutgoingEmployeeCalls()
     {
+        ini_set('memory_limit', '1024M');
+        ini_set('pcre.backtrack_limit', '10000000');
         $type           = $this->request->get('type');
         $searchPhrase   = $this->request->get('search');
         if(!is_string($searchPhrase)){
