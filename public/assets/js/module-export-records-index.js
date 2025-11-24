@@ -1,19 +1,15 @@
 "use strict";
 
-function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
-
-function _toConsumableArray(arr) { return _arrayWithoutHoles(arr) || _iterableToArray(arr) || _unsupportedIterableToArray(arr) || _nonIterableSpread(); }
-
+function _typeof(o) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (o) { return typeof o; } : function (o) { return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o; }, _typeof(o); }
+function _defineProperty(e, r, t) { return (r = _toPropertyKey(r)) in e ? Object.defineProperty(e, r, { value: t, enumerable: !0, configurable: !0, writable: !0 }) : e[r] = t, e; }
+function _toPropertyKey(t) { var i = _toPrimitive(t, "string"); return "symbol" == _typeof(i) ? i : i + ""; }
+function _toPrimitive(t, r) { if ("object" != _typeof(t) || !t) return t; var e = t[Symbol.toPrimitive]; if (void 0 !== e) { var i = e.call(t, r || "default"); if ("object" != _typeof(i)) return i; throw new TypeError("@@toPrimitive must return a primitive value."); } return ("string" === r ? String : Number)(t); }
+function _toConsumableArray(r) { return _arrayWithoutHoles(r) || _iterableToArray(r) || _unsupportedIterableToArray(r) || _nonIterableSpread(); }
 function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
-
-function _unsupportedIterableToArray(o, minLen) { if (!o) return; if (typeof o === "string") return _arrayLikeToArray(o, minLen); var n = Object.prototype.toString.call(o).slice(8, -1); if (n === "Object" && o.constructor) n = o.constructor.name; if (n === "Map" || n === "Set") return Array.from(o); if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen); }
-
-function _iterableToArray(iter) { if (typeof Symbol !== "undefined" && iter[Symbol.iterator] != null || iter["@@iterator"] != null) return Array.from(iter); }
-
-function _arrayWithoutHoles(arr) { if (Array.isArray(arr)) return _arrayLikeToArray(arr); }
-
-function _arrayLikeToArray(arr, len) { if (len == null || len > arr.length) len = arr.length; for (var i = 0, arr2 = new Array(len); i < len; i++) { arr2[i] = arr[i]; } return arr2; }
-
+function _unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return _arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? _arrayLikeToArray(r, a) : void 0; } }
+function _iterableToArray(r) { if ("undefined" != typeof Symbol && null != r[Symbol.iterator] || null != r["@@iterator"]) return Array.from(r); }
+function _arrayWithoutHoles(r) { if (Array.isArray(r)) return _arrayLikeToArray(r); }
+function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
 /*
  * Copyright (C) MIKO LLC - All Rights Reserved
  * Unauthorized copying of this file, via any medium is strictly prohibited
@@ -26,8 +22,8 @@ var idForm = 'module-extended-cdr-form';
 var className = 'ModuleExtendedCDRs';
 var inputClassName = 'mikopbx-module-input';
 var listenedIDs = [];
-/* global globalRootUrl, globalTranslate, Form, Config, $ */
 
+/* global globalRootUrl, globalTranslate, Form, Config, $ */
 var ModuleExtendedCDRs = {
   $formObj: $('#' + idForm),
   $checkBoxes: $('#' + idForm + ' .ui.checkbox'),
@@ -37,44 +33,42 @@ var ModuleExtendedCDRs = {
   $disabilityFields: $('#' + idForm + '  .disability'),
   $statusToggle: $('#module-status-toggle'),
   $moduleStatus: $('#status'),
-
   /**
    * The call detail records table element.
    * @type {jQuery}
    */
   $cdrTable: $('#CallDetails-table'),
   $outgoingEmployeeCalls: $('#OutgoingEmployeeCalls-table'),
-
   /**
    * The global search input element.
    * @type {jQuery}
    */
   $globalSearch: $('#globalsearch'),
-
   /**
    * The date range selector element.
    * @type {jQuery}
    */
   $dateRangeSelector: $('#date-range-selector'),
-
   /**
    * The data table object.
    * @type {Object}
    */
   dataTable: {},
-
   /**
    * An array of players.
    * @type {Array}
    */
   players: [],
-
+  /**
+   * Flag to prevent initial data loading
+   * @type {boolean}
+   */
+  tablesInitialized: false,
   /**
    * Field validation rules
    * https://semantic-ui.com/behaviors/form.html
    */
   validateRules: {},
-
   /**
    * Field validation rules
    * https://semantic-ui.com/behaviors/form.html
@@ -123,7 +117,6 @@ var ModuleExtendedCDRs = {
       }]
     }
   },
-
   /**
    * On page load we init some Semantic UI library
    */
@@ -144,17 +137,14 @@ var ModuleExtendedCDRs = {
         hide: 800
       }
     });
-    $('#content-frame').css('display', 'none'); // Окончание форматирования базовой страницы
+    $('#content-frame').css('display', 'none');
+    // Окончание форматирования базовой страницы
     //////
-
     ModuleExtendedCDRs.changeReportVariant();
-    ModuleExtendedCDRs.initializeDateRangeSelector(); // инициализируем чекбоксы и выподающие менюшки
+    ModuleExtendedCDRs.initializeDateRangeSelector();
 
+    // инициализируем чекбоксы и выподающие менюшки
     window[className].$checkBoxes.checkbox();
-    window[className].$dropDowns.dropdown({
-      onChange: ModuleExtendedCDRs.applyFilter
-    });
-    window.addEventListener('ModuleStatusChanged', window[className].checkStatusToggle);
     window[className].initializeForm();
     $('.menu .item').tab();
     $(document).on('click', '#menu-reports i.edit', function (e) {
@@ -190,37 +180,30 @@ var ModuleExtendedCDRs = {
       var day = form.form('get value', 'day');
       var time = form.form('get value', 'time');
       var email = form.form('get value', 'email');
-
       if (!form.form('is valid', 'title')) {
         form.form('submit');
         return;
       }
-
       if (!form.form('is valid', 'minBillSec')) {
         form.form('submit');
         return;
       }
-
       if (dateMonth && !form.form('is valid', 'dateMonth')) {
         form.form('submit');
         return;
       }
-
       if (day && !form.form('is valid', 'day')) {
         form.form('submit');
         return;
       }
-
       if (time && !form.form('is valid', 'time')) {
         form.form('submit');
         return;
       }
-
       if (email && !form.form('is valid', 'email')) {
         form.form('submit');
         return;
       }
-
       var parent = $("a[data-variant-id=\"".concat(variantId, "\"][data-report-id=\"").concat(reportNameID, "\"]"));
       parent.find('div.content div.title').text(title);
       parent.attr({
@@ -263,11 +246,9 @@ var ModuleExtendedCDRs = {
     $('#menu-reports i.star').on('click', function (e) {
       e.stopPropagation();
       var reportNameID = $(this).parent().attr('id');
-
       if (reportNameID === undefined) {
         reportNameID = $(this).parent().attr('data-report-id');
       }
-
       var variantId = $(this).parent().attr('data-variant-id');
       var self = $(this);
       $.ajax({
@@ -366,15 +347,29 @@ var ModuleExtendedCDRs = {
         defaultContent: "",
         targets: "_all"
       }],
-      ajax: {
-        url: "".concat(globalRootUrl).concat(idUrl, "/getOutgoingEmployeeCalls"),
-        type: 'POST'
+      ajax: function ajax(data, callback, settings) {
+        if (!ModuleExtendedCDRs.tablesInitialized || $('#currentReportNameID').val() !== 'OutgoingEmployeeCalls') {
+          // Skip initial load
+          callback({
+            data: [],
+            recordsTotal: 0,
+            recordsFiltered: 0
+          });
+          return;
+        }
+        $.ajax({
+          url: "".concat(globalRootUrl).concat(idUrl, "/getOutgoingEmployeeCalls"),
+          type: 'POST',
+          data: data,
+          success: function success(json) {
+            callback(json);
+          }
+        });
       },
       paging: true,
       sDom: 'rtip',
       deferRender: true,
       pageLength: ModuleExtendedCDRs.calculatePageLength(),
-
       /**
        * Constructs the CDR row.
        * @param {HTMLElement} row - The row element.
@@ -390,7 +385,6 @@ var ModuleExtendedCDRs = {
       },
       drawCallback: function drawCallback(settings) {
         var pagination = $(this).closest('.dataTables_wrapper').find('.dataTables_paginate');
-
         if (settings._iDisplayLength >= settings.fnRecordsDisplay()) {
           pagination.hide();
         } else {
@@ -411,33 +405,42 @@ var ModuleExtendedCDRs = {
         defaultContent: "-",
         targets: "_all"
       }],
-      ajax: {
-        url: "".concat(globalRootUrl).concat(idUrl, "/getHistory"),
-        type: 'POST',
-        dataSrc: function dataSrc(json) {
-          $('a.item[data-tab="all-calls"] b').html(': ' + json.recordsFiltered);
-          $('a.item[data-tab="incoming-calls"] b').html(': ' + json.recordsIncoming);
-          $('a.item[data-tab="missed-calls"] b').html(': ' + json.recordsMissed);
-          $('a.item[data-tab="outgoing-calls"] b').html(': ' + json.recordsOutgoing);
-          var typeCall = $('#typeCall a.item.active').attr('data-tab');
-
-          if (typeCall === 'incoming-calls') {
-            json.recordsFiltered = json.recordsIncoming;
-          } else if (typeCall === 'missed-calls') {
-            json.recordsFiltered = json.recordsMissed;
-          } else if (typeCall === 'outgoing-calls') {
-            json.recordsFiltered = json.recordsOutgoing;
-          }
-
-          return json.data;
+      ajax: function ajax(data, callback, settings) {
+        if (!ModuleExtendedCDRs.tablesInitialized || $('#currentReportNameID').val() !== 'CallDetails') {
+          // Skip initial load
+          callback({
+            data: [],
+            recordsTotal: 0,
+            recordsFiltered: 0
+          });
+          return;
         }
+        $.ajax({
+          url: "".concat(globalRootUrl).concat(idUrl, "/getHistory"),
+          type: 'POST',
+          data: data,
+          success: function success(json) {
+            $('a.item[data-tab="all-calls"] b').html(': ' + json.recordsFiltered);
+            $('a.item[data-tab="incoming-calls"] b').html(': ' + json.recordsIncoming);
+            $('a.item[data-tab="missed-calls"] b').html(': ' + json.recordsMissed);
+            $('a.item[data-tab="outgoing-calls"] b').html(': ' + json.recordsOutgoing);
+            var typeCall = $('#typeCall a.item.active').attr('data-tab');
+            if (typeCall === 'incoming-calls') {
+              json.recordsFiltered = json.recordsIncoming;
+            } else if (typeCall === 'missed-calls') {
+              json.recordsFiltered = json.recordsMissed;
+            } else if (typeCall === 'outgoing-calls') {
+              json.recordsFiltered = json.recordsOutgoing;
+            }
+            callback(json);
+          }
+        });
       },
       paging: true,
       sDom: 'rtip',
       deferRender: true,
       stripeClasses: ['striped'],
       pageLength: ModuleExtendedCDRs.calculatePageLength(),
-
       /**
        * Constructs the CDR row.
        * @param {HTMLElement} row - The row element.
@@ -445,13 +448,10 @@ var ModuleExtendedCDRs = {
        */
       createdRow: function createdRow(row, data) {
         var detailedIcon = '';
-
         if (data.DT_RowClass.indexOf("detailed") >= 0) {
           detailedIcon = '<i class="icon caret down"></i>';
         }
-
         data.typeCall = "".concat(data.typeCall);
-
         if (data.typeCall === '1') {
           $('td', row).eq(0).html('<i class="custom-outgoing-icon-15x15"></i>' + detailedIcon);
         } else if (data.typeCall === '2') {
@@ -461,28 +461,22 @@ var ModuleExtendedCDRs = {
         } else {
           $('td', row).eq(0).html('' + detailedIcon);
         }
-
         $('td', row).eq(1).html(data[0]).addClass('right aligned');
         $('td', row).eq(2).html(data[1]).attr('data-phone', data[1]).addClass('need-update').addClass('right aligned');
         $('td', row).eq(3).html(data[2]).attr('data-phone', data[2]).addClass('need-update');
         var duration = data[3];
-
         if (data.ids !== '') {
           duration += '<i data-ids="' + data.ids + '" class="file alternate outline icon">';
         }
-
         var lineText = data.line;
-
         if (data.did !== "") {
           lineText = "".concat(data.line, " <a class=\"ui mini basic label\">").concat(data.did, "</a>");
         }
-
         $('td', row).eq(4).html(lineText).addClass('right aligned');
         $('td', row).eq(5).html(data.waitTime).addClass('right aligned');
         $('td', row).eq(6).html(duration).addClass('right aligned');
         $('td', row).eq(7).html(data.stateCall).addClass('right aligned');
       },
-
       /**
        * Draw event - fired once the table has completed a draw.
        */
@@ -490,13 +484,11 @@ var ModuleExtendedCDRs = {
         Extensions.updatePhonesRepresent('need-update');
         listenedIDs.forEach(function (id) {
           var element = $("[id=\"".concat(id, "\"]"));
-
           if (element.length) {
             element.removeClass('warning').addClass('positive');
           }
         });
         var pagination = $(this).closest('.dataTables_wrapper').find('.dataTables_paginate');
-
         if (settings._iDisplayLength >= settings.fnRecordsDisplay()) {
           pagination.hide();
         } else {
@@ -517,34 +509,31 @@ var ModuleExtendedCDRs = {
       // 	ModuleExtendedCDRs.applyFilter();
       // 	return;
       // }
-      var ids = $(e.target).attr('data-ids');
 
+      var ids = $(e.target).attr('data-ids');
       if (ids !== undefined && ids !== '') {
         window.location = "".concat(globalRootUrl, "system-diagnostic/index/?filename=asterisk/verbose&filter=").concat(ids);
       }
-    }); // Add event listener for opening and closing details
-
+    });
+    // Add event listener for opening and closing details
     ModuleExtendedCDRs.$cdrTable.on('click', 'tr.detailed', function (e) {
       var ids = $(e.target).attr('data-ids');
-
       if (ids !== undefined && ids !== '') {
         window.location = "".concat(globalRootUrl, "system-diagnostic/index/?filename=asterisk/verbose&filter=").concat(ids);
         return;
-      } // let filter = $(e.target).attr('data-phone');
+      }
+      // let filter = $(e.target).attr('data-phone');
       // if (filter !== undefined && filter !== '') {
       // 	ModuleExtendedCDRs.$globalSearch.val(filter)
       // 	ModuleExtendedCDRs.applyFilter();
       // 	return;
       // }
 
-
       var tr = $(e.target).closest('tr');
       var row = ModuleExtendedCDRs.dataTable.row(tr);
-
       if (row.length === 0) {
         return;
       }
-
       if (tr.hasClass('shown')) {
         // This row is already open - close it
         $('tr[data-row-id="' + tr.attr('id') + '-detailed"').remove();
@@ -560,13 +549,10 @@ var ModuleExtendedCDRs = {
         Extensions.updatePhonesRepresent('need-update');
         listenedIDs.forEach(function (id) {
           var element = $("[id=\"".concat(id, "\"]"));
-
           if (element.length) {
             element.removeClass('warning').addClass('positive');
           }
-
           element = $("[data-row-id=\"".concat(id, "\"]"));
-
           if (element.length) {
             element.removeClass('warning').addClass('positive');
           }
@@ -575,37 +561,32 @@ var ModuleExtendedCDRs = {
     });
     ModuleExtendedCDRs.updateSettings();
     ModuleExtendedCDRs.applyFilter();
+    window[className].$dropDowns.dropdown({
+      onChange: ModuleExtendedCDRs.applyFilter
+    });
     window[className].updateSyncState();
     setInterval(window[className].updateSyncState, 5000);
   },
   changeReportVariant: function changeReportVariant() {
     var reportNameID = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : '';
     var currentVariantId = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : '';
-
     if (reportNameID === '') {
       reportNameID = $('#currentReportNameID').val();
       currentVariantId = $('#currentVariantId').val();
     }
-
-    $("[id$='_paginate']").hide();
-    $("table[data-report-name!=\"\"]").hide();
-    $("table[data-report-name=\"".concat(reportNameID, "\"]")).css('width', '').show();
-    $("#".concat(reportNameID, "-table_paginate")).show();
-
+    $('[id$="-table-div"]').hide();
+    $("#".concat(reportNameID, "-table-div")).show();
     if (reportNameID === 'CallDetails' && ModuleExtendedCDRs.dataTable.page !== undefined) {
       ModuleExtendedCDRs.dataTable.page.len(ModuleExtendedCDRs.calculatePageLength()).draw();
     }
-
     $('#currentReportNameID').val(reportNameID);
     $('#currentVariantId').val(currentVariantId);
     var variantName = '';
-
     if (currentVariantId !== '') {
       variantName = $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportNameID, "\"] div.title")).text().trim();
     } else {
       variantName = $("h4#".concat(reportNameID, " div.content")).text().trim();
     }
-
     $("h1.header div.content").contents().filter(function () {
       return this.nodeType === 3 && this.nodeValue.trim() !== '';
     }).each(function () {
@@ -614,46 +595,38 @@ var ModuleExtendedCDRs = {
     ModuleExtendedCDRs.updateSettings();
   },
   updateSettings: function updateSettings() {
+    ModuleExtendedCDRs.tablesInitialized = true;
     var currentVariantId = $('#currentVariantId').val();
     var reportNameID = $('#currentReportNameID').val();
     var settings = {};
-
     if (currentVariantId === '') {
       settings = JSON.parse(decodeURIComponent($("#".concat(reportNameID)).attr('data-search-text')));
     } else {
       settings = JSON.parse(decodeURIComponent($("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportNameID, "\"]")).attr('data-search-text')));
     }
-
     if (settings.dateRangeSelector !== undefined && settings.dateRangeSelector !== '') {
       var periods = ModuleExtendedCDRs.getStandardPeriods();
       var defPeriod = [moment(), moment()];
-
       if (periods[settings.dateRangeSelector] !== undefined) {
         defPeriod = periods[settings.dateRangeSelector];
       }
-
       ModuleExtendedCDRs.$dateRangeSelector.attr('data-start', defPeriod[0].format('YYYY/MM/DD'));
       ModuleExtendedCDRs.$dateRangeSelector.attr('data-end', moment(defPeriod[1].format('YYYYMMDD')).endOf('day').format('YYYY/MM/DD'));
       ModuleExtendedCDRs.$dateRangeSelector.val("".concat(defPeriod[0].format('DD/MM/YYYY'), " - ").concat(defPeriod[1].format('DD/MM/YYYY')));
     }
-
     if (settings.globalSearch !== undefined) {
       ModuleExtendedCDRs.$globalSearch.val(settings.globalSearch);
     }
-
     $('#additionalFilter').dropdown('clear');
-
     if (settings.additionalFilter !== undefined) {
       $('#additionalFilter').dropdown('set selected', settings.additionalFilter.split(' '));
     }
-
     if (settings.typeCall !== undefined) {
       $('#typeCall.menu a.item').tab('change tab', settings.typeCall);
     } else {
       $('#typeCall.menu a.item').tab('change tab', 'all-calls');
     }
   },
-
   /**
    *
    */
@@ -669,7 +642,6 @@ var ModuleExtendedCDRs = {
         } else {
           divProgress.hide();
         }
-
         divProgress.progress({
           total: response.stateData.lastId,
           value: response.stateData.nowId,
@@ -684,7 +656,6 @@ var ModuleExtendedCDRs = {
       }
     });
   },
-
   /**
    * Shows a set of call records when a row is clicked.
    * @param {Array} data - The row data.
@@ -695,14 +666,12 @@ var ModuleExtendedCDRs = {
     data[4].forEach(function (record, i) {
       var srcAudio = '';
       var srcDownloadAudio = '';
-
       if (!(record.recordingfile === undefined || record.recordingfile === null || record.recordingfile.length === 0)) {
         var recordFileName = encodeURIComponent(record.prettyFilename);
         var recordFileUri = encodeURIComponent(record.recordingfile);
         srcAudio = "/pbxcore/api/cdr/v2/playback?view=".concat(recordFileUri);
         srcDownloadAudio = "/pbxcore/api/cdr/v2/playback?view=".concat(recordFileUri, "&download=1&filename=").concat(recordFileName, ".mp3");
       }
-
       htmlPlayer += "\n\t\t\t<tr id=\"".concat(record.id, "\" data-row-id=\"").concat(id, "-detailed\" class=\"warning detailed odd shown\" role=\"row\">\n\t\t\t\t<td></td>\n\t\t\t\t<td class=\"right aligned\">").concat(record.start, "</td>\n\t\t\t\t<td data-phone=\"").concat(record.src_num, "\" class=\"right aligned need-update\">").concat(record.src_num, "</td>\n\t\t\t   \t<td data-phone=\"").concat(record.dst_num, "\" class=\"left aligned need-update\">").concat(record.dst_num, "</td>\n\t\t\t\t<td class=\"right aligned\">\t\t\t\n\t\t\t\t</td>\n\t\t\t\t<td class=\"right aligned\">").concat(record.waitTime, "</td>\n\t\t\t\t<td class=\"right aligned\" style=\"padding-right: 3\">\n\t\t\t\t  <div class=\"ui horizontal list\" style=\"width: 100%; display: flex; align-items: center;\">\n\t\t\t\t\t<div class=\"item\">\n\t\t\t\t\t  <i class=\"ui icon play\"></i>\n\t\t\t\t\t</div>\n\t\t\t\t\t<div class=\"item\" style=\"margin-left:0; flex-grow: 1;\">\n\t\t\t\t\t  <div class=\"ui range cdr-player\" data-value=\"").concat(record.id, "\"></div>\n\t\t\t\t\t</div>\n\t\t\t\t\t<div class=\"item\">\n\t\t\t\t\t  ").concat(record.billsec, "\n\t\t\t\t\t  <i class=\"ui icon download\" data-value=\"").concat(srcDownloadAudio, "\" onclick=\"ModuleExtendedCDRs.audioPlayHandler(event)\"></i>\n\t\t\t\t\t</div>\n\t\t\t\t  </div>\n\t\t\t\t  <audio preload=\"metadata\" id=\"audio-player-").concat(record.id, "\" src=\"").concat(srcAudio, "\" onplay=\"ModuleExtendedCDRs.audioPlayHandler(event)\"></audio>\n\t\t\t\t</td>\n\t\t\t\t<td class=\"right aligned\" data-state-index=\"").concat(record.stateCallIndex, "\">").concat(record.stateCall, "</td>\n\t\t\t</tr>");
     });
     return htmlPlayer;
@@ -721,22 +690,21 @@ var ModuleExtendedCDRs = {
         return false;
       }
     });
-
     if (allPositive) {
       $("[id=\"".concat(callId, "\"]")).addClass('positive');
       listenedIDs.push(callId);
     }
-
     listenedIDs = _toConsumableArray(new Set(listenedIDs));
   },
   calculatePageLength: function calculatePageLength() {
     // Calculate row height
-    var rowHeight = ModuleExtendedCDRs.$cdrTable.find('tbody > tr').first().outerHeight(); // Calculate window height and available space for table
+    var rowHeight = ModuleExtendedCDRs.$cdrTable.find('tbody > tr').first().outerHeight();
 
+    // Calculate window height and available space for table
     var windowHeight = window.innerHeight;
     var headerFooterHeight = 400; // Estimate height for header, footer, and other elements
-    // Calculate new page length
 
+    // Calculate new page length
     return Math.max(Math.floor((windowHeight - headerFooterHeight) / rowHeight), 5);
   },
   additionalExportFunctions: function additionalExportFunctions() {
@@ -779,7 +747,6 @@ var ModuleExtendedCDRs = {
         },
         success: function success(response) {
           console.log("Успешный запрос", response);
-
           for (var key in response.ruleSaveResult) {
             if (response.ruleSaveResult.hasOwnProperty(key)) {
               var syncRules = $('#sync-rules tr#' + key);
@@ -818,26 +785,20 @@ var ModuleExtendedCDRs = {
       }
     });
   },
-
   /**
    * Initializes the date range selector.
    */
   initializeDateRangeSelector: function initializeDateRangeSelector() {
-    var _options$ranges;
-
     var period = ModuleExtendedCDRs.$dateRangeSelector.attr('data-def-value');
     var defPeriod = [moment(), moment()];
-
     if (period !== '' && period !== undefined) {
       var periods = ModuleExtendedCDRs.getStandardPeriods();
-
       if (periods[period] !== undefined) {
         defPeriod = periods[period];
       }
     }
-
     var options = {};
-    options.ranges = (_options$ranges = {}, _defineProperty(_options$ranges, globalTranslate.repModuleExtendedCDRs_cdr_cal_Today, [moment(), moment()]), _defineProperty(_options$ranges, globalTranslate.repModuleExtendedCDRs_cdr_cal_Yesterday, [moment().subtract(1, 'days'), moment().subtract(1, 'days')]), _defineProperty(_options$ranges, globalTranslate.repModuleExtendedCDRs_cdr_cal_LastWeek, [moment().subtract(6, 'days'), moment()]), _defineProperty(_options$ranges, globalTranslate.repModuleExtendedCDRs_cdr_cal_Last30Days, [moment().subtract(29, 'days'), moment()]), _defineProperty(_options$ranges, globalTranslate.repModuleExtendedCDRs_cdr_cal_ThisMonth, [moment().startOf('month'), moment().endOf('month')]), _defineProperty(_options$ranges, globalTranslate.repModuleExtendedCDRs_cdr_cal_LastMonth, [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]), _options$ranges);
+    options.ranges = _defineProperty(_defineProperty(_defineProperty(_defineProperty(_defineProperty(_defineProperty({}, globalTranslate.repModuleExtendedCDRs_cdr_cal_Today, [moment(), moment()]), globalTranslate.repModuleExtendedCDRs_cdr_cal_Yesterday, [moment().subtract(1, 'days'), moment().subtract(1, 'days')]), globalTranslate.repModuleExtendedCDRs_cdr_cal_LastWeek, [moment().subtract(6, 'days'), moment()]), globalTranslate.repModuleExtendedCDRs_cdr_cal_Last30Days, [moment().subtract(29, 'days'), moment()]), globalTranslate.repModuleExtendedCDRs_cdr_cal_ThisMonth, [moment().startOf('month'), moment().endOf('month')]), globalTranslate.repModuleExtendedCDRs_cdr_cal_LastMonth, [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]);
     options.alwaysShowCalendars = true;
     options.autoUpdateInput = true;
     options.linkedCalendars = true;
@@ -858,7 +819,6 @@ var ModuleExtendedCDRs = {
     options.endDate = defPeriod[1];
     ModuleExtendedCDRs.$dateRangeSelector.daterangepicker(options, ModuleExtendedCDRs.cbDateRangeSelectorOnSelect);
   },
-
   /**
    * Handles the date range selector select event.
    * @param {moment.Moment} start - The start date.
@@ -871,13 +831,15 @@ var ModuleExtendedCDRs = {
     ModuleExtendedCDRs.$dateRangeSelector.val("".concat(start.format('DD/MM/YYYY'), " - ").concat(end.format('DD/MM/YYYY')));
     ModuleExtendedCDRs.applyFilter();
   },
-
   /**
    * Applies the filter to the data table.
    */
   applyFilter: function applyFilter() {
     var text = ModuleExtendedCDRs.getSearchText();
     listenedIDs = [];
+
+    // Enable data loading for tables
+    ModuleExtendedCDRs.tablesInitialized = true;
     ModuleExtendedCDRs.dataTable.search(text).draw();
     ModuleExtendedCDRs.$outgoingEmployeeCalls.DataTable().search(text).draw();
     ModuleExtendedCDRs.$globalSearch.closest('div').addClass('loading');
@@ -886,7 +848,6 @@ var ModuleExtendedCDRs = {
     var retStandardPeriod = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : false;
     var disableGlobalSearch = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : false;
     var dateRangeSelector = '';
-
     if (retStandardPeriod === true) {
       var periods = ModuleExtendedCDRs.getStandardPeriods();
       $.each(periods, function (index, value) {
@@ -897,15 +858,12 @@ var ModuleExtendedCDRs = {
     } else {
       dateRangeSelector = ModuleExtendedCDRs.$dateRangeSelector.val();
     }
-
     var reportNameID = $('#currentReportNameID').val();
     var currentVariantId = $('#currentVariantId').val();
     var minBilSec = $("h4#".concat(reportNameID)).attr('data-min-bill-sec');
-
     if (currentVariantId !== '') {
       minBilSec = $("a[data-report-id=\"".concat(reportNameID, "\"][data-variant-id=\"").concat(currentVariantId, "\"]")).attr('data-min-bill-sec');
     }
-
     var filter = {
       dateRangeSelector: dateRangeSelector,
       minBilSec: minBilSec,
@@ -913,11 +871,9 @@ var ModuleExtendedCDRs = {
       typeCall: $('#typeCall a.item.active').attr('data-tab'),
       additionalFilter: $('#additionalFilter').dropdown('get value').replace(/,/g, ' ')
     };
-
     if (disableGlobalSearch === true) {
       filter.globalSearch = '';
     }
-
     return JSON.stringify(filter);
   },
   getStandardPeriods: function getStandardPeriods() {
@@ -941,7 +897,6 @@ var ModuleExtendedCDRs = {
       'variantId': currentVariantId,
       'variantName': variantName
     };
-
     if (currentVariantId !== '') {
       var parent = $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportId, "\"]"));
       data.variantName = parent.find('div.title').text().trim();
@@ -952,7 +907,6 @@ var ModuleExtendedCDRs = {
       data.time = parent.attr('data-time').trim();
       data.email = parent.attr('data-email').trim();
     }
-
     $.ajax({
       url: "".concat(globalRootUrl).concat(idUrl, "/saveSearchSettings"),
       type: 'POST',
@@ -977,13 +931,11 @@ var ModuleExtendedCDRs = {
     var reportNameID = $('#currentReportNameID').val();
     var currentVariantId = $('#currentVariantId').val();
     var title = '';
-
     if (currentVariantId === '') {
       title = $("#".concat($('#currentReportNameID').val(), " div.content")).text().trim();
     } else {
       title = $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportNameID, "\"] div.title")).text().trim();
     }
-
     var encodedSearch = encodeURIComponent(ModuleExtendedCDRs.getSearchText());
     var url = "".concat(window.location.origin, "/pbxcore/api/modules/").concat(className, "/exportHistory?reportNameID=").concat(reportNameID, "&type=").concat(type, "&search=").concat(encodedSearch, "&title=") + encodeURIComponent(title);
     window.open(url, '_blank');
@@ -991,7 +943,6 @@ var ModuleExtendedCDRs = {
   getMaxWidth: function getMaxWidth(data, key) {
     // Получаем максимальную длину содержимого в столбце
     var maxLength = key.length; // начинаем с длины заголовка
-
     data.forEach(function (row) {
       var length = (row[key] || '').toString().length;
       if (length > maxLength) maxLength = length;
@@ -1001,44 +952,35 @@ var ModuleExtendedCDRs = {
   startDownload: function startDownload() {
     var startTime = ModuleExtendedCDRs.$dateRangeSelector.attr('data-start');
     var endTime = ModuleExtendedCDRs.$dateRangeSelector.attr('data-end');
-
     if (startTime === undefined) {
       startTime = moment().format('YYYY-MM-DD');
       endTime = moment().endOf('day').format('YYYY-MM-DD HH:mm:ss');
     }
-
     var typeRec = 'inner';
-
     if ($('#allRecord').checkbox('is checked')) {
       typeRec = 'all';
     } else if ($('#outRecord').checkbox('is checked')) {
       typeRec = 'out';
     }
-
     var numbers = ModuleExtendedCDRs.$globalSearch.val();
     window.open('/pbxcore/api/modules/' + className + '/downloads?start=' + startTime + '&end=' + endTime + "&numbers=" + encodeURIComponent(numbers) + "&type=" + typeRec, '_blank');
   },
   startDownloadHistory: function startDownloadHistory() {
     var startTime = ModuleExtendedCDRs.$dateRangeSelector.attr('data-start');
     var endTime = ModuleExtendedCDRs.$dateRangeSelector.attr('data-end');
-
     if (startTime === undefined) {
       startTime = moment().format('YYYY-MM-DD');
       endTime = moment().endOf('day').format('YYYY-MM-DD HH:mm:ss');
     }
-
     var typeRec = 'inner';
-
     if ($('#allRecord').checkbox('is checked')) {
       typeRec = 'all';
     } else if ($('#outRecord').checkbox('is checked')) {
       typeRec = 'out';
     }
-
     var numbers = ModuleExtendedCDRs.$globalSearch.val();
     window.open('/pbxcore/api/modules/' + className + '/downloads-history?start=' + startTime + '&end=' + endTime + "&numbers=" + encodeURIComponent(numbers) + "&type=" + typeRec, '_blank');
   },
-
   /**
    * Подготавливает список выбора
    * @param selected
@@ -1059,7 +1001,6 @@ var ModuleExtendedCDRs = {
     });
     return values;
   },
-
   /**
    * Обработка изменения группы в списке
    */
@@ -1069,326 +1010,10 @@ var ModuleExtendedCDRs = {
     tdInput.attr('value', value);
     var currentRowId = $(choice).closest('tr').attr('id');
     var tableName = $(choice).closest('table').attr('id').replace('-table', '');
-
     if (currentRowId !== undefined && tableName !== undefined) {
       window[className].sendChangesToServer(tableName, currentRowId);
     }
   },
-
-  /**
-   * Add new Table.
-   */
-  initTable: function initTable(tableName, options) {
-    var columns = [];
-    var columnsArray4Sort = [];
-
-    for (var colName in options['cols']) {
-      columns.push({
-        data: colName
-      });
-      columnsArray4Sort.push(colName);
-    }
-
-    $('#' + tableName).DataTable({
-      ajax: {
-        url: idUrl + options.ajaxUrl + '?table=' + tableName.replace('-table', ''),
-        dataSrc: 'data'
-      },
-      columns: columns,
-      paging: true,
-      sDom: 'rtip',
-      deferRender: true,
-      pageLength: 17,
-      infoCallback: function infoCallback(settings, start, end, max, total, pre) {
-        return '';
-      },
-      language: SemanticLocalization.dataTableLocalisation,
-      ordering: false,
-
-      /**
-       * Builder row presentation
-       * @param row
-       * @param data
-       */
-      createdRow: function createdRow(row, data) {
-        var cols = $('td', row);
-        var headers = $('#' + tableName + ' thead tr th');
-
-        for (var key in data) {
-          var index = columnsArray4Sort.indexOf(key);
-
-          if (key === 'rowIcon') {
-            cols.eq(index).html('<i class="ui ' + data[key] + ' circle icon"></i>');
-          } else if (key === 'delButton') {
-            var templateDeleteButton = '<div class="ui small basic icon buttons action-buttons">' + '<a href="' + window[className].deleteRecordAJAXUrl + '/' + data.id + '" data-value = "' + data.DT_RowId + '"' + ' class="ui button delete two-steps-delete popuped" data-content="' + globalTranslate.bt_ToolTipDelete + '">' + '<i class="icon trash red"></i></a></div>';
-            cols.eq(index).html(templateDeleteButton);
-          } else if (key === 'priority') {
-            cols.eq(index).addClass('dragHandle');
-            cols.eq(index).html('<i class="ui sort circle icon"></i>'); // Приоритет устанавливаем для строки.
-
-            $(row).attr('m-priority', data[key]);
-          } else {
-            var template = '<div class="ui transparent fluid input inline-edit">' + '<input colName="' + key + '" class="' + inputClassName + '" type="text" data-value="' + data[key] + '" value="' + data[key] + '"></div>';
-            $('td', row).eq(index).html(template);
-          }
-
-          if (options['cols'][key] === undefined) {
-            continue;
-          }
-
-          var additionalClass = options['cols'][key]['class'];
-
-          if (additionalClass !== undefined && additionalClass !== '') {
-            headers.eq(index).addClass(additionalClass);
-          }
-
-          var header = options['cols'][key]['header'];
-
-          if (header !== undefined && header !== '') {
-            headers.eq(index).html(header);
-          }
-
-          var selectMetaData = options['cols'][key]['select'];
-
-          if (selectMetaData !== undefined) {
-            var newTemplate = $('#template-select').html().replace('PARAM', data[key]);
-
-            var _template = '<input class="' + inputClassName + '" colName="' + key + '" selectType="' + selectMetaData + '" style="display: none;" type="text" data-value="' + data[key] + '" value="' + data[key] + '"></div>';
-
-            cols.eq(index).html(newTemplate + _template);
-          }
-        }
-      },
-
-      /**
-       * Draw event - fired once the table has completed a draw.
-       */
-      drawCallback: function drawCallback(settings) {
-        window[className].drowSelectGroup(settings.sTableId);
-      }
-    });
-    var body = $('body'); // Клик по полю. Вход для редактирования значения.
-
-    body.on('focusin', '.' + inputClassName, function (e) {
-      $(e.target).transition('glow');
-      $(e.target).closest('div').removeClass('transparent').addClass('changed-field');
-      $(e.target).attr('readonly', false);
-    }); // Отправка формы на сервер по Enter или Tab
-
-    $(document).on('keydown', function (e) {
-      var keyCode = e.keyCode || e.which;
-
-      if (keyCode === 13 || keyCode === 9 && $(':focus').hasClass('mikopbx-module-input')) {
-        window[className].endEditInput();
-      }
-    });
-    body.on('click', 'a.delete', function (e) {
-      e.preventDefault();
-      var currentRowId = $(e.target).closest('tr').attr('id');
-      var tableName = $(e.target).closest('table').attr('id').replace('-table', '');
-      window[className].deleteRow(tableName, currentRowId);
-    }); // Добавление новой строки
-    // Отправка формы на сервер по уходу с поля ввода
-
-    body.on('focusout', '.' + inputClassName, window[className].endEditInput); // Кнопка "Добавить новую запись"
-
-    $('[id-table = "' + tableName + '"]').on('click', window[className].addNewRow);
-  },
-
-  /**
-   * Перемещение строки, изменение приоритета.
-   */
-  cbOnDrop: function cbOnDrop(table, row) {
-    var priorityWasChanged = false;
-    var priorityData = {};
-    $(table).find('tr').each(function (index, obj) {
-      var ruleId = $(obj).attr('id');
-      var oldPriority = parseInt($(obj).attr('m-priority'), 10);
-      var newPriority = obj.rowIndex;
-
-      if (!isNaN(ruleId) && oldPriority !== newPriority) {
-        priorityWasChanged = true;
-        priorityData[ruleId] = newPriority;
-      }
-    });
-
-    if (priorityWasChanged) {
-      $.api({
-        on: 'now',
-        url: "".concat(globalRootUrl).concat(idUrl, "/changePriority?table=") + $(table).attr('id').replace('-table', ''),
-        method: 'POST',
-        data: priorityData
-      });
-    }
-  },
-
-  /**
-   * Окончание редактирования поля ввода.
-   * Не относится к select.
-   * @param e
-   */
-  endEditInput: function endEditInput(e) {
-    var $el = $('.changed-field').closest('tr');
-    $el.each(function (index, obj) {
-      var currentRowId = $(obj).attr('id');
-      var tableName = $(obj).closest('table').attr('id').replace('-table', '');
-
-      if (currentRowId !== undefined && tableName !== undefined) {
-        window[className].sendChangesToServer(tableName, currentRowId);
-      }
-    });
-  },
-
-  /**
-   * Добавление новой строки в таблицу.
-   * @param e
-   */
-  addNewRow: function addNewRow(e) {
-    var idTable = $(e.target).attr('id-table');
-    var table = $('#' + idTable);
-    e.preventDefault();
-    table.find('.dataTables_empty').remove(); // Отправим на запись все что не записано еще
-
-    var $el = table.find('.changed-field').closest('tr');
-    $el.each(function (index, obj) {
-      var currentRowId = $(obj).attr('id');
-
-      if (currentRowId !== undefined) {
-        window[className].sendChangesToServer(currentRowId);
-      }
-    });
-    var id = "new" + Math.floor(Math.random() * Math.floor(500));
-    var rowTemplate = '<tr id="' + id + '" role="row" class="even">' + table.find('tr#TEMPLATE').html().replace('TEMPLATE', id) + '</tr>';
-    table.find('tbody > tr:first').before(rowTemplate);
-    window[className].drowSelectGroup(idTable);
-  },
-
-  /**
-   * Обновление select элементов.
-   * @param tableId
-   */
-  drowSelectGroup: function drowSelectGroup(tableId) {
-    $('#' + tableId).find('tr#TEMPLATE').hide();
-    var selestGroup = $('.select-group');
-    selestGroup.each(function (index, obj) {
-      var selectType = $(obj).closest('td').find('input').attr('selectType');
-      $(obj).dropdown({
-        values: window[className].makeDropdownList(selectType, $(obj).attr('data-value'))
-      });
-    });
-    selestGroup.dropdown({
-      onChange: window[className].changeGroupInList
-    });
-    $('#' + tableId).tableDnD({
-      onDrop: window[className].cbOnDrop,
-      onDragClass: 'hoveringRow',
-      dragHandle: '.dragHandle'
-    });
-  },
-
-  /**
-   * Удаление строки
-   * @param tableName
-   * @param id - record id
-   */
-  deleteRow: function deleteRow(tableName, id) {
-    var table = $('#' + tableName + '-table');
-
-    if (id.substr(0, 3) === 'new') {
-      table.find('tr#' + id).remove();
-      return;
-    }
-
-    $.api({
-      url: window[className].deleteRecordAJAXUrl + '?id=' + id + '&table=' + tableName,
-      on: 'now',
-      onSuccess: function onSuccess(response) {
-        if (response.success) {
-          table.find('tr#' + id).remove();
-
-          if (table.find('tbody > tr').length === 0) {
-            table.find('tbody').append('<tr class="odd"></tr>');
-          }
-        }
-      }
-    });
-  },
-
-  /**
-   * Отправка данных на сервер при измении
-   */
-  sendChangesToServer: function sendChangesToServer(tableName, recordId) {
-    var data = {
-      'pbx-table-id': tableName,
-      'pbx-row-id': recordId
-    };
-    var notEmpty = false;
-    $("tr#" + recordId + ' .' + inputClassName).each(function (index, obj) {
-      var colName = $(obj).attr('colName');
-
-      if (colName !== undefined) {
-        data[$(obj).attr('colName')] = $(obj).val();
-
-        if ($(obj).val() !== '') {
-          notEmpty = true;
-        }
-      }
-    });
-
-    if (notEmpty === false) {
-      return;
-    }
-
-    $("tr#" + recordId + " .user.circle").removeClass('user circle').addClass('spinner loading');
-    $.api({
-      url: window[className].saveTableAJAXUrl,
-      on: 'now',
-      method: 'POST',
-      data: data,
-      successTest: function successTest(response) {
-        return response !== undefined && Object.keys(response).length > 0 && response.success === true;
-      },
-      onSuccess: function onSuccess(response) {
-        if (response.data !== undefined) {
-          var rowId = response.data['pbx-row-id'];
-          var table = $('#' + response.data['pbx-table-id'] + '-table');
-          table.find("tr#" + rowId + " input").attr('readonly', true);
-          table.find("tr#" + rowId + " div").removeClass('changed-field loading').addClass('transparent');
-          table.find("tr#" + rowId + " .spinner.loading").addClass('user circle').removeClass('spinner loading');
-
-          if (rowId !== response.data['newId']) {
-            $("tr#".concat(rowId)).attr('id', response.data['newId']);
-          }
-        }
-      },
-      onFailure: function onFailure(response) {
-        if (response.message !== undefined) {
-          UserMessage.showMultiString(response.message);
-        }
-
-        $("tr#" + recordId + " .spinner.loading").addClass('user circle').removeClass('spinner loading');
-      },
-      onError: function onError(errorMessage, element, xhr) {
-        if (xhr.status === 403) {
-          window.location = globalRootUrl + "session/index";
-        }
-      }
-    });
-  },
-
-  /**
-   * Change some form elements classes depends of module status
-   */
-  checkStatusToggle: function checkStatusToggle() {
-    if (window[className].$statusToggle.checkbox('is checked')) {
-      window[className].$disabilityFields.removeClass('disabled');
-      window[className].$moduleStatus.show();
-    } else {
-      window[className].$disabilityFields.addClass('disabled');
-      window[className].$moduleStatus.hide();
-    }
-  },
-
   /**
    * Send command to restart module workers after data changes,
    * Also we can do it on TemplateConf->modelsEventChangeData method
@@ -1410,7 +1035,6 @@ var ModuleExtendedCDRs = {
       }
     });
   },
-
   /**
    * We can modify some data before form send
    * @param settings
@@ -1421,14 +1045,12 @@ var ModuleExtendedCDRs = {
     result.data = window[className].$formObj.form('get values');
     return result;
   },
-
   /**
    * Some actions after forms send
    */
   cbAfterSendForm: function cbAfterSendForm() {
     window[className].applyConfigurationChanges();
   },
-
   /**
    * Initialize form parameters
    */
@@ -1440,7 +1062,6 @@ var ModuleExtendedCDRs = {
     Form.cbAfterSendForm = window[className].cbAfterSendForm;
     Form.initialize();
   },
-
   /**
    * Update the module state on form label
    * @param status
@@ -1451,17 +1072,14 @@ var ModuleExtendedCDRs = {
         window[className].$moduleStatus.removeClass('grey').removeClass('red').addClass('green');
         window[className].$moduleStatus.html(globalTranslate.module_export_recordsConnected);
         break;
-
       case 'Disconnected':
         window[className].$moduleStatus.removeClass('green').removeClass('red').addClass('grey');
         window[className].$moduleStatus.html(globalTranslate.module_export_recordsDisconnected);
         break;
-
       case 'Updating':
         window[className].$moduleStatus.removeClass('green').removeClass('red').addClass('grey');
         window[className].$moduleStatus.html("<i class=\"spinner loading icon\"></i>".concat(globalTranslate.module_export_recordsUpdateStatus));
         break;
-
       default:
         window[className].$moduleStatus.removeClass('green').removeClass('red').addClass('grey');
         window[className].$moduleStatus.html(globalTranslate.module_export_recordsDisconnected);
