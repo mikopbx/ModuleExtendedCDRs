@@ -64,6 +64,176 @@ var ModuleExtendedCDRs = {
    * @type {boolean}
    */
   tablesInitialized: false,
+  tableInitDataOutgoingEmployeeCalls: {
+    wasInit: false,
+    id: 'OutgoingEmployeeCalls',
+    data: {
+      search: {
+        search: ''
+      },
+      serverSide: true,
+      processing: true,
+      info: false,
+      columnDefs: [{
+        defaultContent: "",
+        targets: "_all"
+      }],
+      ajax: function ajax(data, callback, settings) {
+        if (data.search.value === '' || !ModuleExtendedCDRs.tablesInitialized || $('#currentReportNameID').val() !== 'OutgoingEmployeeCalls') {
+          // Skip initial load
+          callback({
+            data: [],
+            recordsTotal: 0,
+            recordsFiltered: 0
+          });
+          return;
+        }
+        $.ajax({
+          url: "".concat(globalRootUrl).concat(idUrl, "/getOutgoingEmployeeCalls"),
+          type: 'POST',
+          data: data,
+          success: function success(json) {
+            callback(json);
+          }
+        });
+      },
+      paging: true,
+      sDom: 'rtip',
+      deferRender: true,
+      // pageLength: ModuleExtendedCDRs.calculatePageLength(),
+      /**
+       * Constructs the CDR row.
+       * @param {HTMLElement} row - The row element.
+       * @param {Array} data - The row data.
+       */
+      createdRow: function createdRow(row, data) {
+        $('td', row).eq(0).html(data.callerId);
+        $('td', row).eq(1).html(data.number).addClass('active');
+        $('td', row).eq(2).html(data.billHourCalls);
+        $('td', row).eq(3).html(data.billMinCalls);
+        $('td', row).eq(4).html(data.billSecCalls);
+        $('td', row).eq(5).html(data.countCalls);
+      },
+      drawCallback: function drawCallback(settings) {
+        var pagination = $(this).closest('.dataTables_wrapper').find('.dataTables_paginate');
+        if (settings._iDisplayLength >= settings.fnRecordsDisplay()) {
+          pagination.hide();
+        } else {
+          pagination.show();
+        }
+      },
+      language: SemanticLocalization.dataTableLocalisation,
+      ordering: false
+    }
+  },
+  tableInitDataCallDetails: {
+    wasInit: false,
+    id: 'CallDetails',
+    data: {
+      search: {
+        search: ''
+      },
+      serverSide: true,
+      processing: true,
+      info: false,
+      columnDefs: [{
+        defaultContent: "-",
+        targets: "_all"
+      }],
+      ajax: function ajax(data, callback, settings) {
+        if (data.search.value === '' || !ModuleExtendedCDRs.tablesInitialized || $('#currentReportNameID').val() !== ModuleExtendedCDRs.tableInitDataCallDetails.id) {
+          // Skip initial load
+          callback({
+            data: [],
+            recordsTotal: 0,
+            recordsFiltered: 0
+          });
+          return;
+        }
+        $.ajax({
+          url: "".concat(globalRootUrl).concat(idUrl, "/getHistory"),
+          type: 'POST',
+          data: data,
+          success: function success(json) {
+            $('a.item[data-tab="all-calls"] b').html(': ' + json.recordsFiltered);
+            $('a.item[data-tab="incoming-calls"] b').html(': ' + json.recordsIncoming);
+            $('a.item[data-tab="missed-calls"] b').html(': ' + json.recordsMissed);
+            $('a.item[data-tab="outgoing-calls"] b').html(': ' + json.recordsOutgoing);
+            var typeCall = $('#typeCall a.item.active').attr('data-tab');
+            if (typeCall === 'incoming-calls') {
+              json.recordsFiltered = json.recordsIncoming;
+            } else if (typeCall === 'missed-calls') {
+              json.recordsFiltered = json.recordsMissed;
+            } else if (typeCall === 'outgoing-calls') {
+              json.recordsFiltered = json.recordsOutgoing;
+            }
+            callback(json);
+          }
+        });
+      },
+      paging: true,
+      sDom: 'rtip',
+      deferRender: true,
+      stripeClasses: ['striped'],
+      // pageLength: ModuleExtendedCDRs.calculatePageLength(),
+      /**
+       * Constructs the CDR row.
+       * @param {HTMLElement} row - The row element.
+       * @param {Array} data - The row data.
+       */
+      createdRow: function createdRow(row, data) {
+        var detailedIcon = '';
+        if (data.DT_RowClass.indexOf("detailed") >= 0) {
+          detailedIcon = '<i class="icon caret down"></i>';
+        }
+        data.typeCall = "".concat(data.typeCall);
+        if (data.typeCall === '1') {
+          $('td', row).eq(0).html('<i class="custom-outgoing-icon-15x15"></i>' + detailedIcon);
+        } else if (data.typeCall === '2') {
+          $('td', row).eq(0).html('<i class="custom-incoming-icon-15x15"></i>' + detailedIcon);
+        } else if (data.typeCall === '3') {
+          $('td', row).eq(0).html('<i class="custom-missed-icon-15x15"></i>' + detailedIcon);
+        } else {
+          $('td', row).eq(0).html('' + detailedIcon);
+        }
+        $('td', row).eq(1).html(data[0]).addClass('right aligned');
+        $('td', row).eq(2).html(data[1]).attr('data-phone', data[1]).addClass('need-update').addClass('right aligned');
+        $('td', row).eq(3).html(data[2]).attr('data-phone', data[2]).addClass('need-update');
+        var duration = data[3];
+        if (data.ids !== '') {
+          duration += '<i data-ids="' + data.ids + '" class="file alternate outline icon">';
+        }
+        var lineText = data.line;
+        if (data.did !== "") {
+          lineText = "".concat(data.line, " <a class=\"ui mini basic label\">").concat(data.did, "</a>");
+        }
+        $('td', row).eq(4).html(lineText).addClass('right aligned');
+        $('td', row).eq(5).html(data.waitTime).addClass('right aligned');
+        $('td', row).eq(6).html(duration).addClass('right aligned');
+        $('td', row).eq(7).html(data.stateCall).addClass('right aligned');
+      },
+      /**
+       * Draw event - fired once the table has completed a draw.
+       */
+      drawCallback: function drawCallback(settings) {
+        Extensions.updatePhonesRepresent('need-update');
+        listenedIDs.forEach(function (id) {
+          var element = $("[id=\"".concat(id, "\"]"));
+          if (element.length) {
+            element.removeClass('warning').addClass('positive');
+          }
+        });
+        var pagination = $(this).closest('.dataTables_wrapper').find('.dataTables_paginate');
+        if (settings._iDisplayLength >= settings.fnRecordsDisplay()) {
+          pagination.hide();
+        } else {
+          pagination.show();
+        }
+      },
+      language: SemanticLocalization.dataTableLocalisation,
+      ordering: false
+    }
+  },
   /**
    * Field validation rules
    * https://semantic-ui.com/behaviors/form.html
@@ -336,229 +506,6 @@ var ModuleExtendedCDRs = {
         return false;
       }
     });
-    ModuleExtendedCDRs.$outgoingEmployeeCalls.dataTable({
-      search: {
-        search: ModuleExtendedCDRs.getSearchText()
-      },
-      serverSide: true,
-      processing: true,
-      info: false,
-      columnDefs: [{
-        defaultContent: "",
-        targets: "_all"
-      }],
-      ajax: function ajax(data, callback, settings) {
-        if (!ModuleExtendedCDRs.tablesInitialized || $('#currentReportNameID').val() !== 'OutgoingEmployeeCalls') {
-          // Skip initial load
-          callback({
-            data: [],
-            recordsTotal: 0,
-            recordsFiltered: 0
-          });
-          return;
-        }
-        $.ajax({
-          url: "".concat(globalRootUrl).concat(idUrl, "/getOutgoingEmployeeCalls"),
-          type: 'POST',
-          data: data,
-          success: function success(json) {
-            callback(json);
-          }
-        });
-      },
-      paging: true,
-      sDom: 'rtip',
-      deferRender: true,
-      pageLength: ModuleExtendedCDRs.calculatePageLength(),
-      /**
-       * Constructs the CDR row.
-       * @param {HTMLElement} row - The row element.
-       * @param {Array} data - The row data.
-       */
-      createdRow: function createdRow(row, data) {
-        $('td', row).eq(0).html(data.callerId);
-        $('td', row).eq(1).html(data.number).addClass('active');
-        $('td', row).eq(2).html(data.billHourCalls);
-        $('td', row).eq(3).html(data.billMinCalls);
-        $('td', row).eq(4).html(data.billSecCalls);
-        $('td', row).eq(5).html(data.countCalls);
-      },
-      drawCallback: function drawCallback(settings) {
-        var pagination = $(this).closest('.dataTables_wrapper').find('.dataTables_paginate');
-        if (settings._iDisplayLength >= settings.fnRecordsDisplay()) {
-          pagination.hide();
-        } else {
-          pagination.show();
-        }
-      },
-      language: SemanticLocalization.dataTableLocalisation,
-      ordering: false
-    });
-    ModuleExtendedCDRs.$cdrTable.dataTable({
-      search: {
-        search: ModuleExtendedCDRs.getSearchText()
-      },
-      serverSide: true,
-      processing: true,
-      info: false,
-      columnDefs: [{
-        defaultContent: "-",
-        targets: "_all"
-      }],
-      ajax: function ajax(data, callback, settings) {
-        if (!ModuleExtendedCDRs.tablesInitialized || $('#currentReportNameID').val() !== 'CallDetails') {
-          // Skip initial load
-          callback({
-            data: [],
-            recordsTotal: 0,
-            recordsFiltered: 0
-          });
-          return;
-        }
-        $.ajax({
-          url: "".concat(globalRootUrl).concat(idUrl, "/getHistory"),
-          type: 'POST',
-          data: data,
-          success: function success(json) {
-            $('a.item[data-tab="all-calls"] b').html(': ' + json.recordsFiltered);
-            $('a.item[data-tab="incoming-calls"] b').html(': ' + json.recordsIncoming);
-            $('a.item[data-tab="missed-calls"] b').html(': ' + json.recordsMissed);
-            $('a.item[data-tab="outgoing-calls"] b').html(': ' + json.recordsOutgoing);
-            var typeCall = $('#typeCall a.item.active').attr('data-tab');
-            if (typeCall === 'incoming-calls') {
-              json.recordsFiltered = json.recordsIncoming;
-            } else if (typeCall === 'missed-calls') {
-              json.recordsFiltered = json.recordsMissed;
-            } else if (typeCall === 'outgoing-calls') {
-              json.recordsFiltered = json.recordsOutgoing;
-            }
-            callback(json);
-          }
-        });
-      },
-      paging: true,
-      sDom: 'rtip',
-      deferRender: true,
-      stripeClasses: ['striped'],
-      pageLength: ModuleExtendedCDRs.calculatePageLength(),
-      /**
-       * Constructs the CDR row.
-       * @param {HTMLElement} row - The row element.
-       * @param {Array} data - The row data.
-       */
-      createdRow: function createdRow(row, data) {
-        var detailedIcon = '';
-        if (data.DT_RowClass.indexOf("detailed") >= 0) {
-          detailedIcon = '<i class="icon caret down"></i>';
-        }
-        data.typeCall = "".concat(data.typeCall);
-        if (data.typeCall === '1') {
-          $('td', row).eq(0).html('<i class="custom-outgoing-icon-15x15"></i>' + detailedIcon);
-        } else if (data.typeCall === '2') {
-          $('td', row).eq(0).html('<i class="custom-incoming-icon-15x15"></i>' + detailedIcon);
-        } else if (data.typeCall === '3') {
-          $('td', row).eq(0).html('<i class="custom-missed-icon-15x15"></i>' + detailedIcon);
-        } else {
-          $('td', row).eq(0).html('' + detailedIcon);
-        }
-        $('td', row).eq(1).html(data[0]).addClass('right aligned');
-        $('td', row).eq(2).html(data[1]).attr('data-phone', data[1]).addClass('need-update').addClass('right aligned');
-        $('td', row).eq(3).html(data[2]).attr('data-phone', data[2]).addClass('need-update');
-        var duration = data[3];
-        if (data.ids !== '') {
-          duration += '<i data-ids="' + data.ids + '" class="file alternate outline icon">';
-        }
-        var lineText = data.line;
-        if (data.did !== "") {
-          lineText = "".concat(data.line, " <a class=\"ui mini basic label\">").concat(data.did, "</a>");
-        }
-        $('td', row).eq(4).html(lineText).addClass('right aligned');
-        $('td', row).eq(5).html(data.waitTime).addClass('right aligned');
-        $('td', row).eq(6).html(duration).addClass('right aligned');
-        $('td', row).eq(7).html(data.stateCall).addClass('right aligned');
-      },
-      /**
-       * Draw event - fired once the table has completed a draw.
-       */
-      drawCallback: function drawCallback(settings) {
-        Extensions.updatePhonesRepresent('need-update');
-        listenedIDs.forEach(function (id) {
-          var element = $("[id=\"".concat(id, "\"]"));
-          if (element.length) {
-            element.removeClass('warning').addClass('positive');
-          }
-        });
-        var pagination = $(this).closest('.dataTables_wrapper').find('.dataTables_paginate');
-        if (settings._iDisplayLength >= settings.fnRecordsDisplay()) {
-          pagination.hide();
-        } else {
-          pagination.show();
-        }
-      },
-      language: SemanticLocalization.dataTableLocalisation,
-      ordering: false
-    });
-    ModuleExtendedCDRs.dataTable = ModuleExtendedCDRs.$cdrTable.DataTable();
-    ModuleExtendedCDRs.dataTable.on('draw', function () {
-      ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
-    });
-    ModuleExtendedCDRs.$cdrTable.on('click', 'tr.negative', function (e) {
-      // let filter = $(e.target).attr('data-phone');
-      // if (filter !== undefined && filter !== '') {
-      // 	ModuleExtendedCDRs.$globalSearch.val(filter)
-      // 	ModuleExtendedCDRs.applyFilter();
-      // 	return;
-      // }
-
-      var ids = $(e.target).attr('data-ids');
-      if (ids !== undefined && ids !== '') {
-        window.location = "".concat(globalRootUrl, "system-diagnostic/index/?filename=asterisk/verbose&filter=").concat(ids);
-      }
-    });
-    // Add event listener for opening and closing details
-    ModuleExtendedCDRs.$cdrTable.on('click', 'tr.detailed', function (e) {
-      var ids = $(e.target).attr('data-ids');
-      if (ids !== undefined && ids !== '') {
-        window.location = "".concat(globalRootUrl, "system-diagnostic/index/?filename=asterisk/verbose&filter=").concat(ids);
-        return;
-      }
-      // let filter = $(e.target).attr('data-phone');
-      // if (filter !== undefined && filter !== '') {
-      // 	ModuleExtendedCDRs.$globalSearch.val(filter)
-      // 	ModuleExtendedCDRs.applyFilter();
-      // 	return;
-      // }
-
-      var tr = $(e.target).closest('tr');
-      var row = ModuleExtendedCDRs.dataTable.row(tr);
-      if (row.length === 0) {
-        return;
-      }
-      if (tr.hasClass('shown')) {
-        // This row is already open - close it
-        $('tr[data-row-id="' + tr.attr('id') + '-detailed"').remove();
-        tr.removeClass('shown');
-      } else {
-        // Open this row
-        tr.after(ModuleExtendedCDRs.showRecords(row.data(), tr.attr('id')));
-        tr.addClass('shown');
-        $('tr[data-row-id="' + tr.attr('id') + '-detailed"').each(function (index, playerRow) {
-          var id = $(playerRow).attr('id');
-          return new CDRPlayer(id);
-        });
-        Extensions.updatePhonesRepresent('need-update');
-        listenedIDs.forEach(function (id) {
-          var element = $("[id=\"".concat(id, "\"]"));
-          if (element.length) {
-            element.removeClass('warning').addClass('positive');
-          }
-          element = $("[data-row-id=\"".concat(id, "\"]"));
-          if (element.length) {
-            element.removeClass('warning').addClass('positive');
-          }
-        });
-      }
-    });
     ModuleExtendedCDRs.updateSettings();
     ModuleExtendedCDRs.applyFilter();
     window[className].$dropDowns.dropdown({
@@ -672,7 +619,7 @@ var ModuleExtendedCDRs = {
         srcAudio = "/pbxcore/api/cdr/v2/playback?view=".concat(recordFileUri);
         srcDownloadAudio = "/pbxcore/api/cdr/v2/playback?view=".concat(recordFileUri, "&download=1&filename=").concat(recordFileName, ".mp3");
       }
-      htmlPlayer += "\n\t\t\t<tr id=\"".concat(record.id, "\" data-row-id=\"").concat(id, "-detailed\" class=\"warning detailed odd shown\" role=\"row\">\n\t\t\t\t<td></td>\n\t\t\t\t<td class=\"right aligned\">").concat(record.start, "</td>\n\t\t\t\t<td data-phone=\"").concat(record.src_num, "\" class=\"right aligned need-update\">").concat(record.src_num, "</td>\n\t\t\t   \t<td data-phone=\"").concat(record.dst_num, "\" class=\"left aligned need-update\">").concat(record.dst_num, "</td>\n\t\t\t\t<td class=\"right aligned\">\t\t\t\n\t\t\t\t</td>\n\t\t\t\t<td class=\"right aligned\">").concat(record.waitTime, "</td>\n\t\t\t\t<td class=\"right aligned\" style=\"padding-right: 3\">\n\t\t\t\t  <div class=\"ui horizontal list\" style=\"width: 100%; display: flex; align-items: center;\">\n\t\t\t\t\t<div class=\"item\">\n\t\t\t\t\t  <i class=\"ui icon play\"></i>\n\t\t\t\t\t</div>\n\t\t\t\t\t<div class=\"item\" style=\"margin-left:0; flex-grow: 1;\">\n\t\t\t\t\t  <div class=\"ui range cdr-player\" data-value=\"").concat(record.id, "\"></div>\n\t\t\t\t\t</div>\n\t\t\t\t\t<div class=\"item\">\n\t\t\t\t\t  ").concat(record.billsec, "\n\t\t\t\t\t  <i class=\"ui icon download\" data-value=\"").concat(srcDownloadAudio, "\" onclick=\"ModuleExtendedCDRs.audioPlayHandler(event)\"></i>\n\t\t\t\t\t</div>\n\t\t\t\t  </div>\n\t\t\t\t  <audio preload=\"metadata\" id=\"audio-player-").concat(record.id, "\" src=\"").concat(srcAudio, "\" onplay=\"ModuleExtendedCDRs.audioPlayHandler(event)\"></audio>\n\t\t\t\t</td>\n\t\t\t\t<td class=\"right aligned\" data-state-index=\"").concat(record.stateCallIndex, "\">").concat(record.stateCall, "</td>\n\t\t\t</tr>");
+      htmlPlayer += "\n\t\t\t<tr id=\"".concat(record.id, "\" data-row-id=\"").concat(id, "-detailed\" class=\"warning detailed odd shown\" role=\"row\">\n\t\t\t\t<td></td>\n\t\t\t\t<td class=\"right aligned\">").concat(record.start, "</td>\n\t\t\t\t<td data-phone=\"").concat(record.src_num, "\" class=\"right aligned need-update\">").concat(record.src_num, "</td>\n\t\t\t   \t<td data-phone=\"").concat(record.dst_num, "\" class=\"left aligned need-update\">").concat(record.dst_num, "</td>\n\t\t\t\t<td class=\"right aligned\">\t\t\t\n\t\t\t\t</td>\n\t\t\t\t<td class=\"right aligned\">").concat(record.waitTime, "</td>\n\t\t\t\t<td class=\"right aligned\" style=\"padding-right: 3px\">\n\t\t\t\t  <div class=\"ui horizontal list\" style=\"width: 100%; display: flex; align-items: center;\">\n\t\t\t\t\t<div class=\"item\">\n\t\t\t\t\t  <i class=\"ui icon play\"></i>\n\t\t\t\t\t</div>\n\t\t\t\t\t<div class=\"item\" style=\"margin-left:0; flex-grow: 1;\">\n\t\t\t\t\t  <div class=\"ui range cdr-player\" data-value=\"").concat(record.id, "\"></div>\n\t\t\t\t\t</div>\n\t\t\t\t\t<div class=\"item\">\n\t\t\t\t\t  ").concat(record.billsec, "\n\t\t\t\t\t  <i class=\"ui icon download\" data-value=\"").concat(srcDownloadAudio, "\" onclick=\"ModuleExtendedCDRs.audioPlayHandler(event)\"></i>\n\t\t\t\t\t</div>\n\t\t\t\t  </div>\n\t\t\t\t  <audio preload=\"metadata\" id=\"audio-player-").concat(record.id, "\" src=\"").concat(srcAudio, "\" onplay=\"ModuleExtendedCDRs.audioPlayHandler(event)\"></audio>\n\t\t\t\t</td>\n\t\t\t\t<td class=\"right aligned\" data-state-index=\"").concat(record.stateCallIndex, "\">").concat(record.stateCall, "</td>\n\t\t\t</tr>");
     });
     return htmlPlayer;
   },
@@ -840,8 +787,81 @@ var ModuleExtendedCDRs = {
 
     // Enable data loading for tables
     ModuleExtendedCDRs.tablesInitialized = true;
-    ModuleExtendedCDRs.dataTable.search(text).draw();
-    ModuleExtendedCDRs.$outgoingEmployeeCalls.DataTable().search(text).draw();
+    var reportName = $('#currentReportNameID').val();
+    if (reportName === ModuleExtendedCDRs.tableInitDataCallDetails.id) {
+      if (ModuleExtendedCDRs.tableInitDataCallDetails.wasInit === false) {
+        ModuleExtendedCDRs.$cdrTable.dataTable(ModuleExtendedCDRs.tableInitDataCallDetails.data);
+        ModuleExtendedCDRs.tableInitDataCallDetails.wasInit = true;
+        ModuleExtendedCDRs.dataTable = ModuleExtendedCDRs.$cdrTable.DataTable();
+        ModuleExtendedCDRs.dataTable.on('draw', function () {
+          ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
+        });
+        ModuleExtendedCDRs.$cdrTable.on('click', 'tr.negative', function (e) {
+          // let filter = $(e.target).attr('data-phone');
+          // if (filter !== undefined && filter !== '') {
+          // 	ModuleExtendedCDRs.$globalSearch.val(filter)
+          // 	ModuleExtendedCDRs.applyFilter();
+          // 	return;
+          // }
+
+          var ids = $(e.target).attr('data-ids');
+          if (ids !== undefined && ids !== '') {
+            window.location = "".concat(globalRootUrl, "system-diagnostic/index/?filename=asterisk/verbose&filter=").concat(ids);
+          }
+        });
+        // Add event listener for opening and closing details
+        ModuleExtendedCDRs.$cdrTable.on('click', 'tr.detailed', function (e) {
+          var ids = $(e.target).attr('data-ids');
+          if (ids !== undefined && ids !== '') {
+            window.location = "".concat(globalRootUrl, "system-diagnostic/index/?filename=asterisk/verbose&filter=").concat(ids);
+            return;
+          }
+          // let filter = $(e.target).attr('data-phone');
+          // if (filter !== undefined && filter !== '') {
+          // 	ModuleExtendedCDRs.$globalSearch.val(filter)
+          // 	ModuleExtendedCDRs.applyFilter();
+          // 	return;
+          // }
+
+          var tr = $(e.target).closest('tr');
+          var row = ModuleExtendedCDRs.dataTable.row(tr);
+          if (row.length === 0) {
+            return;
+          }
+          if (tr.hasClass('shown')) {
+            // This row is already open - close it
+            $('tr[data-row-id="' + tr.attr('id') + '-detailed"').remove();
+            tr.removeClass('shown');
+          } else {
+            // Open this row
+            tr.after(ModuleExtendedCDRs.showRecords(row.data(), tr.attr('id')));
+            tr.addClass('shown');
+            $('tr[data-row-id="' + tr.attr('id') + '-detailed"').each(function (index, playerRow) {
+              var id = $(playerRow).attr('id');
+              return new CDRPlayer(id);
+            });
+            Extensions.updatePhonesRepresent('need-update');
+            listenedIDs.forEach(function (id) {
+              var element = $("[id=\"".concat(id, "\"]"));
+              if (element.length) {
+                element.removeClass('warning').addClass('positive');
+              }
+              element = $("[data-row-id=\"".concat(id, "\"]"));
+              if (element.length) {
+                element.removeClass('warning').addClass('positive');
+              }
+            });
+          }
+        });
+      }
+      ModuleExtendedCDRs.dataTable.search(text).draw();
+    } else if (reportName === ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.id) {
+      if (ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.wasInit === false) {
+        ModuleExtendedCDRs.$outgoingEmployeeCalls.dataTable(ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.data);
+        ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.wasInit = true;
+      }
+      ModuleExtendedCDRs.$outgoingEmployeeCalls.DataTable().search(text).draw();
+    }
     ModuleExtendedCDRs.$globalSearch.closest('div').addClass('loading');
   },
   getSearchText: function getSearchText() {
