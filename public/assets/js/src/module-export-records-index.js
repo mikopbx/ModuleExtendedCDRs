@@ -54,6 +54,189 @@ const ModuleExtendedCDRs = {
 	players: [],
 
 	/**
+	 * Flag to prevent initial data loading
+	 * @type {boolean}
+	 */
+	tablesInitialized: false,
+
+	tableInitDataOutgoingEmployeeCalls: {
+		wasInit: false,
+		id: 'OutgoingEmployeeCalls',
+		data: {
+			search: {
+				search: '',
+			},
+			serverSide: true,
+			processing: true,
+			info: false,
+			columnDefs: [
+				{ defaultContent: "",  targets: "_all"},
+			],
+			ajax: function(data, callback, settings) {
+				if (data.search.value === '' ||
+					!ModuleExtendedCDRs.tablesInitialized || $('#currentReportNameID').val() !== 'OutgoingEmployeeCalls') {
+					// Skip initial load
+					callback({ data: [], recordsTotal: 0, recordsFiltered: 0 });
+					return;
+				}
+				$.ajax({
+					url: `${globalRootUrl}${idUrl}/getOutgoingEmployeeCalls`,
+					type: 'POST',
+					data: data,
+					success: function(json) {
+						callback(json);
+					}
+				});
+			},
+			paging: true,
+			sDom: 'rtip',
+			deferRender: true,
+			// pageLength: ModuleExtendedCDRs.calculatePageLength(),
+
+			/**
+			 * Constructs the CDR row.
+			 * @param {HTMLElement} row - The row element.
+			 * @param {Array} data - The row data.
+			 */
+			createdRow(row, data) {
+				$('td', row).eq(0).html(data.callerId);
+				$('td', row).eq(1).html(data.number).addClass('active');
+				$('td', row).eq(2).html(data.billHourCalls);
+				$('td', row).eq(3).html(data.billMinCalls);
+				$('td', row).eq(4).html(data.billSecCalls);
+				$('td', row).eq(5).html(data.countCalls);
+			},
+			drawCallback(settings) {
+				let pagination = $(this).closest('.dataTables_wrapper').find('.dataTables_paginate');
+				if (settings._iDisplayLength >= settings.fnRecordsDisplay()) {
+					pagination.hide();
+				} else {
+					pagination.show();
+				}
+			},
+			language: SemanticLocalization.dataTableLocalisation,
+			ordering: false,
+		}
+	},
+	tableInitDataCallDetails: {
+		 wasInit: false,
+		 id: 'CallDetails',
+		 data: {
+			search: {
+				search: '',
+			},
+			serverSide: true,
+			processing: true,
+			info: false,
+			columnDefs: [
+				{defaultContent: "-", targets: "_all"},
+			],
+			ajax: function(data, callback, settings) {
+				if (data.search.value === '' ||
+					!ModuleExtendedCDRs.tablesInitialized || $('#currentReportNameID').val() !== ModuleExtendedCDRs.tableInitDataCallDetails.id) {
+					// Skip initial load
+					callback({ data: [], recordsTotal: 0, recordsFiltered: 0 });
+					return;
+				}
+				$.ajax({
+					url: `${globalRootUrl}${idUrl}/getHistory`,
+					type: 'POST',
+					data: data,
+					success: function(json) {
+						$('a.item[data-tab="all-calls"] b').html(': '+json.recordsFiltered)
+						$('a.item[data-tab="incoming-calls"] b').html(': '+json.recordsIncoming)
+						$('a.item[data-tab="missed-calls"] b').html(': '+json.recordsMissed)
+						$('a.item[data-tab="outgoing-calls"] b').html(': '+json.recordsOutgoing)
+
+						let typeCall = $('#typeCall a.item.active').attr('data-tab');
+						if(typeCall === 'incoming-calls'){
+							json.recordsFiltered = json.recordsIncoming;
+						}else if(typeCall === 'missed-calls'){
+							json.recordsFiltered = json.recordsMissed;
+						}else if(typeCall === 'outgoing-calls'){
+							json.recordsFiltered = json.recordsOutgoing;
+						}
+						callback(json);
+					}
+				});
+			},
+			paging: true,
+			sDom: 'rtip',
+			deferRender: true,
+			stripeClasses: ['striped'],
+			// pageLength: ModuleExtendedCDRs.calculatePageLength(),
+
+			/**
+			 * Constructs the CDR row.
+			 * @param {HTMLElement} row - The row element.
+			 * @param {Array} data - The row data.
+			 */
+			createdRow(row, data) {
+				let detailedIcon = '';
+				if (data.DT_RowClass.indexOf("detailed") >= 0) {
+					detailedIcon = '<i class="icon caret down"></i>';
+				}
+				data.typeCall = `${data.typeCall}`;
+				if(data.typeCall === '1'){
+					$('td', row).eq(0).html('<i class="custom-outgoing-icon-15x15"></i>'+detailedIcon);
+				}else if(data.typeCall === '2'){
+					$('td', row).eq(0).html('<i class="custom-incoming-icon-15x15"></i>'+detailedIcon);
+				}else if(data.typeCall === '3'){
+					$('td', row).eq(0).html('<i class="custom-missed-icon-15x15"></i>'+detailedIcon);
+				}else{
+					$('td', row).eq(0).html(''+detailedIcon);
+				}
+
+				$('td', row).eq(1).html(data[0]).addClass('right aligned');
+				$('td', row).eq(2)
+					.html(data[1])
+					.attr('data-phone',data[1])
+					.addClass('need-update').addClass('right aligned');
+				$('td', row).eq(3)
+					.html(data[2])
+					.attr('data-phone',data[2])
+					.addClass('need-update');
+
+				let duration = data[3];
+				if (data.ids !== '') {
+					duration += '<i data-ids="' + data.ids + '" class="file alternate outline icon">';
+				}
+
+				let lineText = data.line;
+				if(data.did !== ""){
+					lineText = `${data.line} <a class="ui mini basic label">${data.did}</a>`;
+				}
+				$('td', row).eq(4).html(lineText).addClass('right aligned');
+
+				$('td', row).eq(5).html(data.waitTime).addClass('right aligned');
+				$('td', row).eq(6).html(duration).addClass('right aligned');
+				$('td', row).eq(7).html(data.stateCall).addClass('right aligned');
+			},
+
+			/**
+			 * Draw event - fired once the table has completed a draw.
+			 */
+			drawCallback(settings) {
+				Extensions.updatePhonesRepresent('need-update');
+				listenedIDs.forEach(function(id) {
+					let element = $(`[id="${id}"]`);
+					if (element.length) {
+						element.removeClass('warning').addClass('positive');
+					}
+				});
+				let pagination = $(this).closest('.dataTables_wrapper').find('.dataTables_paginate');
+				if (settings._iDisplayLength >= settings.fnRecordsDisplay()) {
+					pagination.hide();
+				} else {
+					pagination.show();
+				}
+			},
+			language: SemanticLocalization.dataTableLocalisation,
+			ordering: false,
+		}
+	},
+
+	/**
 	 * Field validation rules
 	 * https://semantic-ui.com/behaviors/form.html
 	 */
@@ -152,8 +335,6 @@ const ModuleExtendedCDRs = {
 
 		// инициализируем чекбоксы и выподающие менюшки
 		window[className].$checkBoxes.checkbox();
-		window[className].$dropDowns.dropdown({onChange: ModuleExtendedCDRs.applyFilter});
-		window.addEventListener('ModuleStatusChanged', window[className].checkStatusToggle);
 
 		window[className].initializeForm();
 		$('.menu .item').tab();
@@ -239,6 +420,7 @@ const ModuleExtendedCDRs = {
 			$(e.target).parents('div.six.wide.column').children('h4').show();
 			$(e.target).parents('div.six.wide.column').children('div').show();
 
+			ModuleExtendedCDRs.tablesInitialized = false;
 			ModuleExtendedCDRs.changeReportVariant(reportNameID, variantId);
 			ModuleExtendedCDRs.saveSearchSettings();
 			ModuleExtendedCDRs.applyFilter();
@@ -345,6 +527,7 @@ const ModuleExtendedCDRs = {
 		$("div.column h4").on('click', function (e) {
 			let reportId = $(this).attr('id');
 			$("h1.header i.th.icon").popup('hide');
+			ModuleExtendedCDRs.tablesInitialized = false;
 			ModuleExtendedCDRs.changeReportVariant(reportId);
 			ModuleExtendedCDRs.applyFilter();
 		});
@@ -352,6 +535,7 @@ const ModuleExtendedCDRs = {
 			let reportId = $(e.target).closest('a').attr('data-report-id');
 			let variantId = $(e.target).closest('a').attr('data-variant-id');
 			$("h1.header i.th.icon").popup('hide');
+			ModuleExtendedCDRs.tablesInitialized = false;
 			ModuleExtendedCDRs.changeReportVariant(reportId, variantId);
 			ModuleExtendedCDRs.applyFilter();
 		});
@@ -370,220 +554,10 @@ const ModuleExtendedCDRs = {
 				return false;
 			}
 		});
-		ModuleExtendedCDRs.$outgoingEmployeeCalls.dataTable({
-			search: {
-				search: ModuleExtendedCDRs.getSearchText(),
-			},
-			serverSide: true,
-			processing: true,
-			info: false,
-			columnDefs: [
-				{ defaultContent: "",  targets: "_all"},
-			],
-			ajax: {
-				url: `${globalRootUrl}${idUrl}/getOutgoingEmployeeCalls`,
-				type: 'POST'
-			},
-			paging: true,
-			sDom: 'rtip',
-			deferRender: true,
-			pageLength: ModuleExtendedCDRs.calculatePageLength(),
-
-			/**
-			 * Constructs the CDR row.
-			 * @param {HTMLElement} row - The row element.
-			 * @param {Array} data - The row data.
-			 */
-			createdRow(row, data) {
-				$('td', row).eq(0).html(data.callerId);
-				$('td', row).eq(1).html(data.number).addClass('active');
-				$('td', row).eq(2).html(data.billHourCalls);
-				$('td', row).eq(3).html(data.billMinCalls);
-				$('td', row).eq(4).html(data.billSecCalls);
-				$('td', row).eq(5).html(data.countCalls);
-			},
-			drawCallback(settings) {
-				let pagination = $(this).closest('.dataTables_wrapper').find('.dataTables_paginate');
-				if (settings._iDisplayLength >= settings.fnRecordsDisplay()) {
-					pagination.hide();
-				} else {
-					pagination.show();
-				}
-			},
-			language: SemanticLocalization.dataTableLocalisation,
-			ordering: false,
-		});
-
-		ModuleExtendedCDRs.$cdrTable.dataTable({
-			search: {
-				search: ModuleExtendedCDRs.getSearchText(),
-			},
-			serverSide: true,
-			processing: true,
-			info: false,
-			columnDefs: [
-				{defaultContent: "-", targets: "_all"},
-			],
-			ajax: {
-				url: `${globalRootUrl}${idUrl}/getHistory`,
-				type: 'POST',
-				dataSrc: function(json) {
-					$('a.item[data-tab="all-calls"] b').html(': '+json.recordsFiltered)
-					$('a.item[data-tab="incoming-calls"] b').html(': '+json.recordsIncoming)
-					$('a.item[data-tab="missed-calls"] b').html(': '+json.recordsMissed)
-					$('a.item[data-tab="outgoing-calls"] b').html(': '+json.recordsOutgoing)
-
-					let typeCall = $('#typeCall a.item.active').attr('data-tab');
-					if(typeCall === 'incoming-calls'){
-						json.recordsFiltered = json.recordsIncoming;
-					}else if(typeCall === 'missed-calls'){
-						json.recordsFiltered = json.recordsMissed;
-					}else if(typeCall === 'outgoing-calls'){
-						json.recordsFiltered = json.recordsOutgoing;
-					}
-					return json.data;
-				}
-			},
-			paging: true,
-			sDom: 'rtip',
-			deferRender: true,
-			stripeClasses: ['striped'],
-			pageLength: ModuleExtendedCDRs.calculatePageLength(),
-
-			/**
-			 * Constructs the CDR row.
-			 * @param {HTMLElement} row - The row element.
-			 * @param {Array} data - The row data.
-			 */
-			createdRow(row, data) {
-				let detailedIcon = '';
-				if (data.DT_RowClass.indexOf("detailed") >= 0) {
-					detailedIcon = '<i class="icon caret down"></i>';
-				}
-				data.typeCall = `${data.typeCall}`;
-				if(data.typeCall === '1'){
-					$('td', row).eq(0).html('<i class="custom-outgoing-icon-15x15"></i>'+detailedIcon);
-				}else if(data.typeCall === '2'){
-					$('td', row).eq(0).html('<i class="custom-incoming-icon-15x15"></i>'+detailedIcon);
-				}else if(data.typeCall === '3'){
-					$('td', row).eq(0).html('<i class="custom-missed-icon-15x15"></i>'+detailedIcon);
-				}else{
-					$('td', row).eq(0).html(''+detailedIcon);
-				}
-
-				$('td', row).eq(1).html(data[0]).addClass('right aligned');
-				$('td', row).eq(2)
-					.html(data[1])
-					.attr('data-phone',data[1])
-					.addClass('need-update').addClass('right aligned');
-				$('td', row).eq(3)
-					.html(data[2])
-					.attr('data-phone',data[2])
-					.addClass('need-update');
-
-				let duration = data[3];
-				if (data.ids !== '') {
-					duration += '<i data-ids="' + data.ids + '" class="file alternate outline icon">';
-				}
-
-				let lineText = data.line;
-				if(data.did !== ""){
-					lineText = `${data.line} <a class="ui mini basic label">${data.did}</a>`;
-				}
-				$('td', row).eq(4).html(lineText).addClass('right aligned');
-
-				$('td', row).eq(5).html(data.waitTime).addClass('right aligned');
-				$('td', row).eq(6).html(duration).addClass('right aligned');
-				$('td', row).eq(7).html(data.stateCall).addClass('right aligned');
-			},
-
-			/**
-			 * Draw event - fired once the table has completed a draw.
-			 */
-			drawCallback(settings) {
-				Extensions.updatePhonesRepresent('need-update');
-				listenedIDs.forEach(function(id) {
-					let element = $(`[id="${id}"]`);
-					if (element.length) {
-						element.removeClass('warning').addClass('positive');
-					}
-				});
-				let pagination = $(this).closest('.dataTables_wrapper').find('.dataTables_paginate');
-				if (settings._iDisplayLength >= settings.fnRecordsDisplay()) {
-					pagination.hide();
-				} else {
-					pagination.show();
-				}
-			},
-			language: SemanticLocalization.dataTableLocalisation,
-			ordering: false,
-		});
-		ModuleExtendedCDRs.dataTable = ModuleExtendedCDRs.$cdrTable.DataTable();
-		ModuleExtendedCDRs.dataTable.on('draw', () => {
-			ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
-		});
-		ModuleExtendedCDRs.$cdrTable.on('click', 'tr.negative', (e) => {
-			// let filter = $(e.target).attr('data-phone');
-			// if (filter !== undefined && filter !== '') {
-			// 	ModuleExtendedCDRs.$globalSearch.val(filter)
-			// 	ModuleExtendedCDRs.applyFilter();
-			// 	return;
-			// }
-
-			let ids = $(e.target).attr('data-ids');
-			if (ids !== undefined && ids !== '') {
-				window.location = `${globalRootUrl}system-diagnostic/index/?filename=asterisk/verbose&filter=${ids}`;
-			}
-		});
-		// Add event listener for opening and closing details
-		ModuleExtendedCDRs.$cdrTable.on('click', 'tr.detailed', (e) => {
-			let ids = $(e.target).attr('data-ids');
-			if (ids !== undefined && ids !== '') {
-				window.location = `${globalRootUrl}system-diagnostic/index/?filename=asterisk/verbose&filter=${ids}`;
-				return;
-			}
-			// let filter = $(e.target).attr('data-phone');
-			// if (filter !== undefined && filter !== '') {
-			// 	ModuleExtendedCDRs.$globalSearch.val(filter)
-			// 	ModuleExtendedCDRs.applyFilter();
-			// 	return;
-			// }
-
-			const tr = $(e.target).closest('tr');
-			const row = ModuleExtendedCDRs.dataTable.row(tr);
-			if(row.length === 0){
-				return;
-			}
-			if (tr.hasClass('shown')) {
-				// This row is already open - close it
-				$('tr[data-row-id="'+tr.attr('id')+'-detailed"').remove();
-				tr.removeClass('shown');
-			} else {
-				// Open this row
-				tr.after(ModuleExtendedCDRs.showRecords(row.data() , tr.attr('id')));
-				tr.addClass('shown');
-				$('tr[data-row-id="'+tr.attr('id')+'-detailed"').each((index, playerRow) => {
-					const id = $(playerRow).attr('id');
-					return new CDRPlayer(id);
-				});
-				Extensions.updatePhonesRepresent('need-update');
-
-				listenedIDs.forEach(function(id) {
-					let element = $(`[id="${id}"]`);
-					if (element.length) {
-						element.removeClass('warning').addClass('positive');
-					}
-					element = $(`[data-row-id="${id}"]`);
-					if (element.length) {
-						element.removeClass('warning').addClass('positive');
-					}
-				});
-			}
-		});
-
 		ModuleExtendedCDRs.updateSettings();
 		ModuleExtendedCDRs.applyFilter();
 
+		window[className].$dropDowns.dropdown({onChange: ModuleExtendedCDRs.applyFilter});
 		window[className].updateSyncState();
 		setInterval(window[className].updateSyncState, 5000);
 	},
@@ -593,10 +567,8 @@ const ModuleExtendedCDRs = {
 			currentVariantId = $('#currentVariantId').val();
 		}
 
-		$("[id$='_paginate']").hide();
-		$(`table[data-report-name!=""]`).hide();
-		$(`table[data-report-name="${reportNameID}"]`).css('width', '').show();
-		$(`#${reportNameID}-table_paginate`).show();
+		$('[id$="-table-div"]').hide();
+		$(`#${reportNameID}-table-div`).show();
 
 		if(reportNameID === 'CallDetails' && ModuleExtendedCDRs.dataTable.page !== undefined){
 			ModuleExtendedCDRs.dataTable.page.len(ModuleExtendedCDRs.calculatePageLength()).draw();
@@ -620,6 +592,7 @@ const ModuleExtendedCDRs = {
 		ModuleExtendedCDRs.updateSettings();
 	},
 	updateSettings(){
+		ModuleExtendedCDRs.tablesInitialized = false;
 		let currentVariantId = $('#currentVariantId').val();
 		let reportNameID = $('#currentReportNameID').val();
 		let settings = {};
@@ -642,10 +615,15 @@ const ModuleExtendedCDRs = {
 			ModuleExtendedCDRs.$globalSearch.val(settings.globalSearch)
 		}
 
+		// Temporarily disable onChange to avoid multiple applyFilter calls
+		$('#additionalFilter').dropdown('setting', 'onChange', function() {});
 		$('#additionalFilter').dropdown('clear');
 		if(settings.additionalFilter !== undefined){
 			$('#additionalFilter').dropdown('set selected', settings.additionalFilter.split(' '));
 		}
+		// Re-enable onChange
+		$('#additionalFilter').dropdown('setting', 'onChange', ModuleExtendedCDRs.applyFilter);
+
 		if(settings.typeCall !== undefined){
 			$('#typeCall.menu a.item').tab('change tab', settings.typeCall)
 		}else{
@@ -707,7 +685,7 @@ const ModuleExtendedCDRs = {
 				<td class="right aligned">			
 				</td>
 				<td class="right aligned">${record.waitTime}</td>
-				<td class="right aligned" style="padding-right: 3">
+				<td class="right aligned" style="padding-right: 3px">
 				  <div class="ui horizontal list" style="width: 100%; display: flex; align-items: center;">
 					<div class="item">
 					  <i class="ui icon play"></i>
@@ -932,9 +910,73 @@ const ModuleExtendedCDRs = {
 	applyFilter() {
 		const text  = ModuleExtendedCDRs.getSearchText();
 		listenedIDs = [];
-		ModuleExtendedCDRs.dataTable.search(text).draw();
-		ModuleExtendedCDRs.$outgoingEmployeeCalls.DataTable().search(text).draw();
+		
+		// Enable data loading for tables
+		ModuleExtendedCDRs.tablesInitialized = true;
+		let reportName = $('#currentReportNameID').val();
+		if(reportName === ModuleExtendedCDRs.tableInitDataCallDetails.id){
+			if(ModuleExtendedCDRs.tableInitDataCallDetails.wasInit === false){
+				ModuleExtendedCDRs.$cdrTable.dataTable(ModuleExtendedCDRs.tableInitDataCallDetails.data);
+				ModuleExtendedCDRs.tableInitDataCallDetails.wasInit = true;
 
+				ModuleExtendedCDRs.dataTable = ModuleExtendedCDRs.$cdrTable.DataTable();
+				ModuleExtendedCDRs.dataTable.on('draw', () => {
+					ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
+				});
+				ModuleExtendedCDRs.$cdrTable.on('click', 'tr.negative', (e) => {
+					let ids = $(e.target).attr('data-ids');
+					if (ids !== undefined && ids !== '') {
+						window.location = `${globalRootUrl}system-diagnostic/index/?filename=asterisk/verbose&filter=${ids}`;
+					}
+				});
+				// Add event listener for opening and closing details
+				ModuleExtendedCDRs.$cdrTable.on('click', 'tr.detailed', (e) => {
+					let ids = $(e.target).attr('data-ids');
+					if (ids !== undefined && ids !== '') {
+						window.location = `${globalRootUrl}system-diagnostic/index/?filename=asterisk/verbose&filter=${ids}`;
+						return;
+					}
+					const tr = $(e.target).closest('tr');
+					const row = ModuleExtendedCDRs.dataTable.row(tr);
+					if(row.length === 0){
+						return;
+					}
+					if (tr.hasClass('shown')) {
+						// This row is already open - close it
+						$('tr[data-row-id="'+tr.attr('id')+'-detailed"').remove();
+						tr.removeClass('shown');
+					} else {
+						// Open this row
+						tr.after(ModuleExtendedCDRs.showRecords(row.data() , tr.attr('id')));
+						tr.addClass('shown');
+						$('tr[data-row-id="'+tr.attr('id')+'-detailed"').each((index, playerRow) => {
+							const id = $(playerRow).attr('id');
+							return new CDRPlayer(id);
+						});
+						Extensions.updatePhonesRepresent('need-update');
+
+						listenedIDs.forEach(function(id) {
+							let element = $(`[id="${id}"]`);
+							if (element.length) {
+								element.removeClass('warning').addClass('positive');
+							}
+							element = $(`[data-row-id="${id}"]`);
+							if (element.length) {
+								element.removeClass('warning').addClass('positive');
+							}
+						});
+					}
+				});
+
+			}
+			ModuleExtendedCDRs.dataTable.search(text).draw();
+		}else if(reportName === ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.id){
+			if(ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.wasInit === false) {
+				ModuleExtendedCDRs.$outgoingEmployeeCalls.dataTable(ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.data);
+				ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.wasInit = true;
+			}
+			ModuleExtendedCDRs.$outgoingEmployeeCalls.DataTable().search(text).draw();
+		}
 		ModuleExtendedCDRs.$globalSearch.closest('div').addClass('loading');
 	},
 
@@ -1118,298 +1160,6 @@ const ModuleExtendedCDRs = {
 		let tableName    = $(choice).closest('table').attr('id').replace('-table', '');
 		if (currentRowId !== undefined && tableName !== undefined) {
 			window[className].sendChangesToServer(tableName, currentRowId);
-		}
-	},
-
-	/**
-	 * Add new Table.
-	 */
-	initTable(tableName, options) {
-		let columns = [];
-		let columnsArray4Sort = []
-		for (let colName in options['cols']) {
-			columns.push( {data: colName});
-			columnsArray4Sort.push(colName);
-		}
-		$('#' + tableName).DataTable( {
-			ajax: {
-				url: idUrl + options.ajaxUrl + '?table=' +tableName.replace('-table', ''),
-				dataSrc: 'data'
-			},
-			columns: columns,
-			paging: true,
-			sDom: 'rtip',
-			deferRender: true,
-			pageLength: 17,
-			infoCallback( settings, start, end, max, total, pre ) {
-				return '';
-			},
-			language: SemanticLocalization.dataTableLocalisation,
-			ordering: false,
-			/**
-			 * Builder row presentation
-			 * @param row
-			 * @param data
-			 */
-			createdRow(row, data) {
-				let cols    = $('td', row);
-				let headers = $('#'+ tableName + ' thead tr th');
-				for (let key in data) {
-					let index = columnsArray4Sort.indexOf(key);
-					if(key === 'rowIcon'){
-						cols.eq(index).html('<i class="ui ' + data[key] + ' circle icon"></i>');
-					}else if(key === 'delButton'){
-						let templateDeleteButton = '<div class="ui small basic icon buttons action-buttons">' +
-							'<a href="' + window[className].deleteRecordAJAXUrl + '/' +
-							data.id + '" data-value = "' + data.DT_RowId + '"' +
-							' class="ui button delete two-steps-delete popuped" data-content="' + globalTranslate.bt_ToolTipDelete + '">' +
-							'<i class="icon trash red"></i></a></div>';
-						cols.eq(index).html(templateDeleteButton);
-					}else if(key === 'priority'){
-						cols.eq(index).addClass('dragHandle')
-						cols.eq(index).html('<i class="ui sort circle icon"></i>');
-						// Приоритет устанавливаем для строки.
-						$(row).attr('m-priority', data[key]);
-					}else{
-						let template = '<div class="ui transparent fluid input inline-edit">' +
-							'<input colName="'+key+'" class="'+inputClassName+'" type="text" data-value="'+data[key] + '" value="' + data[key] + '"></div>';
-						$('td', row).eq(index).html(template);
-					}
-					if(options['cols'][key] === undefined){
-						continue;
-					}
-					let additionalClass = options['cols'][key]['class'];
-					if(additionalClass !== undefined && additionalClass !== ''){
-						headers.eq(index).addClass(additionalClass);
-					}
-					let header = options['cols'][key]['header'];
-					if(header !== undefined && header !== ''){
-						headers.eq(index).html(header);
-					}
-
-					let selectMetaData = options['cols'][key]['select'];
-					if(selectMetaData !== undefined){
-						let newTemplate = $('#template-select').html().replace('PARAM', data[key]);
-						let template = '<input class="'+inputClassName+'" colName="'+key+'" selectType="'+selectMetaData+'" style="display: none;" type="text" data-value="'+data[key] + '" value="' + data[key] + '"></div>';
-						cols.eq(index).html(newTemplate + template);
-					}
-				}
-			},
-			/**
-			 * Draw event - fired once the table has completed a draw.
-			 */
-			drawCallback(settings) {
-				window[className].drowSelectGroup(settings.sTableId);
-			},
-		} );
-
-		let body = $('body');
-		// Клик по полю. Вход для редактирования значения.
-		body.on('focusin', '.'+inputClassName, function (e) {
-			$(e.target).transition('glow');
-			$(e.target).closest('div').removeClass('transparent').addClass('changed-field');
-			$(e.target).attr('readonly', false);
-		})
-		// Отправка формы на сервер по Enter или Tab
-		$(document).on('keydown', function (e) {
-			let keyCode = e.keyCode || e.which;
-			if (keyCode === 13 || keyCode === 9 && $(':focus').hasClass('mikopbx-module-input')) {
-				window[className].endEditInput();
-			}
-		});
-
-		body.on('click', 'a.delete', function (e) {
-			e.preventDefault();
-			let currentRowId = $(e.target).closest('tr').attr('id');
-			let tableName    = $(e.target).closest('table').attr('id').replace('-table', '');
-			window[className].deleteRow(tableName, currentRowId);
-		}); // Добавление новой строки
-
-		// Отправка формы на сервер по уходу с поля ввода
-		body.on('focusout', '.'+inputClassName, window[className].endEditInput);
-
-		// Кнопка "Добавить новую запись"
-		$('[id-table = "'+tableName+'"]').on('click', window[className].addNewRow);
-	},
-
-	/**
-	 * Перемещение строки, изменение приоритета.
-	 */
-	cbOnDrop(table, row) {
-		let priorityWasChanged = false;
-		const priorityData = {};
-		$(table).find('tr').each((index, obj) => {
-			const ruleId = $(obj).attr('id');
-			const oldPriority = parseInt($(obj).attr('m-priority'), 10);
-			const newPriority = obj.rowIndex;
-			if (!isNaN( ruleId ) && oldPriority !== newPriority) {
-				priorityWasChanged = true;
-				priorityData[ruleId] = newPriority;
-			}
-		});
-		if (priorityWasChanged) {
-			$.api({
-				on: 'now',
-				url: `${globalRootUrl}${idUrl}/changePriority?table=`+$(table).attr('id').replace('-table', ''),
-				method: 'POST',
-				data: priorityData,
-			});
-		}
-	},
-
-	/**
-	 * Окончание редактирования поля ввода.
-	 * Не относится к select.
-	 * @param e
-	 */
-	endEditInput(e){
-		let $el = $('.changed-field').closest('tr');
-		$el.each(function (index, obj) {
-			let currentRowId = $(obj).attr('id');
-			let tableName    = $(obj).closest('table').attr('id').replace('-table', '');
-			if (currentRowId !== undefined && tableName !== undefined) {
-				window[className].sendChangesToServer(tableName, currentRowId);
-			}
-		});
-	},
-
-	/**
-	 * Добавление новой строки в таблицу.
-	 * @param e
-	 */
-	addNewRow(e){
-		let idTable = $(e.target).attr('id-table');
-		let table   = $('#'+idTable);
-		e.preventDefault();
-		table.find('.dataTables_empty').remove();
-		// Отправим на запись все что не записано еще
-		let $el = table.find('.changed-field').closest('tr');
-		$el.each(function (index, obj) {
-			let currentRowId = $(obj).attr('id');
-			if (currentRowId !== undefined) {
-				window[className].sendChangesToServer(currentRowId);
-			}
-		});
-		let id = "new"+Math.floor(Math.random() * Math.floor(500));
-		let rowTemplate = '<tr id="'+id+'" role="row" class="even">'+table.find('tr#TEMPLATE').html().replace('TEMPLATE', id)+'</tr>';
-		table.find('tbody > tr:first').before(rowTemplate);
-		window[className].drowSelectGroup(idTable);
-	},
-
-	/**
-	 * Обновление select элементов.
-	 * @param tableId
-	 */
-	drowSelectGroup(tableId) {
-		$('#' + tableId).find('tr#TEMPLATE').hide();
-		let selestGroup = $('.select-group');
-		selestGroup.each((index, obj) => {
-			let selectType = $(obj).closest('td').find('input').attr('selectType');
-			$(obj).dropdown({
-				values: window[className].makeDropdownList(selectType, $(obj).attr('data-value')),
-			});
-		});
-		selestGroup.dropdown({
-			onChange: window[className].changeGroupInList,
-		});
-
-		$('#' + tableId).tableDnD({
-			onDrop: window[className].cbOnDrop,
-			onDragClass: 'hoveringRow',
-			dragHandle: '.dragHandle',
-		});
-	},
-
-	/**
-	 * Удаление строки
-	 * @param tableName
-	 * @param id - record id
-	 */
-	deleteRow(tableName, id) {
-		let table = $('#'+ tableName+'-table');
-		if (id.substr(0,3) === 'new') {
-			table.find('tr#'+id).remove();
-			return;
-		}
-		$.api({
-			url: window[className].deleteRecordAJAXUrl+'?id='+id+'&table='+tableName,
-			on: 'now',
-			onSuccess(response) {
-				if (response.success) {
-					table.find('tr#'+id).remove();
-					if (table.find('tbody > tr').length === 0) {
-						table.find('tbody').append('<tr class="odd"></tr>');
-					}
-				}
-			}
-		});
-	},
-
-	/**
-	 * Отправка данных на сервер при измении
-	 */
-	sendChangesToServer(tableName, recordId) {
-		let data = { 'pbx-table-id': tableName, 'pbx-row-id':  recordId};
-		let notEmpty = false;
-		$("tr#"+recordId + ' .' + inputClassName).each(function (index, obj) {
-			let colName = $(obj).attr('colName');
-			if(colName !== undefined){
-				data[$(obj).attr('colName')] = $(obj).val();
-				if($(obj).val() !== ''){
-					notEmpty = true;
-				}
-			}
-		});
-
-		if(notEmpty === false){
-			return;
-		}
-		$("tr#"+recordId+" .user.circle").removeClass('user circle').addClass('spinner loading');
-		$.api({
-			url: window[className].saveTableAJAXUrl,
-			on: 'now',
-			method: 'POST',
-			data: data,
-			successTest(response) {
-				return response !== undefined && Object.keys(response).length > 0 && response.success === true;
-			},
-			onSuccess(response) {
-				if (response.data !== undefined) {
-					let rowId = response.data['pbx-row-id'];
-					let table = $('#'+response.data['pbx-table-id']+'-table');
-					table.find("tr#" + rowId + " input").attr('readonly', true);
-					table.find("tr#" + rowId + " div").removeClass('changed-field loading').addClass('transparent');
-					table.find("tr#" + rowId + " .spinner.loading").addClass('user circle').removeClass('spinner loading');
-
-					if (rowId !== response.data['newId']){
-						$(`tr#${rowId}`).attr('id', response.data['newId']);
-					}
-				}
-			},
-			onFailure(response) {
-				if (response.message !== undefined) {
-					UserMessage.showMultiString(response.message);
-				}
-				$("tr#" + recordId + " .spinner.loading").addClass('user circle').removeClass('spinner loading');
-			},
-			onError(errorMessage, element, xhr) {
-				if (xhr.status === 403) {
-					window.location = globalRootUrl + "session/index";
-				}
-			}
-		});
-	},
-
-	/**
-	 * Change some form elements classes depends of module status
-	 */
-	checkStatusToggle() {
-		if (window[className].$statusToggle.checkbox('is checked')) {
-			window[className].$disabilityFields.removeClass('disabled');
-			window[className].$moduleStatus.show();
-		} else {
-			window[className].$disabilityFields.addClass('disabled');
-			window[className].$moduleStatus.hide();
 		}
 	},
 

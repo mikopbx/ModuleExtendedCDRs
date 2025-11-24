@@ -9,5 +9,10 @@
   "wiki_links": {
     "ru": {"https://wiki.mikopbx.com/module-extended-c-d-rs": "https://docs.mikopbx.com/mikopbx/modules/miko/module-extended-cdr"},
     "en": {"https://wiki.mikopbx.com/module-extended-c-d-rs": "https://docs.mikopbx.com/mikopbx/v/english/modules/module-extended-cdr"}
+  },
+  "release_settings": {
+    "publish_release": true,
+    "changelog_enabled": true,
+    "create_github_release": true
   }
 }

@@ -100,14 +100,14 @@
     <br>
     <div class="ui three column grid">
         <div class="ui row" style="padding-bottom:3px">
-             <div class="ui four wide column">
-                 <div class="ui fluid  input">
-                      <input type="text" data-def-value="{{dateRangeSelector}}" id="date-range-selector" class="form-control">
+             <div class="ui four wide column" >
+                 <div class="ui fluid input">
+                      <input style="height: 40px;" type="text" data-def-value="{{dateRangeSelector}}" id="date-range-selector" class="form-control">
                  </div>
              </div>
              <div class="ui column" style="display: inline-block; width: auto;">
                  <div id="typeCall" class="ui menu" style="margin: 0;">
-                    <a class="item active" data-tab="all-calls">Все <b></b> </a>
+                    <a class="item active" data-tab="all-calls" style="padding-top: 0; padding-bottom: 0;">Все <b></b> </a>
                     <a class="item" data-tab="incoming-calls" style="padding-top: 0; padding-bottom: 0;">
                         <i class="custom-incoming-icon"></i>
                         {{ t._('repModuleExtendedCDRs_TitleIncomingCals') }} <b></b>
@@ -122,13 +122,13 @@
                     </a>
                  </div>
              </div>
-             <div class="ui two wide column" >
+             <div class="ui two wide column" style="height: 40px;">
                  <div class="ui action input">
-                    <input type="search" id="globalsearch" placeholder="{{ t._('repModuleExtendedCDRs_FindCallsPlaceholder') }}" aria-controls="KeysTable">
-                    <button id="createExcelButton" class="ui icon basic button"> <i class="green file excel outline icon"></i></button>
-                    <button id="createPdfButton" class="ui icon basic button"> <i class="red file pdf outline icon"></i></button>
-                    <button id="downloadRecords" class="ui icon basic button"> <i class="download icon"></i></button>
-                    <button type="button" id="saveSearchSettings" class="ui icon basic button">
+                    <input style="height: 40px;" type="search" id="globalsearch" placeholder="{{ t._('repModuleExtendedCDRs_FindCallsPlaceholder') }}" aria-controls="KeysTable">
+                    <button style="height: 40px;" id="createExcelButton" class="ui icon basic button"> <i class="green file excel outline icon"></i></button>
+                    <button style="height: 40px;" id="createPdfButton" class="ui icon basic button"> <i class="red file pdf outline icon"></i></button>
+                    <button style="height: 40px;" id="downloadRecords" class="ui icon basic button"> <i class="download icon"></i></button>
+                    <button style="height: 40px;" type="button" id="saveSearchSettings" class="ui icon basic button">
                          <i class="blue save outline icon"></i>
                     </button>
                  </div>
@@ -170,43 +170,51 @@
              </div>
          </div>
      </div>
-     <table id="OutgoingEmployeeCalls-table" data-report-name="OutgoingEmployeeCalls" class="ui small very compact single line unstackable celled striped table ">
-         <thead>
-         <tr>
-             <th class="three">{{ t._('repModuleExtendedCDRs_outgoingEmployeeCalls_callerId') }}</th>
-             <th class="three wide">{{ t._('repModuleExtendedCDRs_outgoingEmployeeCalls_number') }}</th>
-             <th class="one wide">{{ t._('repModuleExtendedCDRs_outgoingEmployeeCalls_billHourCalls') }}</th>
-             <th class="one wide">{{ t._('repModuleExtendedCDRs_outgoingEmployeeCalls_billMinCalls') }}</th>
-             <th class="one wide">{{ t._('repModuleExtendedCDRs_outgoingEmployeeCalls_billSecCalls') }}</th>
-             <th class="one wide">{{ t._('repModuleExtendedCDRs_outgoingEmployeeCalls_countCalls') }}</th>
-         </tr>
-         </thead>
-         <tbody>
-         <tr>
-             <td colspan="5" class="dataTables_empty">{{ t._('dt_TableIsEmpty') }}</td>
-         </tr>
-         </tbody>
-     </table>
+
+     <div id="OutgoingEmployeeCalls-table-div">
+         <table id="OutgoingEmployeeCalls-table" data-report-name="OutgoingEmployeeCalls" class="ui small very compact single line unstackable celled striped table ">
+             <thead>
+             <tr>
+                 <th class="three">{{ t._('repModuleExtendedCDRs_outgoingEmployeeCalls_callerId') }}</th>
+                 <th class="three wide">{{ t._('repModuleExtendedCDRs_outgoingEmployeeCalls_number') }}</th>
+                 <th class="one wide">{{ t._('repModuleExtendedCDRs_outgoingEmployeeCalls_billHourCalls') }}</th>
+                 <th class="one wide">{{ t._('repModuleExtendedCDRs_outgoingEmployeeCalls_billMinCalls') }}</th>
+                 <th class="one wide">{{ t._('repModuleExtendedCDRs_outgoingEmployeeCalls_billSecCalls') }}</th>
+                 <th class="one wide">{{ t._('repModuleExtendedCDRs_outgoingEmployeeCalls_countCalls') }}</th>
+             </tr>
+             </thead>
+             <tbody>
+             <tr>
+                 <td colspan="5" class="dataTables_empty">{{ t._('dt_TableIsEmpty') }}</td>
+             </tr>
+             </tbody>
+         </table>
+     </div>
+
      <br>
-     <table id="CallDetails-table" data-report-name="CallDetails" class="ui small very compact single line unstackable table ">
-         <thead>
-         <tr>
-             <th class="one wide"></th>
-             <th class="two wide right aligned">{{ t._('cdr_ColumnDate') }}</th>
-             <th class="right aligned">{{ t._('cdr_ColumnFrom') }}</th>
-             <th class="">{{ t._('cdr_ColumnTo') }}</th>
-             <th class="one wide">{{ t._('repModuleExtendedCDRs_cdr_ColumnLine') }}</th>
-             <th class="one wide">{{ t._('repModuleExtendedCDRs_cdr_ColumnWaitTime') }}</th>
-             <th class="three wide right aligned">{{ t._('cdr_ColumnDuration') }}</th>
-             <th class="one wide right aligned">{{ t._('repModuleExtendedCDRs_cdr_ColumnCallState') }}</th>
-         </tr>
-         </thead>
-         <tbody>
-         <tr>
-             <td colspan="5" class="dataTables_empty">{{ t._('dt_TableIsEmpty') }}</td>
-         </tr>
-         </tbody>
-     </table>
+     <div id="CallDetails-table-div">
+
+         <table id="CallDetails-table" data-report-name="CallDetails" class="ui small very compact single line unstackable table ">
+             <thead>
+             <tr>
+                 <th class="one wide"></th>
+                 <th class="two wide right aligned">{{ t._('cdr_ColumnDate') }}</th>
+                 <th class="right aligned">{{ t._('cdr_ColumnFrom') }}</th>
+                 <th class="">{{ t._('cdr_ColumnTo') }}</th>
+                 <th class="one wide">{{ t._('repModuleExtendedCDRs_cdr_ColumnLine') }}</th>
+                 <th class="one wide">{{ t._('repModuleExtendedCDRs_cdr_ColumnWaitTime') }}</th>
+                 <th class="three wide right aligned">{{ t._('cdr_ColumnDuration') }}</th>
+                 <th class="one wide right aligned">{{ t._('repModuleExtendedCDRs_cdr_ColumnCallState') }}</th>
+             </tr>
+             </thead>
+             <tbody>
+             <tr>
+                 <td colspan="5" class="dataTables_empty">{{ t._('dt_TableIsEmpty') }}</td>
+             </tr>
+             </tbody>
+         </table>
+     </div>
+
 </form>
  <div class="ui bottom aattached active tab" data-tab="all-calls"></div>
  <div class="ui bottom aattached active tab" data-tab="incoming-calls"></div>
