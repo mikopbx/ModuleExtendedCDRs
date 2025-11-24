@@ -391,6 +391,7 @@ var ModuleExtendedCDRs = {
       form.hide();
       $(e.target).parents('div.six.wide.column').children('h4').show();
       $(e.target).parents('div.six.wide.column').children('div').show();
+      ModuleExtendedCDRs.tablesInitialized = false;
       ModuleExtendedCDRs.changeReportVariant(reportNameID, variantId);
       ModuleExtendedCDRs.saveSearchSettings();
       ModuleExtendedCDRs.applyFilter();
@@ -485,6 +486,7 @@ var ModuleExtendedCDRs = {
     $("div.column h4").on('click', function (e) {
       var reportId = $(this).attr('id');
       $("h1.header i.th.icon").popup('hide');
+      ModuleExtendedCDRs.tablesInitialized = false;
       ModuleExtendedCDRs.changeReportVariant(reportId);
       ModuleExtendedCDRs.applyFilter();
     });
@@ -492,6 +494,7 @@ var ModuleExtendedCDRs = {
       var reportId = $(e.target).closest('a').attr('data-report-id');
       var variantId = $(e.target).closest('a').attr('data-variant-id');
       $("h1.header i.th.icon").popup('hide');
+      ModuleExtendedCDRs.tablesInitialized = false;
       ModuleExtendedCDRs.changeReportVariant(reportId, variantId);
       ModuleExtendedCDRs.applyFilter();
     });
@@ -542,7 +545,7 @@ var ModuleExtendedCDRs = {
     ModuleExtendedCDRs.updateSettings();
   },
   updateSettings: function updateSettings() {
-    ModuleExtendedCDRs.tablesInitialized = true;
+    ModuleExtendedCDRs.tablesInitialized = false;
     var currentVariantId = $('#currentVariantId').val();
     var reportNameID = $('#currentReportNameID').val();
     var settings = {};
@@ -564,10 +567,15 @@ var ModuleExtendedCDRs = {
     if (settings.globalSearch !== undefined) {
       ModuleExtendedCDRs.$globalSearch.val(settings.globalSearch);
     }
+
+    // Temporarily disable onChange to avoid multiple applyFilter calls
+    $('#additionalFilter').dropdown('setting', 'onChange', function () {});
     $('#additionalFilter').dropdown('clear');
     if (settings.additionalFilter !== undefined) {
       $('#additionalFilter').dropdown('set selected', settings.additionalFilter.split(' '));
     }
+    // Re-enable onChange
+    $('#additionalFilter').dropdown('setting', 'onChange', ModuleExtendedCDRs.applyFilter);
     if (settings.typeCall !== undefined) {
       $('#typeCall.menu a.item').tab('change tab', settings.typeCall);
     } else {
@@ -797,13 +805,6 @@ var ModuleExtendedCDRs = {
           ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
         });
         ModuleExtendedCDRs.$cdrTable.on('click', 'tr.negative', function (e) {
-          // let filter = $(e.target).attr('data-phone');
-          // if (filter !== undefined && filter !== '') {
-          // 	ModuleExtendedCDRs.$globalSearch.val(filter)
-          // 	ModuleExtendedCDRs.applyFilter();
-          // 	return;
-          // }
-
           var ids = $(e.target).attr('data-ids');
           if (ids !== undefined && ids !== '') {
             window.location = "".concat(globalRootUrl, "system-diagnostic/index/?filename=asterisk/verbose&filter=").concat(ids);
@@ -816,13 +817,6 @@ var ModuleExtendedCDRs = {
             window.location = "".concat(globalRootUrl, "system-diagnostic/index/?filename=asterisk/verbose&filter=").concat(ids);
             return;
           }
-          // let filter = $(e.target).attr('data-phone');
-          // if (filter !== undefined && filter !== '') {
-          // 	ModuleExtendedCDRs.$globalSearch.val(filter)
-          // 	ModuleExtendedCDRs.applyFilter();
-          // 	return;
-          // }
-
           var tr = $(e.target).closest('tr');
           var row = ModuleExtendedCDRs.dataTable.row(tr);
           if (row.length === 0) {
