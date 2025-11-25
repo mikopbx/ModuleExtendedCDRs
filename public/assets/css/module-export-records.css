@@ -74,3 +74,8 @@ td .ui.horizontal.list .track-fill {
     background-size: contain;
     background-repeat: no-repeat;
 }
+
+/* Hide tooltip for CDR player slider */
+.cdr-slider-tooltip {
+    display: none !important;
+}

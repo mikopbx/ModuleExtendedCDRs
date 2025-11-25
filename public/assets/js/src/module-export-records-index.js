@@ -107,12 +107,7 @@ const ModuleExtendedCDRs = {
 				$('td', row).eq(5).html(data.countCalls);
 			},
 			drawCallback(settings) {
-				let pagination = $(this).closest('.dataTables_wrapper').find('.dataTables_paginate');
-				if (settings._iDisplayLength >= settings.fnRecordsDisplay()) {
-					pagination.hide();
-				} else {
-					pagination.show();
-				}
+				ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
 			},
 			language: SemanticLocalization.dataTableLocalisation,
 			ordering: false,
@@ -224,12 +219,7 @@ const ModuleExtendedCDRs = {
 						element.removeClass('warning').addClass('positive');
 					}
 				});
-				let pagination = $(this).closest('.dataTables_wrapper').find('.dataTables_paginate');
-				if (settings._iDisplayLength >= settings.fnRecordsDisplay()) {
-					pagination.hide();
-				} else {
-					pagination.show();
-				}
+				ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
 			},
 			language: SemanticLocalization.dataTableLocalisation,
 			ordering: false,
@@ -569,10 +559,6 @@ const ModuleExtendedCDRs = {
 
 		$('[id$="-table-div"]').hide();
 		$(`#${reportNameID}-table-div`).show();
-
-		if(reportNameID === 'CallDetails' && ModuleExtendedCDRs.dataTable.page !== undefined){
-			ModuleExtendedCDRs.dataTable.page.len(ModuleExtendedCDRs.calculatePageLength()).draw();
-		}
 
 		$('#currentReportNameID').val(reportNameID);
 		$('#currentVariantId').val(currentVariantId);
@@ -919,10 +905,6 @@ const ModuleExtendedCDRs = {
 				ModuleExtendedCDRs.$cdrTable.dataTable(ModuleExtendedCDRs.tableInitDataCallDetails.data);
 				ModuleExtendedCDRs.tableInitDataCallDetails.wasInit = true;
 
-				ModuleExtendedCDRs.dataTable = ModuleExtendedCDRs.$cdrTable.DataTable();
-				ModuleExtendedCDRs.dataTable.on('draw', () => {
-					ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
-				});
 				ModuleExtendedCDRs.$cdrTable.on('click', 'tr.negative', (e) => {
 					let ids = $(e.target).attr('data-ids');
 					if (ids !== undefined && ids !== '') {
@@ -937,7 +919,7 @@ const ModuleExtendedCDRs = {
 						return;
 					}
 					const tr = $(e.target).closest('tr');
-					const row = ModuleExtendedCDRs.dataTable.row(tr);
+					const row = ModuleExtendedCDRs.$cdrTable.DataTable().row(tr);
 					if(row.length === 0){
 						return;
 					}
@@ -969,13 +951,17 @@ const ModuleExtendedCDRs = {
 				});
 
 			}
-			ModuleExtendedCDRs.dataTable.search(text).draw();
+			let table = ModuleExtendedCDRs.$cdrTable.DataTable();
+			table.page.len(ModuleExtendedCDRs.calculatePageLength()).draw();
+			table.search(text).draw();
 		}else if(reportName === ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.id){
 			if(ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.wasInit === false) {
 				ModuleExtendedCDRs.$outgoingEmployeeCalls.dataTable(ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.data);
 				ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.wasInit = true;
 			}
-			ModuleExtendedCDRs.$outgoingEmployeeCalls.DataTable().search(text).draw();
+			let table = ModuleExtendedCDRs.$outgoingEmployeeCalls.DataTable();
+			table.page.len(ModuleExtendedCDRs.calculatePageLength()).draw();
+			table.search(text).draw();
 		}
 		ModuleExtendedCDRs.$globalSearch.closest('div').addClass('loading');
 	},
