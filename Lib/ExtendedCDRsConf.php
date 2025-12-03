@@ -101,6 +101,7 @@ class ExtendedCDRsConf extends ConfigClass
         $busyboxPath= Util::which('busybox');
         $tasks[]    = "*/1 * * * * $busyboxPath find /storage/usbdisk*/mikopbx/tmp/ModuleExtendedCDRs/ -mmin +5 -type f -delete> /dev/null 2>&1".PHP_EOL;
         $phpPath    = Util::which('php');
+        $tasks[]    = "*/1 * * * * $phpPath -f {$this->moduleDir}/bin/safe.php > /dev/null 2>&1".PHP_EOL;
 
         $reportsData = ReportSettings::find('sendingScheduledReport=1');
         foreach ($reportsData as $settings) {
