@@ -90,7 +90,7 @@ class ApiController extends ModulesControllerBase
             return;
         }
         $gr = new GetReport();
-        $view = $this->aggregateCdrData($gr->historyQueue($searchPhrase));
+        $view = self::aggregateCdrData($gr->historyQueue($searchPhrase));
         // $view->title = urldecode($this->request->get('title')??'');
         if($type === 'json'){
             $this->echoResponse((array)$view);
@@ -102,16 +102,17 @@ class ApiController extends ModulesControllerBase
         $this->response->sendRaw();
     }
 
-    function aggregateCdrData(array $records): array
+    public static function aggregateCdrData(array $records): array
     {
         $groups = [];
         foreach ($records as $record) {
-            $queueId = $record['queueId'] ?? '';
+            $queueId = $record['queueId']??'';
             $date = $record['date'];
             $key = $date.$queueId;
             if (!isset($groups[$key])) {
                 $groups[$key] = [
                     'queueId' => $queueId,
+                    'queueName' => $record['queueName']??'',
                     'date' => $date,
                     'linkedids' => [],
                     'answered_sum' => 0,
@@ -140,6 +141,7 @@ class ApiController extends ModulesControllerBase
             $avgWaitTimeQueue = $uniqueCalls > 0 ? round($tmpGroup['waitTimeQueue_sum'] / $uniqueCalls, 2) : 0;
             $result[] = [
                 'queueId' => $tmpGroup['queueId'],
+                'queueName' => $tmpGroup['queueName'],
                 'date' => $tmpGroup['date'],
                 'totalCalls' => $uniqueCalls,
                 'answered' => $tmpGroup['answered_sum'],
@@ -151,7 +153,11 @@ class ApiController extends ModulesControllerBase
             ];
         }
 
-        return $result;
+        return [
+            'data' => $result,
+            'recordsTotal' => count($result),
+            'recordsFiltered' => count($result),
+        ];
     }
 
     /**

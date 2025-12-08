@@ -52,14 +52,13 @@ class GetReport
         $parameters = [];
         [$start, $end, $numbers, $additionalNumbers] = $this->prepareConditionsForSearchPhrasesQueue($searchPhrase, $parameters);
 
-//        $parameters['test'] = $searchPhrase;
         $parameters['order'] = ['date desc'];
-        if (!empty($limit)) {
-            $parameters['limit'] = $limit;
-        }
-        if (!empty($offset)) {
-            $parameters['offset'] = $offset;
-        }
+//        if (!empty($limit)) {
+//            $parameters['limit'] = $limit;
+//        }
+//        if (!empty($offset)) {
+//            $parameters['offset'] = $offset;
+//        }
         return ConnectorDB::invoke('getCdrQueue', [$parameters]);
     }
 

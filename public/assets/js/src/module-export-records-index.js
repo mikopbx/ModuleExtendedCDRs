@@ -28,6 +28,7 @@ const ModuleExtendedCDRs = {
 	 */
 	$cdrTable: $('#CallDetails-table'),
 	$outgoingEmployeeCalls: $('#OutgoingEmployeeCalls-table'),
+	$cdrQueueTable: $('#CdrQueue-table'),
 
 	/**
 	 * The global search input element.
@@ -88,7 +89,7 @@ const ModuleExtendedCDRs = {
 					}
 				});
 			},
-			paging: true,
+			paging: false,
 			sDom: 'rtip',
 			deferRender: true,
 			// pageLength: ModuleExtendedCDRs.calculatePageLength(),
@@ -219,6 +220,65 @@ const ModuleExtendedCDRs = {
 						element.removeClass('warning').addClass('positive');
 					}
 				});
+				ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
+			},
+			language: SemanticLocalization.dataTableLocalisation,
+			ordering: false,
+		}
+	},
+	tableInitDataCdrQueue: {
+		wasInit: false,
+		id: 'CdrQueue',
+		data: {
+			search: {
+				search: '',
+			},
+			serverSide: true,
+			processing: true,
+			info: false,
+			columnDefs: [
+				{ defaultContent: "",  targets: "_all"},
+			],
+			ajax: function(data, callback, settings) {
+				if (data.search.value === '' ||
+					!ModuleExtendedCDRs.tablesInitialized || $('#currentReportNameID').val() !== 'CdrQueue') {
+					// Skip initial load
+					callback({ data: [], recordsTotal: 0, recordsFiltered: 0 });
+					return;
+				}
+				$.ajax({
+					url: `${globalRootUrl}${idUrl}/getCdrQueue`,
+					type: 'POST',
+					data: data,
+					success: function(json) {
+						callback(json);
+					}
+				});
+			},
+			paging: false,
+			sDom: 'rtip',
+			deferRender: true,
+			// pageLength: ModuleExtendedCDRs.calculatePageLength(),
+
+			/**
+			 * Constructs the CDR Queue row.
+			 * @param {HTMLElement} row - The row element.
+			 * @param {Array} data - The row data.
+			 */
+			createdRow(row, data) {
+				$(row).attr('data-queue', data.queueId);
+				$(row).attr('data-date', data.date);
+				$('td', row).eq(0).html(data.date);
+				$('td', row).eq(1).html(data.queueName || '-').addClass('center aligned');
+				$('td', row).eq(2).html(data.totalCalls).addClass('center aligned');
+				$('td', row).eq(3).html(data.answered).addClass('center aligned');
+				$('td', row).eq(4).html(data.missed).addClass('center aligned');
+				$('td', row).eq(5).html(data.answeredQueue).addClass('center aligned');
+				$('td', row).eq(6).html(data.avgWaitTime).addClass('center aligned');
+				$('td', row).eq(7).html(data.avgMissed + '%').addClass('center aligned');
+				$('td', row).eq(8).html(data.avgWaitTimeQueue).addClass('center aligned');
+			},
+			drawCallback(settings) {
 				ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
 			},
 			language: SemanticLocalization.dataTableLocalisation,
@@ -960,6 +1020,14 @@ const ModuleExtendedCDRs = {
 				ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.wasInit = true;
 			}
 			let table = ModuleExtendedCDRs.$outgoingEmployeeCalls.DataTable();
+			table.page.len(ModuleExtendedCDRs.calculatePageLength()).draw();
+			table.search(text).draw();
+		}else if(reportName === ModuleExtendedCDRs.tableInitDataCdrQueue.id){
+			if(ModuleExtendedCDRs.tableInitDataCdrQueue.wasInit === false) {
+				ModuleExtendedCDRs.$cdrQueueTable.dataTable(ModuleExtendedCDRs.tableInitDataCdrQueue.data);
+				ModuleExtendedCDRs.tableInitDataCdrQueue.wasInit = true;
+			}
+			let table = ModuleExtendedCDRs.$cdrQueueTable.DataTable();
 			table.page.len(ModuleExtendedCDRs.calculatePageLength()).draw();
 			table.search(text).draw();
 		}

@@ -21,6 +21,7 @@ use Modules\ModuleExtendedCDRs\bin\ConnectorDB;
 use Modules\ModuleExtendedCDRs\Lib\CacheManager;
 use Modules\ModuleExtendedCDRs\Lib\GetReport;
 use Modules\ModuleExtendedCDRs\Lib\HistoryParser;
+use Modules\ModuleExtendedCDRs\Lib\RestAPI\Controllers\ApiController;
 use Modules\ModuleExtendedCDRs\Models\CallHistory;
 use Modules\ModuleExtendedCDRs\Models\ExportRules;
 use Modules\ModuleExtendedCDRs\Models\ModuleExtendedCDRs;
@@ -214,6 +215,12 @@ class ModuleExtendedCDRsController extends BaseController
                 'minBillSec' => 0,
                 'isMain' => 0,
                 'variantName' => Util::translate('repModuleExtendedCDRs_'.ReportSettings::REPORT_OUTGOING_EMPLOYEE_CALLS)
+            ],
+            ReportSettings::REPORT_QUEUES => [
+                'searchText' => '{}',
+                'minBillSec' => 0,
+                'isMain' => 0,
+                'variantName' => Util::translate('repModuleExtendedCDRs_'.ReportSettings::REPORT_QUEUES)
             ],
         ];
         $filterVariantReport = [
@@ -587,6 +594,19 @@ class ModuleExtendedCDRsController extends BaseController
         foreach ($view as $key => $value) {
             $this->view->$key = $value;
         }
+    }
+    public function getCdrQueueAction(): void
+    {
+        $this->view->draw = $this->request->get('draw');
+        $searchPhrase     = $this->request->get('search');
+        $length           = is_numeric($this->request->get('length'))?(int)$this->request->get('length'):null;
+
+        $gr = new GetReport();
+        $view = ApiController::aggregateCdrData($gr->historyQueue($searchPhrase['value']??'',  $this->request->get('start'), $length));
+        foreach ($view as $key => $value) {
+            $this->view->$key = $value;
+        }
+        $this->view->length = count($view);
     }
 
     /**

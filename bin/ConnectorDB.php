@@ -19,6 +19,7 @@
 
 namespace Modules\ModuleExtendedCDRs\bin;
 
+use MikoPBX\Common\Models\CallQueues;
 use MikoPBX\Core\System\Util;
 use MikoPBX\Core\Workers\WorkerBase;
 use MikoPBX\Core\System\BeanstalkClient;
@@ -471,6 +472,14 @@ class ConnectorDB extends WorkerBase
         try {
             $res = CallQueuesHistory::find($filter);
             $res_data = $res->toArray();
+
+            $queues = CallQueues::find(['columns'=> 'uniqid,name'])->toArray();
+            $queues = array_column($queues, 'name', 'uniqid');
+            foreach ($res_data as &$rowResult){
+                $rowResult['queueName'] = $queues[$rowResult['queueId']]??'';
+            }
+            unset($rowResult);
+
         } catch (\Throwable $e) {
             $res_data = [];
         }

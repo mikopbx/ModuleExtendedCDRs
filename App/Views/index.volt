@@ -191,6 +191,29 @@
          </table>
      </div>
 
+     <div id="CdrQueue-table-div">
+         <table id="CdrQueue-table" data-report-name="CdrQueue" class="ui small very compact single line unstackable celled striped table ">
+             <thead>
+             <tr>
+                 <th class="one wide">{{ t._('repModuleExtendedCDRs_CdrQueue_Date') }}</th>
+                 <th class="three wide center aligned">{{ t._('repModuleExtendedCDRs_CdrQueue_Queue') }}</th>
+                 <th class="one wide center aligned">{{ t._('repModuleExtendedCDRs_CdrQueue_TotalCalls') }}</th>
+                 <th class="one wide center aligned">{{ t._('repModuleExtendedCDRs_CdrQueue_Answered') }}</th>
+                 <th class="one wide center aligned">{{ t._('repModuleExtendedCDRs_CdrQueue_Missed') }}</th>
+                 <th class="one wide center aligned">{{ t._('repModuleExtendedCDRs_CdrQueue_AnsweredQueue') }}</th>
+                 <th class="one wide center aligned">{{ t._('repModuleExtendedCDRs_CdrQueue_AvgWaitTime') }}</th>
+                 <th class="one wide center aligned">{{ t._('repModuleExtendedCDRs_CdrQueue_AvgMissed') }}</th>
+                 <th class="one wide center aligned">{{ t._('repModuleExtendedCDRs_CdrQueue_AvgWaitTimeQueue') }}</th>
+             </tr>
+             </thead>
+             <tbody>
+             <tr>
+                 <td colspan="9" class="dataTables_empty">{{ t._('dt_TableIsEmpty') }}</td>
+             </tr>
+             </tbody>
+         </table>
+     </div>
+
      <br>
      <div id="CallDetails-table-div">
 

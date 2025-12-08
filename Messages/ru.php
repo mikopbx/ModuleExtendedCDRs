@@ -45,6 +45,16 @@ return [
     'repModuleExtendedCDRs_cdr_cal_ThisMonth' => 'Текущий месяц',
     'repModuleExtendedCDRs_cdr_cal_LastMonth' => 'Прошлый месяц',
 
+    'repModuleExtendedCDRs_CdrQueue_Date'       => 'Дата',
+    'repModuleExtendedCDRs_CdrQueue_Queue'      => 'Очередь',
+    'repModuleExtendedCDRs_CdrQueue_TotalCalls' => 'Всего',
+    'repModuleExtendedCDRs_CdrQueue_Answered'          => 'Отвечены',
+    'repModuleExtendedCDRs_CdrQueue_Missed'            => 'Пропущены',
+    'repModuleExtendedCDRs_CdrQueue_AnsweredQueue'     => 'Отвечены в очереди',
+    'repModuleExtendedCDRs_CdrQueue_AvgWaitTime'   => 'Ср. Ожидание',
+    'repModuleExtendedCDRs_CdrQueue_AvgMissed'   => '% Пропущенных',
+    'repModuleExtendedCDRs_CdrQueue_AvgWaitTimeQueue'   => 'Ср. Ожидание очереди',
+
     'repModuleExtendedCDRs_outgoingEmployeeCalls_callerId'     => 'Сотрудник',
     'repModuleExtendedCDRs_outgoingEmployeeCalls_number'       => 'Внутренний номер',
     'repModuleExtendedCDRs_outgoingEmployeeCalls_billHourCalls'=> 'Часы',
@@ -53,6 +63,7 @@ return [
     'repModuleExtendedCDRs_outgoingEmployeeCalls_countCalls'   => 'Количество',
     'repModuleExtendedCDRs_CallDetails'   => 'Журнал звонков',
     'repModuleExtendedCDRs_OutgoingEmployeeCalls'   => 'Исходящие сотрудников',
+    'repModuleExtendedCDRs_CdrQueue'   => 'Входящие на очередь',
 
 
     'repModuleExtendedCDRs_Form_titleReport'   => 'Наименование',
