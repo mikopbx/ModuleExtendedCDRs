@@ -14,9 +14,8 @@ use MikoPBX\Core\System\Util;
 use MikoPBX\Core\Workers\Cron\WorkerSafeScriptsCore;
 use MikoPBX\Modules\Config\ConfigClass;
 use MikoPBX\PBXCoreREST\Lib\PBXApiResult;
-use Modules\ModuleAmoCrm\Models\ModuleAmoCrm;
-use Modules\ModuleExtendedCDRs\Lib\RestAPI\Controllers\ApiController;
 use Modules\ModuleExtendedCDRs\bin\ConnectorDB;
+use Modules\ModuleExtendedCDRs\Lib\RestAPI\Controllers\ApiController;
 use Modules\ModuleExtendedCDRs\Models\ReportSettings;
 
 class ExtendedCDRsConf extends ConfigClass

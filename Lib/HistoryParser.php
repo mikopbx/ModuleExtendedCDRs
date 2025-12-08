@@ -19,6 +19,8 @@
 
 namespace Modules\ModuleExtendedCDRs\Lib;
 
+use MikoPBX\Common\Models\CallDetailRecordsTmp;
+use MikoPBX\Common\Models\CallQueues;
 use MikoPBX\Common\Models\Extensions;
 use MikoPBX\Common\Providers\CDRDatabaseProvider;
 use MikoPBX\Core\System\BeanstalkClient;
@@ -85,6 +87,19 @@ class HistoryParser
         return $result_data;
     }
 
+    public static function getQueues():array
+    {
+        $queues = CacheManager::getCacheData('ModuleMtsPbx');
+        if(empty($queues)){
+            $queues = [];
+            $queuesData = CallQueues::find(['columns' => 'uniqid,name,extension']);
+            foreach ($queuesData as $queue) {
+                $queues[$queue->extension] = $queue->uniqid;
+            }
+            CacheManager::setCacheData('ModuleMtsPbx', $queues, 120);
+        }
+        return $queues;
+    }
 
     /**
      * Заполнение кэш истории звонков. Кто последний говорил с клиентом.
@@ -126,15 +141,21 @@ class HistoryParser
         $cdrData = self::getCdr($filter);
         $resultRows = [];
         if(count($cdrData)>0){
+            $queues = self::getQueues();
+
             $newOffset = 0;
             $minNewOffset = 0;
             foreach ($cdrData as $cdr){
-                if($minNewOffset === 0 ){
-                    $minNewOffset = (int)$cdr['id'];
-                }else{
-                    $minNewOffset = min((int)$cdr['id'], $minNewOffset);
+                foreach (['id', 'is_app', 'billsec'] as $key){
+                    $cdr[$key] = intval($cdr[$key]);
                 }
-                $newOffset = max((int)$cdr['id'], $newOffset);
+
+                if($minNewOffset === 0 ){
+                    $minNewOffset = $cdr['id'];
+                }else{
+                    $minNewOffset = min($cdr['id'], $minNewOffset);
+                }
+                $newOffset = max($cdr['id'], $newOffset);
                 $cdr['srcIndex'] = ConnectorDB::getPhoneIndex($cdr['src_num']);
                 $cdr['dstIndex'] = ConnectorDB::getPhoneIndex($cdr['dst_num']);
 
@@ -145,15 +166,23 @@ class HistoryParser
                         && stripos( $cdr['dst_chan'], 'pjsip/sip') !== false)){
                         // Автодиалер звонки.
                         $typeCall = CallHistory::CALL_TYPE_OUTGOING;
-                    }elseif($srcInner && ($cdr['is_app'] === '1' || $dstInner)){
+                    }elseif($srcInner && ($cdr['is_app'] === 1 || $dstInner)){
                         $typeCall = CallHistory::CALL_TYPE_INNER;
                     }else{
                         $typeCall = CallHistory::CALL_TYPE_INCOMING;
                     }
-                    $resultRows[$cdr['linkedid']]['typeCall'] = $typeCall;
-                    $resultRows[$cdr['linkedid']]['answered'] = 0;
-                    $resultRows[$cdr['linkedid']]['waitTime'] = '';
+                    $resultRows[$cdr['linkedid']]['typeCall']   = $typeCall;
+                    $resultRows[$cdr['linkedid']]['answered']   = 0;
+                    $resultRows[$cdr['linkedid']]['waitTime']   = '';
+                    $resultRows[$cdr['linkedid']]['firstQueue'] = [];
+                    $resultRows[$cdr['linkedid']]['start']   = strtotime($cdr['start']);
+                    $resultRows[$cdr['linkedid']]['endtime'] = strtotime($cdr['endtime']);
+                    $resultRows[$cdr['linkedid']]['answer']  = strtotime($cdr['answer']);
+                }else{
+                    $resultRows[$cdr['linkedid']]['start']   = min(strtotime($cdr['start']),   $resultRows[$cdr['linkedid']]['start']);
+                    $resultRows[$cdr['linkedid']]['endtime'] = max(strtotime($cdr['endtime']), $resultRows[$cdr['linkedid']]['endtime']);
                 }
+
 
                 $line = $resultRows[$cdr['linkedid']]['line']??'';
                 if(empty($line)){
@@ -161,7 +190,7 @@ class HistoryParser
                             && stripos( $cdr['dst_chan'], 'pjsip/sip') !== false)){
                         // Автодиалер звонки.
                         $line = $cdr['to_account'];
-                    }elseif($srcInner && ($cdr['is_app'] === '1' || $dstInner)){
+                    }elseif($srcInner && ($cdr['is_app'] === 1 || $dstInner)){
                         $line = '';
                     }else{
                         $line = $cdr['from_account'];
@@ -169,7 +198,33 @@ class HistoryParser
                     $resultRows[$cdr['linkedid']]['line']     = $line;
                 }
 
-                if( $cdr['is_app'] !== '1' && $cdr['billsec'] !== '0' ){
+                $firstQueue = &$resultRows[$cdr['linkedid']]['firstQueue'];
+                if(stripos( $cdr['dst_chan'], 'queue:') !== false){
+                    if(empty($firstQueue)){
+                        // Первая очередь в этом звонке.
+                        $firstQueue = [
+                            'id'        => $queues[$cdr['dst_num']]??'',
+                            'number'    => $cdr['dst_num'],
+                            'start'     => $cdr['start'],
+                            'queueWait' => 0,
+                            'answered'   => 0,
+                            'ended'     => 0
+                        ];
+                    }elseif($firstQueue['ended'] === 0){
+                        // Следующие очереди этого звонкаю
+                        // Если прошлая очередь не была завершена / отвечена, то завершим ее обработку.
+                        $firstQueue['ended'] = 1;
+                        $firstQueue['queueWait'] = max(strtotime($cdr['start']) - strtotime($firstQueue['start']), 0);
+                    }
+                }elseif (!empty($firstQueue) && $firstQueue['ended'] === 0){
+                    // Вычисляем время ожидания первой очереди, если она не была завершена.
+                    // Не заполняем ended.
+                    $queueWait = max(strtotime($cdr['endtime']) - strtotime($firstQueue['start']), 0);
+                    $firstQueue['queueWait'] = max($queueWait, $firstQueue['queueWait']);
+                }
+
+                if( $cdr['is_app'] !== 1 && $cdr['billsec'] !== 0 ){
+                    $resultRows[$cdr['linkedid']]['answer']   = max(strtotime($cdr['answer']), $resultRows[$cdr['linkedid']]['answer']);
                     $resultRows[$cdr['linkedid']]['answered'] = 1;
                     if($resultRows[$cdr['linkedid']]['waitTime'] === ''){
                         $resultRows[$cdr['linkedid']]['waitTime'] = max(strtotime($cdr['answer']) - strtotime($cdr['start']), 0);
@@ -178,7 +233,16 @@ class HistoryParser
                         && $resultRows[$cdr['linkedid']]['typeCall'] === CallHistory::CALL_TYPE_OUTGOING){
                         $resultRows[$cdr['linkedid']]['line'] = $cdr['to_account'];
                     }
+
+                    if(!empty($firstQueue)
+                        && $firstQueue['answered'] === 0 && $firstQueue['ended'] === 0){
+                        // Вызов отвечен. Вычисляем время ожидания очереди и заполняем ended.
+                        $firstQueue['queueWait'] = max(strtotime($cdr['answer']) - strtotime($firstQueue['start']), 0);
+                        $firstQueue['answered'] = 1;
+                        $firstQueue['ended'] = 1;
+                    }
                 }
+                unset($firstQueue);
                 $resultRows[$cdr['linkedid']]['rows'][] = $cdr;
             }
             $offset = min($offset + self::LIMIT_CDR, $newOffset);

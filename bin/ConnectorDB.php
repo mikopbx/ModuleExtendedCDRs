@@ -28,6 +28,7 @@ use Modules\ModuleExtendedCDRs\Lib\Logger;
 use Exception;
 use Modules\ModuleExtendedCDRs\Lib\Providers\CdrDbProvider;
 use Modules\ModuleExtendedCDRs\Models\CallHistory;
+use Modules\ModuleExtendedCDRs\Models\CallQueuesHistory;
 use Modules\ModuleExtendedCDRs\Models\ModuleExtendedCDRs;
 use Phalcon\Db\Enum;
 use DateTime;
@@ -62,9 +63,9 @@ class ConnectorDB extends WorkerBase
         $beanstalk->subscribe(self::class, [$this, 'onEvents']);
         $beanstalk->subscribe($this->makePingTubeName(self::class), [$this, 'pingCallBack']);
         while ($this->needRestart === false) {
+            $this->syncCdrData();
             $beanstalk->wait(10);
             $this->logger->rotate();
-            $this->syncCdrData();
         }
     }
 
@@ -240,7 +241,26 @@ class ConnectorDB extends WorkerBase
 
         $arrKeys = (new CallHistory())->toArray();
         unset($arrKeys['id']);
-        foreach ($cdrData as $cdr){
+        foreach ($cdrData as $linkedId => $cdr){
+
+            if(in_array($cdr['typeCall'],[CallHistory::CALL_TYPE_INCOMING, CallHistory::CALL_TYPE_MISSED], true)){
+                $cdrQueue = CallQueuesHistory::findFirst(['linkedid=:linkedid:', 'bind' => [':linkedid'=>$linkedId]]);
+                if(!$cdrQueue){
+                    $cdrQueue = new CallQueuesHistory();
+                    $cdrQueue->linkedid = $linkedId;
+                }
+
+                $dateParts = explode(' ', $cdr['firstQueue']['start']??$cdr['rows'][0]['start']??'');
+                $cdrQueue->date          = $dateParts[0]??'';
+                $cdrQueue->time          = $dateParts[1]??'';
+                $cdrQueue->queueId       = $cdr['firstQueue']['id']??'';
+                $cdrQueue->answered      = $cdr['answered'];
+                $cdrQueue->answeredQueue = $cdr['firstQueue']['answered']??0;
+                $cdrQueue->waitTimeQueue = $cdr['firstQueue']['queueWait']??0;
+                $cdrQueue->waitTime = ($cdr['answered'] === 1)?($cdr['answer'] - $cdr['start']):($cdr['endtime'] - $cdr['start']);
+                $cdrQueue->save();
+            }
+
             foreach ($cdr['rows'] as $row){
                 /** @var CallHistory $dbData */
                 $dbData = CallHistory::findFirst("UNIQUEID='{$row['UNIQUEID']}'");
@@ -344,7 +364,7 @@ class ConnectorDB extends WorkerBase
         $dirLink = str_replace('/monitor/', '/pretty-monitor/', dirname($data->recordingfile,2));
         $mkdirPath = Util::which('mkdir');
         $lnPath = Util::which('ln');
-        shell_exec("$mkdirPath -p $dirLink; $lnPath -s $data->recordingfile $dirLink/$prettyFilename.mp3");
+        shell_exec("$mkdirPath -p $dirLink; $lnPath -s $data->recordingfile $dirLink/$prettyFilename.mp3 > /dev/null 2> /dev/null");
 
     }
 
