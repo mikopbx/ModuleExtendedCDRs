@@ -458,6 +458,22 @@ class ConnectorDB extends WorkerBase
         } catch (\Throwable $e) {
             $res_data = [];
         }
+
+        return $res_data;
+    }
+
+    public function getCdrQueue(array $filter = [], array $additionalFilter = []): array
+    {
+        $res_data = [];
+        if ($this->filterNotValid($filter)) {
+            return $res_data;
+        }
+        try {
+            $res = CallQueuesHistory::find($filter);
+            $res_data = $res->toArray();
+        } catch (\Throwable $e) {
+            $res_data = [];
+        }
         return $res_data;
     }
 

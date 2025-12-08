@@ -39,6 +39,30 @@ require_once(dirname(__DIR__) . '/vendor/autoload.php');
 
 class GetReport
 {
+
+    public function historyQueue(string $searchPhrase = '', ?int $offset = null, ?int $limit = null)
+    {
+        $tmpSearchPhrase = json_decode($searchPhrase, true);
+        $minBilSec  = intval($tmpSearchPhrase['minBilSec']??0);
+        $tmpSearchPhrase['dateRangeSelector'] = self::getDateRanges($tmpSearchPhrase['dateRangeSelector']);
+        $searchPhrase = json_encode($tmpSearchPhrase, JSON_UNESCAPED_SLASHES);
+        unset($tmpSearchPhrase);
+
+
+        $parameters = [];
+        [$start, $end, $numbers, $additionalNumbers] = $this->prepareConditionsForSearchPhrasesQueue($searchPhrase, $parameters);
+
+//        $parameters['test'] = $searchPhrase;
+        $parameters['order'] = ['date desc'];
+        if (!empty($limit)) {
+            $parameters['limit'] = $limit;
+        }
+        if (!empty($offset)) {
+            $parameters['offset'] = $offset;
+        }
+        return ConnectorDB::invoke('getCdrQueue', [$parameters]);
+    }
+
     /**
      * Формирование журнала звонков.
      * @param string   $searchPhrase
@@ -754,10 +778,118 @@ class GetReport
      * @param array  $parameters The CDR query parameters.
      * @return array
      */
-    private function prepareConditionsForSearchPhrases(string &$searchPhrase, array &$parameters): array
+    private function prepareConditionsForSearchPhrasesQueue(string &$searchPhrase, array &$parameters): array
     {
         $searchPhrase = json_decode($searchPhrase, true);
-        $minBilSec  = (int)($searchPhrase['minBilSec']??0);
+        $minBilSec    = intval($searchPhrase['minBilSec']??0);
+        $dateRangeSelector = $searchPhrase['dateRangeSelector'] ?? '';
+        $typeCall = $searchPhrase['typeCall'] ?? '';
+
+        $parameters['conditions'] = '';
+        $start = '';
+        $end = '';
+
+        // Search date ranges
+        if (preg_match_all("/\d{2}\/\d{2}\/\d{4}/", $dateRangeSelector, $matches)) {
+            if (count($matches[0]) === 1) {
+                $date = DateTime::createFromFormat('d/m/Y', $matches[0][0]);
+                $start = $date->format('Y-m-d');
+                $end = $date->modify('+1 day')->format('Y-m-d');
+                $parameters['conditions'] .= 'date BETWEEN :dateFromPhrase1: AND :dateFromPhrase2:';
+                $parameters['bind']['dateFromPhrase1'] = $start;
+                $parameters['bind']['dateFromPhrase2'] = $end;
+                $searchPhrase = str_replace($matches[0][0], "", $searchPhrase);
+            } elseif (count($matches[0]) === 2) {
+                $parameters['conditions'] .= 'date BETWEEN :dateFromPhrase1: AND :dateFromPhrase2:';
+                $date = DateTime::createFromFormat('d/m/Y', $matches[0][0]);
+                $start = $date->format('Y-m-d');
+                $parameters['bind']['dateFromPhrase1'] = $start;
+                $date = DateTime::createFromFormat('d/m/Y', $matches[0][1]);
+                $end = $date->modify('+1 day')->format('Y-m-d');
+                $parameters['bind']['dateFromPhrase2'] = $end;
+                $searchPhrase = str_replace(
+                    [$matches[0][0], $matches[0][1]],
+                    '',
+                    $searchPhrase
+                );
+            }
+        }
+
+
+//        if($minBilSec>0){
+//            if ($parameters['conditions'] !== '') {
+//                $parameters['conditions'] .= ' AND ';
+//            }
+//            $minBilSecComp= $searchPhrase['minBilSecComp']??'>';
+//            if(!in_array($minBilSecComp, ['>', '>=', '<', '<='], true)){
+//                $minBilSecComp = '>';
+//            }
+//            $parameters['conditions'] .= "billsec $minBilSecComp $minBilSec ";
+//        }
+
+        $additionalFilter = $searchPhrase['additionalFilter'] ?? '';
+        // Search phone numbers
+        $searchPhrase = str_replace(['(', ')', '-', '+'], '', $searchPhrase);
+        $groupNumber = [];
+        if (class_exists('\Modules\ModuleUsersGroups\Models\UsersGroups') && preg_match_all(
+                '/(?:\s|^)group_(\d+)\b/',
+                $additionalFilter,
+                $matches
+            )) {
+            $filter = [
+                'group_id IN ({group_id:array})',
+                'bind' => [
+                    'group_id' => array_unique($matches[1])
+                ],
+                'columns' => 'user_id'
+            ];
+            $uIds = array_column(GroupMembers::find($filter)->toArray(), 'user_id');
+            if (!empty($uIds)) {
+                $filter = [
+                    'type=:type: AND userid IN ({userid:array})',
+                    'bind' => [
+                        'type' => Extensions::TYPE_SIP,
+                        'userid' => $uIds,
+                    ],
+                    'columns' => 'number,userid'
+
+                ];
+                $groupNumber = array_column(Extensions::find($filter)->toArray(), 'number');
+            }
+        }
+
+        $additionalNumbers = [];
+        if (preg_match_all('/(?<=\s|^)\d+(?=\s|$)/', $additionalFilter, $matches)) {
+            $additionalNumbers = $matches[0];
+        }
+        $additionalNumbers = array_merge($additionalNumbers, $groupNumber);
+        foreach ($additionalNumbers as $index => $value) {
+            $additionalNumbers[$index] = ConnectorDB::getPhoneIndex($value);
+        }
+
+        $globalNumbers = [];
+        $globalSearch = $searchPhrase['globalSearch'] ?? '';
+        if (preg_match_all('/(?<=\s|^)\d+(?=\s|$)/', $globalSearch, $matches)) {
+            $globalNumbers = $matches[0];
+        }
+        foreach ($globalNumbers as $index => $value) {
+            $globalNumbers[$index] = ConnectorDB::getPhoneIndex($value);
+        }
+
+        return [$start, $end, $globalNumbers, $additionalNumbers];
+    }
+
+    /**
+     * Prepares query parameters for filtering CDR records.
+     *
+     * @param string $searchPhrase The search phrase entered by the user.
+     * @param array  $parameters The CDR query parameters.
+     * @return array
+     */
+    private function prepareConditionsForSearchPhrases(string &$searchPhrase, array &$parameters, array $columns = []): array
+    {
+        $searchPhrase = json_decode($searchPhrase, true);
+        $minBilSec    = intval($searchPhrase['minBilSec']??0);
         $dateRangeSelector = $searchPhrase['dateRangeSelector'] ?? '';
         $typeCall = $searchPhrase['typeCall'] ?? '';
 
@@ -796,7 +928,11 @@ class GetReport
             if ($parameters['conditions'] !== '') {
                 $parameters['conditions'] .= ' AND ';
             }
-            $parameters['conditions'] .= "billsec > $minBilSec ";
+            $minBilSecComp= $searchPhrase['minBilSecComp']??'>';
+            if(!in_array($minBilSecComp, ['>', '>=', '<', '<='], true)){
+                $minBilSecComp = '>';
+            }
+            $parameters['conditions'] .= "billsec $minBilSecComp $minBilSec ";
         }
 
         if (stripos($typeCall, 'incoming') === 0) {

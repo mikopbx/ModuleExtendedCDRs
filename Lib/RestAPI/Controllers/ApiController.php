@@ -75,6 +75,86 @@ class ApiController extends ModulesControllerBase
 
 
     /**
+     * curl 'http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory?reportNameID=CdrQueue&type=json&search=%7B%22dateRangeSelector%22%3A%2209%2F11%2F2025%20-%2008%2F12%2F2025%22%2C%22minBilSec%22%3A%226%22%2C%22minBilSecComp%22%3A%22%3E%3D%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22outgoing-calls%22%2C%22additionalFilter%22%3A%22%22%7D'
+     * {"dateRangeSelector":"09/11/2025 - 08/12/2025","minBilSec":"6","minBilSecComp":">=","globalSearch":"","typeCall":"outgoing-calls","additionalFilter":""}
+     * @return void
+     */
+    public function exportHistoryQueue(): void
+    {
+        ini_set('memory_limit', '2024M');
+        ini_set('pcre.backtrack_limit', '10000000');
+        $type           = $this->request->get('type');
+        $searchPhrase   = $this->request->get('search');
+        if(!is_string($searchPhrase)){
+            $this->response->sendRaw();
+            return;
+        }
+        $gr = new GetReport();
+        $view = $this->aggregateCdrData($gr->historyQueue($searchPhrase));
+        // $view->title = urldecode($this->request->get('title')??'');
+        if($type === 'json'){
+            $this->echoResponse((array)$view);
+        }elseif($type === 'pdf'){
+            // GetReport::exportOutgoingEmployeeCallsPrintPdf($view);
+        }elseif ($type === 'xlsx'){
+            // GetReport::exportOutgoingEmployeeCallsPrintXls($view);
+        }
+        $this->response->sendRaw();
+    }
+
+    function aggregateCdrData(array $records): array
+    {
+        $groups = [];
+        foreach ($records as $record) {
+            $queueId = $record['queueId'] ?? '';
+            $date = $record['date'];
+            $key = $date.$queueId;
+            if (!isset($groups[$key])) {
+                $groups[$key] = [
+                    'queueId' => $queueId,
+                    'date' => $date,
+                    'linkedids' => [],
+                    'answered_sum' => 0,
+                    'answeredQueue_sum' => 0,
+                    'waitTime_sum' => 0,
+                    'waitTimeQueue_sum' => 0,
+                ];
+            }
+            $group =& $groups[$key];
+            if (!in_array($record['linkedid'], $group['linkedids'], true)) {
+                $group['linkedids'][] = $record['linkedid'];
+            }
+            $group['answered_sum'] += intval($record['answered']);
+            $group['missed_sum'] += intval($record['answered'])===0?1:0;
+            $group['answeredQueue_sum'] += (int)$record['answeredQueue'];
+            $group['waitTime_sum'] += (int)$record['waitTime'];
+            $group['waitTimeQueue_sum'] += (int)$record['waitTimeQueue'];
+            unset($group);
+        }
+
+        $result = [];
+        foreach ($groups as $tmpGroup) {
+            $uniqueCalls = count($tmpGroup['linkedids']);
+            $avgMissed        = $uniqueCalls > 0 ? round($tmpGroup['missed_sum'] / $uniqueCalls, 2) *100: 0;
+            $avgWaitTime      = $uniqueCalls > 0 ? round($tmpGroup['waitTime_sum'] / $uniqueCalls, 2) : 0;
+            $avgWaitTimeQueue = $uniqueCalls > 0 ? round($tmpGroup['waitTimeQueue_sum'] / $uniqueCalls, 2) : 0;
+            $result[] = [
+                'queueId' => $tmpGroup['queueId'],
+                'date' => $tmpGroup['date'],
+                'totalCalls' => $uniqueCalls,
+                'answered' => $tmpGroup['answered_sum'],
+                'missed' => $tmpGroup['missed_sum'],
+                'answeredQueue' => $tmpGroup['answeredQueue_sum'],
+                'avgWaitTime' => $avgWaitTime,
+                'avgMissed' => $avgMissed,
+                'avgWaitTimeQueue' => $avgWaitTimeQueue,
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
      * curl 'http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory?reportNameID=OutgoingEmployeeCalls&type=json&search=%7B%22dateRangeSelector%22%3A%2221%2F10%2F2024%20-%2021%2F10%2F2024%22%2C%22minBilSec%22%3A%220%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22outgoing-calls%22%2C%22additionalFilter%22%3A%22%22%7D'
      * curl -H 'Cookie: PHPSESSID=5ada41f50486a5792cb3520f0922b7e9' 'https://boffart.miko.ru/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory?type=json&search=%7B%22dateRangeSelector%22%3A%2201%2F10%2F2024+-+31%2F10%2F2024%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22all-calls%22%2C%22additionalFilter%22%3A%22%22%7D'
      * @return void
@@ -84,6 +164,10 @@ class ApiController extends ModulesControllerBase
         ini_set('memory_limit', '2024M');
         ini_set('pcre.backtrack_limit', '10000000');
         $reportNameID   = $this->request->get('reportNameID');
+        if(ReportSettings::REPORT_QUEUES  === $reportNameID){
+            $this->exportHistoryQueue();
+            return;
+        }
         if(ReportSettings::REPORT_OUTGOING_EMPLOYEE_CALLS  === $reportNameID){
             $this->exportOutgoingEmployeeCalls();
             return;
