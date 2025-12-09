@@ -602,10 +602,12 @@ class ModuleExtendedCDRsController extends BaseController
         $length           = is_numeric($this->request->get('length'))?(int)$this->request->get('length'):null;
 
         $gr = new GetReport();
-        $view = ApiController::aggregateCdrData($gr->historyQueue($searchPhrase['value']??'',  $this->request->get('start'), $length));
+        $params = [];
+        $view = ApiController::aggregateCdrData($gr->historyQueue($searchPhrase['value']??'',  $this->request->get('start'), $length, $params));
         foreach ($view as $key => $value) {
             $this->view->$key = $value;
         }
+        $this->view->params = $params;
         $this->view->length = count($view);
     }
 

@@ -76,8 +76,8 @@ class ApiController extends ModulesControllerBase
 
     /**
      * curl 'http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory?reportNameID=CdrQueue&type=json&search=%7B%22dateRangeSelector%22%3A%2209%2F11%2F2025%20-%2008%2F12%2F2025%22%2C%22minBilSec%22%3A%226%22%2C%22minBilSecComp%22%3A%22%3E%3D%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22outgoing-calls%22%2C%22additionalFilter%22%3A%22%22%7D'
-     * curl 'http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory?reportNameID=CdrQueue&type=pdf&search=%7B%22dateRangeSelector%22%3A%2209%2F11%2F2025%20-%2008%2F12%2F2025%22%2C%22minBilSec%22%3A%226%22%2C%22minBilSecComp%22%3A%22%3E%3D%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22outgoing-calls%22%2C%22additionalFilter%22%3A%22%22%7D'
-     * {"dateRangeSelector":"09/11/2025 - 08/12/2025","minBilSec":"6","minBilSecComp":">=","globalSearch":"","typeCall":"outgoing-calls","additionalFilter":""}
+     * curl 'http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory?reportNameID=CdrQueue&type=json&search=%7B%22dateRangeSelector%22%3A%2201%2F12%2F2025%20-%2002%2F12%2F2025%22%2C%22minBilSec%22%3A%226%22%2C%22minBilSecComp%22%3A%22%3E%3D%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22outgoing-calls%22%2C%22additionalFilter%22%3A%22%22%7D'
+     * {"dateRangeSelector":"01/11/2025 - 02/12/2025","minBilSec":"6","minBilSecComp":">=","globalSearch":"","typeCall":"outgoing-calls","additionalFilter":""}
      * @return void
      */
     public function exportHistoryQueue(): void
@@ -91,11 +91,13 @@ class ApiController extends ModulesControllerBase
             return;
         }
         $gr = new GetReport();
-        $aggregatedData = self::aggregateCdrData($gr->historyQueue($searchPhrase));
+        $params = [];
+        $aggregatedData = self::aggregateCdrData($gr->historyQueue($searchPhrase, null, null, $params));
         $view = (object)$aggregatedData;
         $view->searchPhrase = $searchPhrase;
         $view->title = urldecode($this->request->get('title')??'');
         if($type === 'json'){
+            $view->params = $params;
             $this->echoResponse((array)$view);
         }elseif($type === 'pdf'){
             GetReport::exporthistoryQueuePdf($view);

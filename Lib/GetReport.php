@@ -40,7 +40,7 @@ require_once(dirname(__DIR__) . '/vendor/autoload.php');
 class GetReport
 {
 
-    public function historyQueue(string $searchPhrase = '', ?int $offset = null, ?int $limit = null)
+    public function historyQueue(string $searchPhrase = '', ?int $offset = null, ?int $limit = null, array &$params)
     {
         $tmpSearchPhrase = json_decode($searchPhrase, true);
         $minBilSec  = intval($tmpSearchPhrase['minBilSec']??0);
@@ -51,6 +51,7 @@ class GetReport
 
         $parameters = [];
         [$start, $end, $numbers, $additionalNumbers] = $this->prepareConditionsForSearchPhrasesQueue($searchPhrase, $parameters);
+        $params = [$start, $end, $numbers, $additionalNumbers];
 
         $parameters['order'] = ['date desc'];
 //        if (!empty($limit)) {
@@ -901,8 +902,9 @@ class GetReport
                 $date = DateTime::createFromFormat('d/m/Y', $matches[0][0]);
                 $start = $date->format('Y-m-d');
                 $parameters['bind']['dateFromPhrase1'] = $start;
+
                 $date = DateTime::createFromFormat('d/m/Y', $matches[0][1]);
-                $end = $date->modify('+1 day')->format('Y-m-d');
+                $end = $date->modify('+1 day')->setTime(0, 0, 0)->modify('-1 second')->format('Y-m-d H:i:s');
                 $parameters['bind']['dateFromPhrase2'] = $end;
                 $searchPhrase = str_replace(
                     [$matches[0][0], $matches[0][1]],
