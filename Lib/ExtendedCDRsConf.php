@@ -85,7 +85,7 @@ class ExtendedCDRsConf extends ConfigClass
     {
         return [
             [ApiController::class, 'downloads',                     '/pbxcore/api/modules/ModuleExtendedCDRs/downloads', 'get', '/', false],
-            [ApiController::class, 'exportHistory',                 '/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory', 'get', '/', false],
+            [ApiController::class, 'exportHistory',                 '/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory', 'get', '/', true],
             [ApiController::class, 'exportHistoryDetail',           '/pbxcore/api/modules/ModuleExtendedCDRs/exportHistoryDetail', 'get', '/', false],
             [ApiController::class, 'recordsAction',                 '/pbxcore/api/modules/ModuleExtendedCDRs/records', 'get', '/', false],
             [ApiController::class, 'exportOutgoingEmployeeCalls',   '/pbxcore/api/modules/ModuleExtendedCDRs/exportOutgoingEmployeeCalls', 'get', '/', false],

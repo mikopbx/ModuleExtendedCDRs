@@ -76,6 +76,7 @@ class ApiController extends ModulesControllerBase
 
     /**
      * curl 'http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory?reportNameID=CdrQueue&type=json&search=%7B%22dateRangeSelector%22%3A%2209%2F11%2F2025%20-%2008%2F12%2F2025%22%2C%22minBilSec%22%3A%226%22%2C%22minBilSecComp%22%3A%22%3E%3D%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22outgoing-calls%22%2C%22additionalFilter%22%3A%22%22%7D'
+     * curl 'http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory?reportNameID=CdrQueue&type=pdf&search=%7B%22dateRangeSelector%22%3A%2209%2F11%2F2025%20-%2008%2F12%2F2025%22%2C%22minBilSec%22%3A%226%22%2C%22minBilSecComp%22%3A%22%3E%3D%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22outgoing-calls%22%2C%22additionalFilter%22%3A%22%22%7D'
      * {"dateRangeSelector":"09/11/2025 - 08/12/2025","minBilSec":"6","minBilSecComp":">=","globalSearch":"","typeCall":"outgoing-calls","additionalFilter":""}
      * @return void
      */
@@ -90,14 +91,18 @@ class ApiController extends ModulesControllerBase
             return;
         }
         $gr = new GetReport();
-        $view = self::aggregateCdrData($gr->historyQueue($searchPhrase));
-        // $view->title = urldecode($this->request->get('title')??'');
+        $aggregatedData = self::aggregateCdrData($gr->historyQueue($searchPhrase));
+        $view = (object)$aggregatedData;
+        $view->searchPhrase = $searchPhrase;
+        $view->title = urldecode($this->request->get('title')??'');
         if($type === 'json'){
             $this->echoResponse((array)$view);
         }elseif($type === 'pdf'){
-            // GetReport::exportOutgoingEmployeeCallsPrintPdf($view);
+            GetReport::exporthistoryQueuePdf($view);
+            exit();
         }elseif ($type === 'xlsx'){
-            // GetReport::exportOutgoingEmployeeCallsPrintXls($view);
+            GetReport::exporthistoryQueueXls($view);
+            exit();
         }
         $this->response->sendRaw();
     }
@@ -116,6 +121,7 @@ class ApiController extends ModulesControllerBase
                     'date' => $date,
                     'linkedids' => [],
                     'answered_sum' => 0,
+                    'missed_sum' => 0,
                     'answeredQueue_sum' => 0,
                     'waitTime_sum' => 0,
                     'waitTimeQueue_sum' => 0,

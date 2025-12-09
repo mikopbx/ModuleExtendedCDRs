@@ -62,6 +62,104 @@ class GetReport
         return ConnectorDB::invoke('getCdrQueue', [$parameters]);
     }
 
+    public static function exportHistoryQueuePdf($view, $saveInFile = false): string
+    {
+        $tmpDir = '/tmp';
+        $mpdf = new Mpdf(['tempDir' => $tmpDir]);
+        $html = '';
+        if(!empty($view->title)){
+            $html.= '<h2>' . $view->title . '</h2>';
+        }
+        $html.= '<h3>' . json_decode($view->searchPhrase, true)['dateRangeSelector'] . '</h3>';
+        $html .= '<table border="1" cellpadding="10" cellspacing="0" style="width: 100%;">';
+        $html .= '<thead><tr>' . 
+            '<th>' . Util::translate('repModuleExtendedCDRs_CdrQueue_Date') . '</th>' .
+            '<th>' . Util::translate('repModuleExtendedCDRs_CdrQueue_Queue') . '</th>' .
+            '<th>' . Util::translate('repModuleExtendedCDRs_CdrQueue_TotalCalls') . '</th>' .
+            '<th>' . Util::translate('repModuleExtendedCDRs_CdrQueue_Answered') . '</th>' .
+            '<th>' . Util::translate('repModuleExtendedCDRs_CdrQueue_Missed') . '</th>' .
+            '<th>' . Util::translate('repModuleExtendedCDRs_CdrQueue_AnsweredQueue') . '</th>' .
+            '<th>' . Util::translate('repModuleExtendedCDRs_CdrQueue_AvgWaitTime') . '</th>' .
+            '<th>' . Util::translate('repModuleExtendedCDRs_CdrQueue_AvgMissed') . '</th>' .
+            '<th>' . Util::translate('repModuleExtendedCDRs_CdrQueue_AvgWaitTimeQueue') . '</th>' .
+            '</tr></thead>';
+        $html .= '<tbody>';
+        foreach ($view->data as $index => $item) {
+            $rowStyle = ($index % 2 == 1) ? 'background-color: #f0f0f0;' : '';
+            $html .= '<tr>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['date']) . '</td>';
+            $html .= '<td style="background-color: #d3d3d3;">' . htmlspecialchars($item['queueName']) . '</td>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['totalCalls']) . '</td>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['answered']) . '</td>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['missed']) . '</td>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['answeredQueue']) . '</td>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['avgWaitTime']) . '</td>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['avgMissed']) . '</td>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['avgWaitTimeQueue']) . '</td>';
+            $html .= '</tr>';
+        }
+        $html .= '</tbody></table>';
+        $mpdf->WriteHTML($html);
+        $filename = $tmpDir . '/history-queue-calls-' . time() . '.pdf';
+        if ($saveInFile === true) {
+            $mpdf->Output($filename, Destination::FILE);
+        } else {
+            $mpdf->Output('history-queue-calls.pdf', Destination::DOWNLOAD);
+        }
+        return $filename;
+    }
+
+    public static function exporthistoryQueueXls($view): void
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $headers = [
+            Util::translate('repModuleExtendedCDRs_CdrQueue_Date'),
+            Util::translate('repModuleExtendedCDRs_CdrQueue_Queue'),
+            Util::translate('repModuleExtendedCDRs_CdrQueue_TotalCalls'),
+            Util::translate('repModuleExtendedCDRs_CdrQueue_Answered'),
+            Util::translate('repModuleExtendedCDRs_CdrQueue_Missed'),
+            Util::translate('repModuleExtendedCDRs_CdrQueue_AnsweredQueue'),
+            Util::translate('repModuleExtendedCDRs_CdrQueue_AvgWaitTime'),
+            Util::translate('repModuleExtendedCDRs_CdrQueue_AvgMissed'),
+            Util::translate('repModuleExtendedCDRs_CdrQueue_AvgWaitTimeQueue'),
+        ];
+        $sheet->fromArray($headers, null, 'A1');
+        $rowIndex = 2;
+        foreach ($view->data as $item) {
+            $sheet->setCellValueExplicit('A' . $rowIndex, htmlspecialchars($item['date']), DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit('B' . $rowIndex, htmlspecialchars($item['queueName']), DataType::TYPE_STRING);
+            $sheet->setCellValue('C' . $rowIndex, htmlspecialchars($item['totalCalls']));
+            $sheet->setCellValue('D' . $rowIndex, htmlspecialchars($item['answered']));
+            $sheet->setCellValue('E' . $rowIndex, htmlspecialchars($item['missed']));
+            $sheet->setCellValue('F' . $rowIndex, htmlspecialchars($item['answeredQueue']));
+            $sheet->setCellValue('G' . $rowIndex, htmlspecialchars($item['avgWaitTime']));
+            $sheet->setCellValue('H' . $rowIndex, htmlspecialchars($item['avgMissed']));
+            $sheet->setCellValue('I' . $rowIndex, htmlspecialchars($item['avgWaitTimeQueue']));
+            $rowIndex++;
+        }
+        $highestRow = $sheet->getHighestRow();
+        $highestColumn = $sheet->getHighestColumn();
+        $highestColumnIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($highestColumn);
+        for ($col = 1; $col <= $highestColumnIndex; $col++) {
+            $maxLength = 0;
+            for ($row = 1; $row <= $highestRow; $row++) {
+                $cellValue = $sheet->getCellByColumnAndRow($col, $row)->getValue();
+                if ($cellValue !== null) {
+                    $maxLength = max($maxLength, strlen($cellValue));
+                }
+            }
+            $sheet->getColumnDimensionByColumn($col)->setWidth($maxLength + 2);
+        }
+        $writer = new Xlsx($spreadsheet);
+
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="history-queue-calls.xlsx"');
+        header('Cache-Control: max-age=0');
+        $writer->save('php://output');
+    }
+
+
     /**
      * Формирование журнала звонков.
      * @param string   $searchPhrase
