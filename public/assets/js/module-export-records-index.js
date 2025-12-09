@@ -581,6 +581,11 @@ var ModuleExtendedCDRs = {
     $("#".concat(reportNameID, "-table-div")).show();
     $('#currentReportNameID').val(reportNameID);
     $('#currentVariantId').val(currentVariantId);
+    if (reportNameID === 'CdrQueue') {
+      $('#typeCall').closest('.ui.column').hide();
+    } else {
+      $('#typeCall').closest('.ui.column').show();
+    }
     var variantName = '';
     if (currentVariantId !== '') {
       variantName = $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportNameID, "\"] div.title")).text().trim();

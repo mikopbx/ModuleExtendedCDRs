@@ -122,9 +122,9 @@
                     </a>
                  </div>
              </div>
-             <div class="ui two wide column" style="height: 40px;">
+             <div class="ui column" style="height: 40px; display: flex; justify-content: flex-end; flex: 1;">
                  <div class="ui action input">
-                    <input style="height: 40px;" type="search" id="globalsearch" placeholder="{{ t._('repModuleExtendedCDRs_FindCallsPlaceholder') }}" aria-controls="KeysTable">
+                    <input style="height: 40px; width: 200px; min-width: 150px;" type="search" id="globalsearch" placeholder="{{ t._('repModuleExtendedCDRs_FindCallsPlaceholder') }}" aria-controls="KeysTable">
                     <button style="height: 40px;" id="createExcelButton" class="ui icon basic button"> <i class="green file excel outline icon"></i></button>
                     <button style="height: 40px;" id="createPdfButton" class="ui icon basic button"> <i class="red file pdf outline icon"></i></button>
                     <button style="height: 40px;" id="downloadRecords" class="ui icon basic button"> <i class="download icon"></i></button>

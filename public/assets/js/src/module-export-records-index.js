@@ -623,6 +623,12 @@ const ModuleExtendedCDRs = {
 		$('#currentReportNameID').val(reportNameID);
 		$('#currentVariantId').val(currentVariantId);
 
+		if(reportNameID === 'CdrQueue'){
+			$('#typeCall').closest('.ui.column').hide();
+		}else{
+			$('#typeCall').closest('.ui.column').show();
+		}
+
 		let variantName = '';
 		if(currentVariantId !==''){
 			variantName = $(`a[data-variant-id="${currentVariantId}"][data-report-id="${reportNameID}"] div.title`).text().trim();
