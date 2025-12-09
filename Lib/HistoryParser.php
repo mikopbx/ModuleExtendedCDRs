@@ -175,14 +175,13 @@ class HistoryParser
                     $resultRows[$cdr['linkedid']]['answered']   = 0;
                     $resultRows[$cdr['linkedid']]['waitTime']   = '';
                     $resultRows[$cdr['linkedid']]['firstQueue'] = [];
-                    $resultRows[$cdr['linkedid']]['start']   = strtotime($cdr['start']);
-                    $resultRows[$cdr['linkedid']]['endtime'] = strtotime($cdr['endtime']);
-                    $resultRows[$cdr['linkedid']]['answer']  = strtotime($cdr['answer']);
+                    $resultRows[$cdr['linkedid']]['q_start']   = strtotime($cdr['start']);
+                    $resultRows[$cdr['linkedid']]['q_endtime'] = strtotime($cdr['endtime']);
+                    $resultRows[$cdr['linkedid']]['q_answer']  = strtotime($cdr['answer']);
                 }else{
-                    $resultRows[$cdr['linkedid']]['start']   = min(strtotime($cdr['start']),   $resultRows[$cdr['linkedid']]['start']);
-                    $resultRows[$cdr['linkedid']]['endtime'] = max(strtotime($cdr['endtime']), $resultRows[$cdr['linkedid']]['endtime']);
+                    $resultRows[$cdr['linkedid']]['q_start']   = min(strtotime($cdr['start']),   $resultRows[$cdr['linkedid']]['q_start']);
+                    $resultRows[$cdr['linkedid']]['q_endtime'] = max(strtotime($cdr['endtime']), $resultRows[$cdr['linkedid']]['q_endtime']);
                 }
-
 
                 $line = $resultRows[$cdr['linkedid']]['line']??'';
                 if(empty($line)){
@@ -224,7 +223,7 @@ class HistoryParser
                 }
 
                 if( $cdr['is_app'] !== 1 && $cdr['billsec'] !== 0 ){
-                    $resultRows[$cdr['linkedid']]['answer']   = max(strtotime($cdr['answer']), $resultRows[$cdr['linkedid']]['answer']);
+                    $resultRows[$cdr['linkedid']]['q_answer']   = max(strtotime($cdr['answer']), $resultRows[$cdr['linkedid']]['q_answer']);
                     $resultRows[$cdr['linkedid']]['answered'] = 1;
                     if($resultRows[$cdr['linkedid']]['waitTime'] === ''){
                         $resultRows[$cdr['linkedid']]['waitTime'] = max(strtotime($cdr['answer']) - strtotime($cdr['start']), 0);
@@ -252,6 +251,13 @@ class HistoryParser
         foreach ($resultRows as $index => $cdr){
             if($cdr['answered'] === 0 && $cdr['typeCall'] === CallHistory::CALL_TYPE_INCOMING){
                 $resultRows[$index]['typeCall'] = CallHistory::CALL_TYPE_MISSED;
+            }
+
+            foreach (['start', 'endtime', 'answer'] as $key){
+                if(empty($cdr[$key]) || !is_numeric($cdr[$key])){
+                    continue;
+                }
+                $resultRows[$index][$key] = date('Y-m-d H:i:s', $cdr[$key]);
             }
         }
 

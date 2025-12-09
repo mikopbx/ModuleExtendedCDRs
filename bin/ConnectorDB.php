@@ -258,7 +258,7 @@ class ConnectorDB extends WorkerBase
                 $cdrQueue->answered      = $cdr['answered'];
                 $cdrQueue->answeredQueue = $cdr['firstQueue']['answered']??0;
                 $cdrQueue->waitTimeQueue = $cdr['firstQueue']['queueWait']??0;
-                $cdrQueue->waitTime = ($cdr['answered'] === 1)?($cdr['answer'] - $cdr['start']):($cdr['endtime'] - $cdr['start']);
+                $cdrQueue->waitTime = ($cdr['answered'] === 1)?($cdr['q_answer'] - $cdr['q_start']):($cdr['q_endtime'] - $cdr['q_start']);
                 $cdrQueue->save();
             }
 
