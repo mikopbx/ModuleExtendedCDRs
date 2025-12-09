@@ -1,6 +1,8 @@
 <div id="menu-reports"  style="display: none;" class="ui fluid popup bottom left transition hidden">
   <input id="currentReportNameID" type="hidden" name="filters" value="{{currentReportNameID}}">
   <input id="currentVariantId" type="hidden" name="filters" value="{{currentVariantId}}">
+  <input id="pDateRangeSelector" type="hidden" name="filters" value="{{pDateRangeSelector}}">
+  <input id="pAdditionalFilterString" type="hidden" name="filters" value="{{pAdditionalFilterString}}">
 
   <div class="ui four column relaxed equal height divided grid">
        {% for variantId,variantsData in mainReports %}

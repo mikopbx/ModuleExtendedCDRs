@@ -186,7 +186,7 @@ class ModuleExtendedCDRsController extends BaseController
 
         foreach ($this->view->queues as $queue){
             foreach ($filterNumbers as $number){
-                if('group_'.$queue['id'] === $number){
+                if('queue_'.$queue['id'] === $number){
                     $additionalFilter[] = [
                         'name'   => $queue['name'],
                         'number' => $number
@@ -204,10 +204,36 @@ class ModuleExtendedCDRsController extends BaseController
                 }
             }
         }
-        $this->view->dateRangeSelector      = $searchSettings['dateRangeSelector']??'';
+        $pDateRangeSelector  = $_REQUEST['dateRangeSelector']??'';
+        if(!empty($pDateRangeSelector)){
+            $this->view->dateRangeSelector      = $pDateRangeSelector;
+            $this->view->pDateRangeSelector      = $pDateRangeSelector;
+            $additionalFilter = [];
+            foreach ($this->view->queues as $queue){
+                if($queue['id'] === $_REQUEST['queue']??'' ){
+                    $additionalFilter[] = [
+                        'name'   => $queue['name'],
+                        'number' => 'queue_'.$queue['id']
+                    ];
+                }
+            }
+            $this->view->pAdditionalFilterString = implode(',',array_column($additionalFilter, 'number'));
+        }else{
+            $this->view->pDateRangeSelector      = '';
+            $this->view->pAdditionalFilterString = '-';
+            $this->view->dateRangeSelector      = $searchSettings['dateRangeSelector']??'';
+        }
+
+        $pReportNameID = $_REQUEST['reportNameID']??'';
+        if($pReportNameID === ReportSettings::REPORT_MAIN){
+            $this->view->currentReportNameID = $pReportNameID;
+            $this->view->currentVariantId    = null;
+        }
+
         $this->view->additionalFilter       = $additionalFilter;
         $this->view->additionalFilterString = implode(',',array_column($additionalFilter, 'number'));
         $this->view->accessData  = $this->getUserData();
+
     }
 
     private function getVariantsReports(&$searchSettings)

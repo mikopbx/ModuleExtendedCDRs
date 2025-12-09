@@ -4,6 +4,10 @@ function _typeof(o) { "@babel/helpers - typeof"; return _typeof = "function" == 
 function _defineProperty(e, r, t) { return (r = _toPropertyKey(r)) in e ? Object.defineProperty(e, r, { value: t, enumerable: !0, configurable: !0, writable: !0 }) : e[r] = t, e; }
 function _toPropertyKey(t) { var i = _toPrimitive(t, "string"); return "symbol" == _typeof(i) ? i : i + ""; }
 function _toPrimitive(t, r) { if ("object" != _typeof(t) || !t) return t; var e = t[Symbol.toPrimitive]; if (void 0 !== e) { var i = e.call(t, r || "default"); if ("object" != _typeof(i)) return i; throw new TypeError("@@toPrimitive must return a primitive value."); } return ("string" === r ? String : Number)(t); }
+function _slicedToArray(r, e) { return _arrayWithHoles(r) || _iterableToArrayLimit(r, e) || _unsupportedIterableToArray(r, e) || _nonIterableRest(); }
+function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
+function _iterableToArrayLimit(r, l) { var t = null == r ? null : "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (null != t) { var e, n, i, u, a = [], f = !0, o = !1; try { if (i = (t = t.call(r)).next, 0 === l) { if (Object(t) !== t) return; f = !1; } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = !0); } catch (r) { o = !0, n = r; } finally { try { if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u)) return; } finally { if (o) throw n; } } return a; } }
+function _arrayWithHoles(r) { if (Array.isArray(r)) return r; }
 function _toConsumableArray(r) { return _arrayWithoutHoles(r) || _iterableToArray(r) || _unsupportedIterableToArray(r) || _nonIterableSpread(); }
 function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
 function _unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return _arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? _arrayLikeToArray(r, a) : void 0; } }
@@ -270,7 +274,23 @@ var ModuleExtendedCDRs = {
       createdRow: function createdRow(row, data) {
         $(row).attr('data-queue', data.queueId);
         $(row).attr('data-date', data.date);
-        $('td', row).eq(0).html(data.date);
+
+        // Format date for display and URL
+        var dateForUrl = '';
+        if (data.date) {
+          var dateParts = data.date.split('-');
+          if (dateParts.length === 3) {
+            dateForUrl = "".concat(dateParts[2], "/").concat(dateParts[1], "/").concat(dateParts[0]);
+          }
+        }
+
+        // Create detail button
+        var dateHtml = data.date;
+        if (dateForUrl && data.queueId) {
+          var detailUrl = "".concat(globalRootUrl, "module-extended-c-d-rs/index/?reportNameID=CallDetails&dateRangeSelector=").concat(encodeURIComponent(dateForUrl + ' - ' + dateForUrl), "&queue=").concat(encodeURIComponent(data.queueId));
+          dateHtml = "".concat(data.date, " <i class=\"external alternate icon link\" style=\"cursor: pointer; margin-left: 5px;\" onclick=\"window.open('").concat(detailUrl, "', '_blank')\" title=\"Open details\"></i>");
+        }
+        $('td', row).eq(0).html(dateHtml);
         $('td', row).eq(1).html(data.queueName || '-').addClass('center aligned');
         $('td', row).eq(2).html(data.totalCalls).addClass('center aligned');
         $('td', row).eq(3).html(data.answered).addClass('center aligned');
@@ -341,9 +361,59 @@ var ModuleExtendedCDRs = {
     }
   },
   /**
+   * Process URL parameters for filtering
+   */
+  processUrlParameters: function processUrlParameters() {
+    var urlParams = new URLSearchParams(window.location.search);
+    var reportNameID = urlParams.get('reportNameID');
+    var dateRangeSelector = urlParams.get('dateRangeSelector');
+    var queue = urlParams.get('queue');
+
+    // Set report type if specified
+    if (reportNameID) {
+      $('#currentReportNameID').val(reportNameID);
+    }
+
+    // Set date range if specified
+    if (dateRangeSelector) {
+      var dates = dateRangeSelector.split(' - ');
+      if (dates.length === 2) {
+        var startDate = moment(dates[0], 'DD/MM/YYYY');
+        var endDate = moment(dates[1], 'DD/MM/YYYY');
+        if (startDate.isValid() && endDate.isValid()) {
+          ModuleExtendedCDRs.$dateRangeSelector.attr('data-start', startDate.format('YYYY/MM/DD'));
+          ModuleExtendedCDRs.$dateRangeSelector.attr('data-end', endDate.endOf('day').format('YYYY/MM/DD'));
+          ModuleExtendedCDRs.$dateRangeSelector.val("".concat(startDate.format('DD/MM/YYYY'), " - ").concat(endDate.format('DD/MM/YYYY')));
+        }
+      }
+    }
+
+    // Set queue filter if specified
+    if (queue) {
+      // Temporarily disable onChange to avoid multiple applyFilter calls
+      $('#additionalFilter').dropdown('setting', 'onChange', function () {});
+
+      // Add queue to filter
+      var currentFilter = $('#additionalFilter').dropdown('get value');
+      var filterArray = currentFilter ? currentFilter.split(',') : [];
+      var queueValue = 'queue_' + queue;
+      if (!filterArray.includes(queueValue)) {
+        filterArray.push(queueValue);
+      }
+      $('#additionalFilter').dropdown('set selected', filterArray);
+
+      // Re-enable onChange
+      $('#additionalFilter').dropdown('setting', 'onChange', ModuleExtendedCDRs.applyFilter);
+    }
+  },
+  /**
    * On page load we init some Semantic UI library
    */
   initialize: function initialize() {
+    if (window.location.search) {
+      var newUrl = window.location.pathname;
+      window.history.replaceState(null, '', newUrl);
+    }
     //////
     // Удаляем отступы контейнера.
     $('#main-content-container').removeClass('container');
@@ -365,6 +435,9 @@ var ModuleExtendedCDRs = {
     //////
     ModuleExtendedCDRs.changeReportVariant();
     ModuleExtendedCDRs.initializeDateRangeSelector();
+
+    // Process URL parameters
+    ModuleExtendedCDRs.processUrlParameters();
 
     // инициализируем чекбоксы и выподающие менюшки
     window[className].$checkBoxes.checkbox();
@@ -619,18 +692,21 @@ var ModuleExtendedCDRs = {
       ModuleExtendedCDRs.$dateRangeSelector.attr('data-end', moment(defPeriod[1].format('YYYYMMDD')).endOf('day').format('YYYY/MM/DD'));
       ModuleExtendedCDRs.$dateRangeSelector.val("".concat(defPeriod[0].format('DD/MM/YYYY'), " - ").concat(defPeriod[1].format('DD/MM/YYYY')));
     }
-    if (settings.globalSearch !== undefined) {
-      ModuleExtendedCDRs.$globalSearch.val(settings.globalSearch);
-    }
-
     // Temporarily disable onChange to avoid multiple applyFilter calls
     $('#additionalFilter').dropdown('setting', 'onChange', function () {});
     $('#additionalFilter').dropdown('clear');
-    if (settings.additionalFilter !== undefined) {
+    if ($('#pAdditionalFilterString').val() !== '-') {
+      $('#additionalFilter').dropdown('set selected', $('#pAdditionalFilterString').val().split(' '));
+      settings.typeCall = undefined;
+      settings.globalSearch = undefined;
+    } else if (settings.additionalFilter !== undefined) {
       $('#additionalFilter').dropdown('set selected', settings.additionalFilter.split(' '));
     }
     // Re-enable onChange
     $('#additionalFilter').dropdown('setting', 'onChange', ModuleExtendedCDRs.applyFilter);
+    if (settings.globalSearch !== undefined) {
+      ModuleExtendedCDRs.$globalSearch.val(settings.globalSearch);
+    }
     if (settings.typeCall !== undefined) {
       $('#typeCall.menu a.item').tab('change tab', settings.typeCall);
     } else {
@@ -802,9 +878,17 @@ var ModuleExtendedCDRs = {
     var period = ModuleExtendedCDRs.$dateRangeSelector.attr('data-def-value');
     var defPeriod = [moment(), moment()];
     if (period !== '' && period !== undefined) {
-      var periods = ModuleExtendedCDRs.getStandardPeriods();
-      if (periods[period] !== undefined) {
-        defPeriod = periods[period];
+      if ($('#pDateRangeSelector').val() === period) {
+        var _period$split = period.split(' - '),
+          _period$split2 = _slicedToArray(_period$split, 2),
+          startStr = _period$split2[0],
+          endStr = _period$split2[1];
+        defPeriod = [moment(startStr, 'DD/MM/YYYY'), moment(endStr, 'DD/MM/YYYY')];
+      } else {
+        var periods = ModuleExtendedCDRs.getStandardPeriods();
+        if (periods[period] !== undefined) {
+          defPeriod = periods[period];
+        }
       }
     }
     var options = {};

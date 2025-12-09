@@ -260,24 +260,41 @@ const ModuleExtendedCDRs = {
 			deferRender: true,
 			// pageLength: ModuleExtendedCDRs.calculatePageLength(),
 
-			/**
-			 * Constructs the CDR Queue row.
-			 * @param {HTMLElement} row - The row element.
-			 * @param {Array} data - The row data.
-			 */
-			createdRow(row, data) {
-				$(row).attr('data-queue', data.queueId);
-				$(row).attr('data-date', data.date);
-				$('td', row).eq(0).html(data.date);
-				$('td', row).eq(1).html(data.queueName || '-').addClass('center aligned');
-				$('td', row).eq(2).html(data.totalCalls).addClass('center aligned');
-				$('td', row).eq(3).html(data.answered).addClass('center aligned');
-				$('td', row).eq(4).html(data.missed).addClass('center aligned');
-				$('td', row).eq(5).html(data.answeredQueue).addClass('center aligned');
-				$('td', row).eq(6).html(data.avgWaitTime).addClass('center aligned');
-				$('td', row).eq(7).html(data.avgMissed + '%').addClass('center aligned');
-				$('td', row).eq(8).html(data.avgWaitTimeQueue).addClass('center aligned');
-			},
+		/**
+		 * Constructs the CDR Queue row.
+		 * @param {HTMLElement} row - The row element.
+		 * @param {Array} data - The row data.
+		 */
+		createdRow(row, data) {
+			$(row).attr('data-queue', data.queueId);
+			$(row).attr('data-date', data.date);
+			
+			// Format date for display and URL
+			let dateForUrl = '';
+			if (data.date) {
+				const dateParts = data.date.split('-');
+				if (dateParts.length === 3) {
+					dateForUrl = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+				}
+			}
+			
+			// Create detail button
+			let dateHtml = data.date;
+			if (dateForUrl && data.queueId) {
+				const detailUrl = `${globalRootUrl}module-extended-c-d-rs/index/?reportNameID=CallDetails&dateRangeSelector=${encodeURIComponent(dateForUrl + ' - ' + dateForUrl)}&queue=${encodeURIComponent(data.queueId)}`;
+				dateHtml = `${data.date} <i class="external alternate icon link" style="cursor: pointer; margin-left: 5px;" onclick="window.open('${detailUrl}', '_blank')" title="Open details"></i>`;
+			}
+			
+			$('td', row).eq(0).html(dateHtml);
+			$('td', row).eq(1).html(data.queueName || '-').addClass('center aligned');
+			$('td', row).eq(2).html(data.totalCalls).addClass('center aligned');
+			$('td', row).eq(3).html(data.answered).addClass('center aligned');
+			$('td', row).eq(4).html(data.missed).addClass('center aligned');
+			$('td', row).eq(5).html(data.answeredQueue).addClass('center aligned');
+			$('td', row).eq(6).html(data.avgWaitTime).addClass('center aligned');
+			$('td', row).eq(7).html(data.avgMissed + '%').addClass('center aligned');
+			$('td', row).eq(8).html(data.avgWaitTimeQueue).addClass('center aligned');
+		},
 			drawCallback(settings) {
 				ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
 			},
@@ -353,9 +370,63 @@ const ModuleExtendedCDRs = {
 		}
 	},
 	/**
+	 * Process URL parameters for filtering
+	 */
+	processUrlParameters() {
+		const urlParams = new URLSearchParams(window.location.search);
+		const reportNameID = urlParams.get('reportNameID');
+		const dateRangeSelector = urlParams.get('dateRangeSelector');
+		const queue = urlParams.get('queue');
+		
+		// Set report type if specified
+		if (reportNameID) {
+			$('#currentReportNameID').val(reportNameID);
+		}
+		
+		// Set date range if specified
+		if (dateRangeSelector) {
+			const dates = dateRangeSelector.split(' - ');
+			if (dates.length === 2) {
+				const startDate = moment(dates[0], 'DD/MM/YYYY');
+				const endDate = moment(dates[1], 'DD/MM/YYYY');
+				
+				if (startDate.isValid() && endDate.isValid()) {
+					ModuleExtendedCDRs.$dateRangeSelector.attr('data-start', startDate.format('YYYY/MM/DD'));
+					ModuleExtendedCDRs.$dateRangeSelector.attr('data-end', endDate.endOf('day').format('YYYY/MM/DD'));
+					ModuleExtendedCDRs.$dateRangeSelector.val(`${startDate.format('DD/MM/YYYY')} - ${endDate.format('DD/MM/YYYY')}`);
+				}
+			}
+		}
+		
+		// Set queue filter if specified
+		if (queue) {
+			// Temporarily disable onChange to avoid multiple applyFilter calls
+			$('#additionalFilter').dropdown('setting', 'onChange', function() {});
+			
+			// Add queue to filter
+			const currentFilter = $('#additionalFilter').dropdown('get value');
+			const filterArray = currentFilter ? currentFilter.split(',') : [];
+			const queueValue = 'queue_' + queue;
+			
+			if (!filterArray.includes(queueValue)) {
+				filterArray.push(queueValue);
+			}
+			
+			$('#additionalFilter').dropdown('set selected', filterArray);
+			
+			// Re-enable onChange
+			$('#additionalFilter').dropdown('setting', 'onChange', ModuleExtendedCDRs.applyFilter);
+		}
+	},
+	
+	/**
 	 * On page load we init some Semantic UI library
 	 */
 	initialize() {
+		if (window.location.search) {
+			const newUrl = window.location.pathname;
+			window.history.replaceState(null, '', newUrl);
+		}
 		//////
 		// Удаляем отступы контейнера.
 		$('#main-content-container').removeClass('container');
@@ -382,6 +453,9 @@ const ModuleExtendedCDRs = {
 		//////
 		ModuleExtendedCDRs.changeReportVariant();
 		ModuleExtendedCDRs.initializeDateRangeSelector();
+		
+		// Process URL parameters
+		ModuleExtendedCDRs.processUrlParameters();
 
 		// инициализируем чекбоксы и выподающие менюшки
 		window[className].$checkBoxes.checkbox();
@@ -663,18 +737,23 @@ const ModuleExtendedCDRs = {
 			ModuleExtendedCDRs.$dateRangeSelector.attr('data-end', moment(defPeriod[1].format('YYYYMMDD')).endOf('day').format('YYYY/MM/DD'));
 			ModuleExtendedCDRs.$dateRangeSelector.val(`${defPeriod[0].format('DD/MM/YYYY')} - ${defPeriod[1].format('DD/MM/YYYY') }`);
 		}
-		if(settings.globalSearch !== undefined) {
-			ModuleExtendedCDRs.$globalSearch.val(settings.globalSearch)
-		}
-
 		// Temporarily disable onChange to avoid multiple applyFilter calls
 		$('#additionalFilter').dropdown('setting', 'onChange', function() {});
 		$('#additionalFilter').dropdown('clear');
-		if(settings.additionalFilter !== undefined){
+
+		if($('#pAdditionalFilterString').val() !== '-'){
+			$('#additionalFilter').dropdown('set selected', $('#pAdditionalFilterString').val().split(' '));
+			settings.typeCall = undefined;
+			settings.globalSearch = undefined;
+		}else if(settings.additionalFilter !== undefined){
 			$('#additionalFilter').dropdown('set selected', settings.additionalFilter.split(' '));
 		}
 		// Re-enable onChange
 		$('#additionalFilter').dropdown('setting', 'onChange', ModuleExtendedCDRs.applyFilter);
+
+		if(settings.globalSearch !== undefined) {
+			ModuleExtendedCDRs.$globalSearch.val(settings.globalSearch)
+		}
 
 		if(settings.typeCall !== undefined){
 			$('#typeCall.menu a.item').tab('change tab', settings.typeCall)
@@ -905,9 +984,14 @@ const ModuleExtendedCDRs = {
 		const period = ModuleExtendedCDRs.$dateRangeSelector.attr('data-def-value');
 		let defPeriod = [moment(),moment()];
 		if(period !== '' && period !== undefined){
-			let periods = ModuleExtendedCDRs.getStandardPeriods();
-			if(periods[period] !== undefined){
-				defPeriod = periods[period];
+			if($('#pDateRangeSelector').val() === period){
+				const [startStr, endStr] = period.split(' - ');
+				defPeriod = [moment(startStr, 'DD/MM/YYYY'),  moment(endStr, 'DD/MM/YYYY')];
+			}else{
+				let periods = ModuleExtendedCDRs.getStandardPeriods();
+				if(periods[period] !== undefined){
+					defPeriod = periods[period];
+				}
 			}
 		}
 
