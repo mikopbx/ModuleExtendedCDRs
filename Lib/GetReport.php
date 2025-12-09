@@ -978,6 +978,12 @@ class GetReport
             $globalNumbers[$index] = ConnectorDB::getPhoneIndex($value);
         }
 
+        if( preg_match_all('/queue_(QUEUE-[A-Z0-9]+)/i', $additionalFilter, $matches)){
+            $queueIds = $matches[1]??[];
+            $parameters['conditions'] .= ' AND queueId IN ({queueIds:array})';
+            $parameters['bind']['queueIds'] = $queueIds;
+        }
+
         return [$start, $end, $globalNumbers, $additionalNumbers];
     }
 
