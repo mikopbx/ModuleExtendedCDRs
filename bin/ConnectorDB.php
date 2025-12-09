@@ -27,6 +27,7 @@ use Modules\ModuleExtendedCDRs\Lib\CacheManager;
 use Modules\ModuleExtendedCDRs\Lib\HistoryParser;
 use Modules\ModuleExtendedCDRs\Lib\Logger;
 use Exception;
+use Modules\ModuleExtendedCDRs\Lib\MikoPBXVersion;
 use Modules\ModuleExtendedCDRs\Lib\Providers\CdrDbProvider;
 use Modules\ModuleExtendedCDRs\Models\CallHistory;
 use Modules\ModuleExtendedCDRs\Models\CallQueuesHistory;
@@ -115,8 +116,13 @@ class ConnectorDB extends WorkerBase
      */
     public function onEvents($tube): void
     {
+        $data = [];
         try {
-            $data = json_decode($tube->getBody(), true, 512, JSON_THROW_ON_ERROR);
+            $pathToData = $tube->getBody();
+            if(file_exists($pathToData)) {
+                $data = json_decode(file_get_contents($pathToData), true, 512, JSON_THROW_ON_ERROR);
+                unlink($pathToData);
+            }
         }catch (Exception $e){
             return;
         }
@@ -133,7 +139,7 @@ class ConnectorDB extends WorkerBase
                 $this->logger->writeError($data);
             }
             if(isset($data['need-ret'])){
-                $res_data = $this->saveResultInTmpFile($res_data);
+                $res_data = self::saveInTmpFile($res_data);
                 $tube->reply($res_data);
             }
         }
@@ -141,27 +147,32 @@ class ConnectorDB extends WorkerBase
 
     /**
      * Сериализует данные и сохраняет их во временный файл.
-     * @param $data
+     * @param array $data
      * @return string
      */
-    private function saveResultInTmpFile($data):string
+    public static function saveInTmpFile(array $data):string
     {
         try {
             $res_data = json_encode($data, JSON_THROW_ON_ERROR);
         }catch (\JsonException $e){
             return '';
         }
-        $dirsConfig = $this->di->getShared('config');
-        $tmoDirName = $dirsConfig->path('core.tempDir') . '/ModuleExtendedCDRs';
-        Util::mwMkdir($tmoDirName, true);
-        if (file_exists($tmoDirName)) {
-            $tmpDir = $tmoDirName;
-        }else{
-            $tmpDir = '/tmp/';
-        }
-        $downloadCacheDir = $dirsConfig->path('www.downloadCacheDir');
-        if (!file_exists($downloadCacheDir)) {
-            $downloadCacheDir = '';
+        $downloadCacheDir = '/tmp/';
+        $tmpDir           = '/tmp/';
+        $di = MikoPBXVersion::getDefaultDi();
+        if ($di) {
+            $dirsConfig = $di->getShared('config');
+            $tmoDirName = $dirsConfig->path('core.tempDir') . '/ModuleExtendedCDRs';
+            Util::mwMkdir($tmoDirName);
+            chown($tmoDirName, 'www');
+            if (file_exists($tmoDirName)) {
+                $tmpDir = $tmoDirName;
+            }
+
+            $downloadCacheDir = $dirsConfig->path('www.downloadCacheDir');
+            if (!file_exists($downloadCacheDir)) {
+                $downloadCacheDir = '';
+            }
         }
         $fileBaseName = md5(microtime(true));
         // "temp-" in the filename is necessary for the file to be automatically deleted after 5 minutes.
@@ -196,9 +207,11 @@ class ConnectorDB extends WorkerBase
         try {
             if($retVal){
                 $req['need-ret'] = true;
-                $result = $client->request(json_encode($req, JSON_THROW_ON_ERROR), 60);
+                $pathToData = self::saveInTmpFile($req);
+                $result = $client->request($pathToData, 20);
             }else{
-                $client->publish(json_encode($req, JSON_THROW_ON_ERROR));
+                $pathToData = self::saveInTmpFile($req);
+                $client->publish($pathToData);
                 return [];
             }
             if(file_exists($result)){
