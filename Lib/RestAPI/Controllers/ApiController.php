@@ -91,13 +91,11 @@ class ApiController extends ModulesControllerBase
             return;
         }
         $gr = new GetReport();
-        $params = [];
-        $aggregatedData = self::aggregateCdrData($gr->historyQueue($searchPhrase, null, null, $params));
+        $aggregatedData = self::aggregateCdrData($gr->historyQueue($searchPhrase, null, null));
         $view = (object)$aggregatedData;
         $view->searchPhrase = $searchPhrase;
         $view->title = urldecode($this->request->get('title')??'');
         if($type === 'json'){
-            $view->params = $params;
             $this->echoResponse((array)$view);
         }elseif($type === 'pdf'){
             GetReport::exporthistoryQueuePdf($view);

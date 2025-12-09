@@ -40,7 +40,7 @@ require_once(dirname(__DIR__) . '/vendor/autoload.php');
 class GetReport
 {
 
-    public function historyQueue(string $searchPhrase = '', ?int $offset = null, ?int $limit = null, array &$params)
+    public function historyQueue(string $searchPhrase = '', ?int $offset = null, ?int $limit = null)
     {
         $tmpSearchPhrase = json_decode($searchPhrase, true);
         $minBilSec  = intval($tmpSearchPhrase['minBilSec']??0);
@@ -1001,7 +1001,7 @@ class GetReport
             if (count($matches[0]) === 1) {
                 $date = DateTime::createFromFormat('d/m/Y', $matches[0][0]);
                 $start = $date->format('Y-m-d');
-                $end = $date->modify('+1 day')->format('Y-m-d');
+                $end = $date->modify('+1 day')->setTime(0, 0, 0)->modify('-1 second')->format('Y-m-d H:i:s');
                 $parameters['conditions'] .= 'start BETWEEN :dateFromPhrase1: AND :dateFromPhrase2:';
                 $parameters['bind']['dateFromPhrase1'] = $start;
                 $parameters['bind']['dateFromPhrase2'] = $end;
@@ -1012,7 +1012,8 @@ class GetReport
                 $start = $date->format('Y-m-d');
                 $parameters['bind']['dateFromPhrase1'] = $start;
                 $date = DateTime::createFromFormat('d/m/Y', $matches[0][1]);
-                $end = $date->modify('+1 day')->format('Y-m-d');
+                $end = $date->modify('+1 day')->setTime(0, 0, 0)->modify('-1 second')->format('Y-m-d H:i:s');
+
                 $parameters['bind']['dateFromPhrase2'] = $end;
                 $searchPhrase = str_replace(
                     [$matches[0][0], $matches[0][1]],

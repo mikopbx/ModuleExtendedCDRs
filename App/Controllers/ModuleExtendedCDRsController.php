@@ -603,7 +603,7 @@ class ModuleExtendedCDRsController extends BaseController
 
         $gr = new GetReport();
         $params = [];
-        $view = ApiController::aggregateCdrData($gr->historyQueue($searchPhrase['value']??'',  $this->request->get('start'), $length, $params));
+        $view = ApiController::aggregateCdrData($gr->historyQueue($searchPhrase['value']??'',  $this->request->get('start'), $length));
         foreach ($view as $key => $value) {
             $this->view->$key = $value;
         }
