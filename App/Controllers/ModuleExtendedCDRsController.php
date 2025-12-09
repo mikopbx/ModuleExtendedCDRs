@@ -147,7 +147,7 @@ class ModuleExtendedCDRsController extends BaseController
         $this->view->pick("{$this->moduleDir}/App/Views/index");
 
         // Список выбора очередей.
-        $this->view->queues = CallQueues::find(['columns' => ['id', 'name']]);
+        $this->view->queues = CallQueues::find(['columns' => ['uniqid As id', 'name']]);
         $this->view->groups = [];
 
         if(class_exists('\Modules\ModuleUsersGroups\Models\UsersGroups')){
@@ -184,6 +184,16 @@ class ModuleExtendedCDRsController extends BaseController
             }
         }
 
+        foreach ($this->view->queues as $queue){
+            foreach ($filterNumbers as $number){
+                if('group_'.$queue['id'] === $number){
+                    $additionalFilter[] = [
+                        'name'   => $queue['name'],
+                        'number' => $number
+                    ];
+                }
+            }
+        }
         foreach ($this->view->users as $user){
             foreach ($filterNumbers as $number){
                 if($user['number'] === $number){
@@ -198,7 +208,6 @@ class ModuleExtendedCDRsController extends BaseController
         $this->view->additionalFilter       = $additionalFilter;
         $this->view->additionalFilterString = implode(',',array_column($additionalFilter, 'number'));
         $this->view->accessData  = $this->getUserData();
-
     }
 
     private function getVariantsReports(&$searchSettings)

@@ -152,11 +152,20 @@
                  <div class="scrolling menu">
                     {% for group in groups %}
                     <div class="item" data-value="group_{{ group['id'] }}">
-                    <i class="users icon"></i>
+                    <i class="sitemap icon"></i>
                     Отдел: {{ group['name'] }}
                     </div>
                     {% endfor %}
                     <h4 class="ui horizontal divider header"></h4>
+
+                    {% for queue in queues %}
+                    <div class="item" data-value="queue_{{ queue['id'] }}">
+                    <i class="users icon"></i>
+                    Очередь: {{ queue['name'] }}
+                    </div>
+                    {% endfor %}
+                    <h4 class="ui horizontal divider header"></h4>
+
                     {% for user in users %}
                     <div class="item" data-value="{{ user['number'] }}">
                     <i class="user icon"></i>

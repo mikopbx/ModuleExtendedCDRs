@@ -486,6 +486,21 @@ class ConnectorDB extends WorkerBase
         return $res_data;
     }
 
+    public function getCdrQueueIDs(array $filter = []): array
+    {
+        $res_data = [];
+        if ($this->filterNotValid($filter)) {
+            return $res_data;
+        }
+        try {
+            $res = CallQueuesHistory::find($filter)->toArray();
+        } catch (\Throwable $e) {
+            $res_data = [];
+        }
+        return $res;
+    }
+
+
     /**
      * Возвращает количество записпей за период с отбором по номерам.
      * @param string $start
@@ -496,7 +511,7 @@ class ConnectorDB extends WorkerBase
      * @param int  $minBilSec
      * @return array
      */
-    public function getCountCdr(string $start, string $end, array $numbers, array $additionalNumbers, array $additionalFilter, int $minBilSec = 0): array
+    public function getCountCdr(string $start, string $end, array $numbers, array $additionalNumbers, array $additionalFilter, int $minBilSec = 0, array $ids = []): array
     {
         $bindParams = [
             ':start' => $start,
@@ -547,6 +562,21 @@ class ConnectorDB extends WorkerBase
                 [$placeholders, 'cdr_general.dstIndex', 'cdr_general.srcIndex', ''],
                 $additionalFilter['conditions']??''
             );
+        }
+
+        if (!empty($ids)) {
+            $index = 0;
+            foreach ($ids as $linkedid) {
+                $bindParams[":linkedid$index"] = $linkedid;
+                $index++;
+            }
+            $placeholders = implode(
+                ', ',
+                array_map(static function ($key){
+                    return ":linkedid$key";
+                }, array_keys($ids))
+            );
+            $condition .= " AND cdr_general.linkedid IN ($placeholders)";
         }
 
         if (!$this->di->has(CdrDbProvider::SERVICE_NAME)) {

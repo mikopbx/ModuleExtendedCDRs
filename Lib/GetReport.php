@@ -189,7 +189,7 @@ class GetReport
             return $view;
         }
 
-        [$start, $end, $numbers, $additionalNumbers] = $this->prepareConditionsForSearchPhrases($searchPhrase, $parameters);
+        [$start, $end, $numbers, $additionalNumbers, $ids] = $this->prepareConditionsForSearchPhrases($searchPhrase, $parameters);
         // If we couldn't understand the search phrase, return empty result
         if (empty($parameters['conditions'])) {
             $view->conditions = 'empty';
@@ -202,7 +202,7 @@ class GetReport
         $view->additionalFilter = $additionalFilter;
         $view->baseNumberFilter = array_merge($numbers, $additionalNumbers, $additionalFilter);
 
-        $recordsFilteredReq = ConnectorDB::invoke('getCountCdr', [$start, $end, $numbers, $additionalNumbers, $additionalFilter, $minBilSec]);
+        $recordsFilteredReq = ConnectorDB::invoke('getCountCdr', [$start, $end, $numbers, $additionalNumbers, $additionalFilter, $minBilSec, $ids]);
         $view->recordsFiltered = $recordsFilteredReq['cCalls'] ?? 0;
         $view->recordsInner = $recordsFilteredReq['cINNER'] ?? 0;
         $view->recordsOutgoing = $recordsFilteredReq['cOUTGOING'] ?? 0;
@@ -220,6 +220,10 @@ class GetReport
             $parameters['offset'] = $offset;
         }
 
+        if(!empty($ids)){
+            $parameters['conditions'] = '('.$parameters['conditions']. ') AND linkedid IN ({queueIds:array})';
+            $parameters['bind']['queueIds'] = $ids;
+        }
         $selectedLinkedIds = $this->selectCDRRecordsWithFilters($parameters);
         $arrIDS = [];
         foreach ($selectedLinkedIds as $item) {
@@ -881,7 +885,6 @@ class GetReport
         $searchPhrase = json_decode($searchPhrase, true);
         $minBilSec    = intval($searchPhrase['minBilSec']??0);
         $dateRangeSelector = $searchPhrase['dateRangeSelector'] ?? '';
-        $typeCall = $searchPhrase['typeCall'] ?? '';
 
         $parameters['conditions'] = '';
         $start = '';
@@ -987,6 +990,7 @@ class GetReport
      */
     private function prepareConditionsForSearchPhrases(string &$searchPhrase, array &$parameters, array $columns = []): array
     {
+        $ids = [];
         $searchPhrase = json_decode($searchPhrase, true);
         $minBilSec    = intval($searchPhrase['minBilSec']??0);
         $dateRangeSelector = $searchPhrase['dateRangeSelector'] ?? '';
@@ -1059,11 +1063,8 @@ class GetReport
         // Search phone numbers
         $searchPhrase = str_replace(['(', ')', '-', '+'], '', $searchPhrase);
         $groupNumber = [];
-        if (class_exists('\Modules\ModuleUsersGroups\Models\UsersGroups') && preg_match_all(
-                '/(?:\s|^)group_(\d+)\b/',
-                $additionalFilter,
-                $matches
-            )) {
+        if (class_exists('\Modules\ModuleUsersGroups\Models\UsersGroups')
+            && preg_match_all('/(?:\s|^)group_(\d+)\b/', $additionalFilter, $matches )) {
             $filter = [
                 'group_id IN ({group_id:array})',
                 'bind' => [
@@ -1084,6 +1085,21 @@ class GetReport
                 ];
                 $groupNumber = array_column(Extensions::find($filter)->toArray(), 'number');
             }
+        }
+
+        $matches  = [];
+        if( preg_match_all('/queue_(QUEUE-[A-Z0-9]+)/i', $additionalFilter, $matches)){
+            $queueIds = $matches[1]??[];
+            $filterQueue = [
+                'conditions' => 'date BETWEEN :dateFromPhrase1: AND :dateFromPhrase2: AND queueId IN ({queueIds:array})',
+                'columns' => 'linkedid',
+                'bind' => [
+                    'queueIds' => $queueIds,
+                    'dateFromPhrase1' => $parameters['bind']['dateFromPhrase1'],
+                    'dateFromPhrase2' => $parameters['bind']['dateFromPhrase2']
+                ]
+            ];
+            $ids = array_column(ConnectorDB::invoke('getCdrQueueIDs', [$filterQueue]), 'linkedid');
         }
 
         $additionalNumbers = [];
@@ -1120,7 +1136,7 @@ class GetReport
             $parameters['bind']['additionslNumbers'] = array_unique($additionalNumbers);
         }
 
-        return [$start, $end, $globalNumbers, $additionalNumbers];
+        return [$start, $end, $globalNumbers, $additionalNumbers, $ids];
     }
 
     /**
