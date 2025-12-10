@@ -778,8 +778,12 @@ const ModuleExtendedCDRs = {
 		$('#currentMinBillSec').val(minBillSec);
 		$('#currentMinBillSecComp').dropdown('set selected', minBillSecComp);
 		$('#currentMinBillSecComp').attr('data-value', minBillSecComp);
-		
-		if(settings.dateRangeSelector !== undefined && settings.dateRangeSelector !== ''){
+
+		let setDate = $('#pDateRangeSelector').val() === "";
+		if(setDate){
+			$('#pDateRangeSelector').val('');
+		}
+		if(setDate && settings.dateRangeSelector !== undefined && settings.dateRangeSelector !== ''){
 			let periods = ModuleExtendedCDRs.getStandardPeriods();
 			let defPeriod = [moment(),moment()];
 			if(periods[settings.dateRangeSelector] !== undefined){

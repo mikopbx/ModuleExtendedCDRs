@@ -146,8 +146,14 @@ class ModuleExtendedCDRsController extends BaseController
         $this->view->form = new ModuleExtendedCDRsForm($settings, $options);
         $this->view->pick("{$this->moduleDir}/App/Views/index");
 
+        $queues = CallQueues::find(['columns' => ['uniqid As id', 'name']])->toArray();
+        if(!empty($queues)){
+            $queues[] = ['id' => '-', "name" => Util::translate('repModuleExtendedCDRs_WithOutQueues')];
+        }
         // Список выбора очередей.
-        $this->view->queues = CallQueues::find(['columns' => ['uniqid As id', 'name']]);
+        $this->view->queues = $queues;
+
+
         $this->view->groups = [];
 
         if(class_exists('\Modules\ModuleUsersGroups\Models\UsersGroups')){

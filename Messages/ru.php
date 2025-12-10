@@ -36,7 +36,8 @@ return [
     'repModuleExtendedCDRs_cdr_CALL_TYPE_OUTGOING' => 'исходящий',
     'repModuleExtendedCDRs_cdr_CALL_TYPE_INCOMING' => 'входящий',
     'repModuleExtendedCDRs_cdr_CALL_TYPE_MISSED'   => 'пропущен',
-    'repModuleExtendedCDRs_syncState'              => 'Прогресс загрузки истории звонков: {value} из {total} записей',
+    'repModuleExtendedCDRs_WithOutQueues'   => 'Без очередей',
+    'repModuleExtendedCDRs_syncState'       => 'Прогресс загрузки истории звонков: {value} из {total} записей',
 
     'repModuleExtendedCDRs_cdr_cal_Today' => 'Сегодня',
     'repModuleExtendedCDRs_cdr_cal_Yesterday' => 'Вчера',

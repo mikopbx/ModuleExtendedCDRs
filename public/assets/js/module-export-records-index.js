@@ -730,7 +730,11 @@ var ModuleExtendedCDRs = {
     $('#currentMinBillSec').val(minBillSec);
     $('#currentMinBillSecComp').dropdown('set selected', minBillSecComp);
     $('#currentMinBillSecComp').attr('data-value', minBillSecComp);
-    if (settings.dateRangeSelector !== undefined && settings.dateRangeSelector !== '') {
+    var setDate = $('#pDateRangeSelector').val() === "";
+    if (setDate) {
+      $('#pDateRangeSelector').val('');
+    }
+    if (setDate && settings.dateRangeSelector !== undefined && settings.dateRangeSelector !== '') {
       var periods = ModuleExtendedCDRs.getStandardPeriods();
       var defPeriod = [moment(), moment()];
       if (periods[settings.dateRangeSelector] !== undefined) {

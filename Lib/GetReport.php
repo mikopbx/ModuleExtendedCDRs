@@ -978,8 +978,13 @@ class GetReport
             $globalNumbers[$index] = ConnectorDB::getPhoneIndex($value);
         }
 
-        if( preg_match_all('/queue_(QUEUE-[A-Z0-9]+)/i', $additionalFilter, $matches)){
+        if( preg_match_all('/queue_([^\s]+)/', $additionalFilter, $matches)){
             $queueIds = $matches[1]??[];
+            foreach ($queueIds as $index => $value) {
+                if($value === '-'){
+                    $queueIds[$index] = '';
+                }
+            }
             $parameters['conditions'] .= ' AND queueId IN ({queueIds:array})';
             $parameters['bind']['queueIds'] = $queueIds;
         }
@@ -1094,8 +1099,13 @@ class GetReport
         }
 
         $matches  = [];
-        if( preg_match_all('/queue_(QUEUE-[A-Z0-9]+)/i', $additionalFilter, $matches)){
+        if( preg_match_all('/queue_([^\s]+)/', $additionalFilter, $matches)){
             $queueIds = $matches[1]??[];
+            foreach ($queueIds as $index => $value) {
+                if($value === '-'){
+                    $queueIds[$index] = '';
+                }
+            }
             $filterQueue = [
                 'conditions' => 'date BETWEEN :dateFromPhrase1: AND :dateFromPhrase2: AND queueId IN ({queueIds:array})',
                 'columns' => 'linkedid',

@@ -116,7 +116,7 @@ class ApiController extends ModulesControllerBase
             $key = $date.$queueId;
             if (!isset($groups[$key])) {
                 $groups[$key] = [
-                    'queueId' => $queueId,
+                    'queueId' =>  ($queueId==='')?'-':$queueId,
                     'queueName' => $record['queueName']??'',
                     'date' => $date,
                     'linkedids' => [],
