@@ -360,6 +360,8 @@ class GetReport
                 if ($record->is_app === '1') {
                     $waitTime = 0;
                 } else {
+                    $linkedRecord->answerTime = empty($linkedRecord->answerTime) ? $record->answer : $linkedRecord->answerTime;
+
                     $waitTime = strtotime($record->answer) - strtotime($record->start);
                 }
 
@@ -414,6 +416,7 @@ class GetReport
                 $cdr->waitTime = strtotime($cdr->endtime) - strtotime($cdr->start);
             }
             $additionalClass = (empty($cdr->answered)) ? 'ui' : 'detailed';
+            $realWaitTime = max(0,strtotime($cdr->answerTime)-strtotime($cdr->start));
             $output[] = [
                 date('d-m-Y H:i:s', strtotime($cdr->start)),
                 $cdr->src_num,
@@ -421,7 +424,8 @@ class GetReport
                 $timing === '00:00' ? '' : $timing,
                 $cdr->answered,
                 $cdr->disposition,
-                'waitTime' => gmdate($cdr->waitTime < 3600 ? 'i:s' : 'G:i:s', $cdr->waitTime),
+                'waitTime' => gmdate($realWaitTime < 3600 ? 'i:s' : 'G:i:s', $realWaitTime),
+                // 'waitTime' => gmdate($cdr->waitTime < 3600 ? 'i:s' : 'G:i:s', $cdr->waitTime),
                 'stateCall' => $cdr->stateCall,
                 'typeCall' => $cdr->typeCall,
                 'typeCallDesc' => $cdr->typeCallDesc,

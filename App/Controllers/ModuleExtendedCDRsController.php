@@ -152,8 +152,6 @@ class ModuleExtendedCDRsController extends BaseController
         }
         // Список выбора очередей.
         $this->view->queues = $queues;
-
-
         $this->view->groups = [];
 
         if(class_exists('\Modules\ModuleUsersGroups\Models\UsersGroups')){
