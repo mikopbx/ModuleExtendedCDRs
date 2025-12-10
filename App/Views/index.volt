@@ -181,7 +181,7 @@
              </div>
              <div id="minBillSecContainer" style="margin-right: 18px; display: flex; align-items: center; white-space: nowrap;">
                <label style="margin-right: 10px; line-height: 32px; font-weight: 600;">{{ t._('repModuleExtendedCDRs_Form_minBillSec') }}:</label>
-               <div id="currentMinBillSecComp" class="ui compact button dropdown" data-value=">" style="height: 32px; min-width: 40px; padding: 8px 10px; line-height: 16px;">
+               <div id="currentMinBillSecComp" class="ui basic compact button dropdown" data-value=">" style="height: 32px; min-width: 40px; padding: 8px 10px; line-height: 16px;">
                   &gt;
                   <div class="menu">
                     <div class="item" data-value=">">&gt;</div>

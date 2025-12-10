@@ -645,21 +645,30 @@ var ModuleExtendedCDRs = {
       ModuleExtendedCDRs.applyFilter();
     });
 
-    // Initialize and handle minBillSecComp dropdown changes
-    $('#currentMinBillSecComp').dropdown({
-      onChange: function onChange(value, text, $selectedItem) {
-        var reportNameID = $('#currentReportNameID').val();
-        var currentVariantId = $('#currentVariantId').val();
+    // Initialize minBillSecComp dropdown
+    $('#currentMinBillSecComp').dropdown();
 
-        // Update button text and data attribute
-        $('#currentMinBillSecComp').attr('data-value', value);
-        if (currentVariantId === '') {
-          $("h4#".concat(reportNameID)).attr('data-min-bill-sec-comp', value);
-        } else {
-          $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportNameID, "\"]")).attr('data-min-bill-sec-comp', value);
-        }
-        ModuleExtendedCDRs.applyFilter();
+    // Handle minBillSecComp dropdown changes via click on menu items
+    $(document).on('click', '#currentMinBillSecComp .menu .item', function (e) {
+      var value = $(this).attr('data-value');
+      var text = $(this).html();
+      var reportNameID = $('#currentReportNameID').val();
+      var currentVariantId = $('#currentVariantId').val();
+
+      // Update button text and data attribute
+      $('#currentMinBillSecComp').attr('data-value', value);
+      // Update button text content - remove menu and update text
+      var $button = $('#currentMinBillSecComp');
+      var $menu = $button.find('.menu');
+      $button.contents().not($menu).remove();
+      $button.prepend(text + ' ');
+      $button.append($menu);
+      if (currentVariantId === '') {
+        $("h4#".concat(reportNameID)).attr('data-min-bill-sec-comp', value);
+      } else {
+        $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportNameID, "\"]")).attr('data-min-bill-sec-comp', value);
       }
+      ModuleExtendedCDRs.applyFilter();
     });
     ModuleExtendedCDRs.$formObj.keydown(function (event) {
       if (event.keyCode === 13) {
@@ -730,6 +739,12 @@ var ModuleExtendedCDRs = {
     $('#currentMinBillSec').val(minBillSec);
     $('#currentMinBillSecComp').dropdown('set selected', minBillSecComp);
     $('#currentMinBillSecComp').attr('data-value', minBillSecComp);
+    // Update button text content
+    var $button = $('#currentMinBillSecComp');
+    var $menu = $button.find('.menu');
+    $button.contents().not($menu).remove();
+    $button.prepend(minBillSecComp + ' ');
+    $button.append($menu);
     var setDate = $('#pDateRangeSelector').val() === "";
     if (setDate) {
       $('#pDateRangeSelector').val('');

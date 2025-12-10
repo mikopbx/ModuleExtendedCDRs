@@ -1044,7 +1044,7 @@ class GetReport
                 $parameters['conditions'] .= ' AND ';
             }
             $minBilSecComp= $searchPhrase['minBilSecComp']??'>';
-            if(!in_array($minBilSecComp, ['>', '>=', '<', '<='], true)){
+            if(!in_array($minBilSecComp, ['>', '>=', '<', '<=', '='], true)){
                 $minBilSecComp = '>';
             }
             $parameters['conditions'] .= "billsec $minBilSecComp $minBilSec ";

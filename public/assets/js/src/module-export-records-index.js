@@ -688,23 +688,32 @@ const ModuleExtendedCDRs = {
 			ModuleExtendedCDRs.applyFilter();
 		});
 
-		// Initialize and handle minBillSecComp dropdown changes
-		$('#currentMinBillSecComp').dropdown({
-			onChange: function(value, text, $selectedItem) {
-				const reportNameID = $('#currentReportNameID').val();
-				const currentVariantId = $('#currentVariantId').val();
-				
-				// Update button text and data attribute
-				$('#currentMinBillSecComp').attr('data-value', value);
-				
-				if (currentVariantId === '') {
-					$(`h4#${reportNameID}`).attr('data-min-bill-sec-comp', value);
-				} else {
-					$(`a[data-variant-id="${currentVariantId}"][data-report-id="${reportNameID}"]`).attr('data-min-bill-sec-comp', value);
-				}
-				
-				ModuleExtendedCDRs.applyFilter();
+		// Initialize minBillSecComp dropdown
+		$('#currentMinBillSecComp').dropdown();
+		
+		// Handle minBillSecComp dropdown changes via click on menu items
+		$(document).on('click', '#currentMinBillSecComp .menu .item', function(e) {
+			const value = $(this).attr('data-value');
+			const text = $(this).html();
+			const reportNameID = $('#currentReportNameID').val();
+			const currentVariantId = $('#currentVariantId').val();
+			
+			// Update button text and data attribute
+			$('#currentMinBillSecComp').attr('data-value', value);
+			// Update button text content - remove menu and update text
+			const $button = $('#currentMinBillSecComp');
+			const $menu = $button.find('.menu');
+			$button.contents().not($menu).remove();
+			$button.prepend(text + ' ');
+			$button.append($menu);
+			
+			if (currentVariantId === '') {
+				$(`h4#${reportNameID}`).attr('data-min-bill-sec-comp', value);
+			} else {
+				$(`a[data-variant-id="${currentVariantId}"][data-report-id="${reportNameID}"]`).attr('data-min-bill-sec-comp', value);
 			}
+			
+			ModuleExtendedCDRs.applyFilter();
 		});
 
 		ModuleExtendedCDRs.$formObj.keydown(function(event){
@@ -778,6 +787,12 @@ const ModuleExtendedCDRs = {
 		$('#currentMinBillSec').val(minBillSec);
 		$('#currentMinBillSecComp').dropdown('set selected', minBillSecComp);
 		$('#currentMinBillSecComp').attr('data-value', minBillSecComp);
+		// Update button text content
+		const $button = $('#currentMinBillSecComp');
+		const $menu = $button.find('.menu');
+		$button.contents().not($menu).remove();
+		$button.prepend(minBillSecComp + ' ');
+		$button.append($menu);
 
 		let setDate = $('#pDateRangeSelector').val() === "";
 		if(setDate){
