@@ -629,6 +629,38 @@ var ModuleExtendedCDRs = {
         ModuleExtendedCDRs.applyFilter();
       }
     });
+
+    // Handle minBillSec field changes
+    $('#currentMinBillSec').on('change', function () {
+      var value = $(this).val();
+      var reportNameID = $('#currentReportNameID').val();
+      var currentVariantId = $('#currentVariantId').val();
+
+      // Update data attribute
+      if (currentVariantId === '') {
+        $("h4#".concat(reportNameID)).attr('data-min-bill-sec', value);
+      } else {
+        $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportNameID, "\"]")).attr('data-min-bill-sec', value);
+      }
+      ModuleExtendedCDRs.applyFilter();
+    });
+
+    // Initialize and handle minBillSecComp dropdown changes
+    $('#currentMinBillSecComp').dropdown({
+      onChange: function onChange(value, text, $selectedItem) {
+        var reportNameID = $('#currentReportNameID').val();
+        var currentVariantId = $('#currentVariantId').val();
+
+        // Update button text and data attribute
+        $('#currentMinBillSecComp').attr('data-value', value);
+        if (currentVariantId === '') {
+          $("h4#".concat(reportNameID)).attr('data-min-bill-sec-comp', value);
+        } else {
+          $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportNameID, "\"]")).attr('data-min-bill-sec-comp', value);
+        }
+        ModuleExtendedCDRs.applyFilter();
+      }
+    });
     ModuleExtendedCDRs.$formObj.keydown(function (event) {
       if (event.keyCode === 13) {
         event.preventDefault();
@@ -656,8 +688,10 @@ var ModuleExtendedCDRs = {
     $('#currentVariantId').val(currentVariantId);
     if (reportNameID === 'CdrQueue') {
       $('#typeCall').closest('.ui.column').hide();
+      $('#minBillSecContainer').hide();
     } else {
       $('#typeCall').closest('.ui.column').show();
+      $('#minBillSecContainer').show();
     }
     var variantName = '';
     if (currentVariantId !== '') {
@@ -682,6 +716,20 @@ var ModuleExtendedCDRs = {
     } else {
       settings = JSON.parse(decodeURIComponent($("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportNameID, "\"]")).attr('data-search-text')));
     }
+
+    // Update minBillSec field
+    var minBillSec = 0;
+    var minBillSecComp = '>';
+    if (currentVariantId === '') {
+      minBillSec = $("h4#".concat(reportNameID)).attr('data-min-bill-sec') || 0;
+      minBillSecComp = $("h4#".concat(reportNameID)).attr('data-min-bill-sec-comp') || '>';
+    } else {
+      minBillSec = $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportNameID, "\"]")).attr('data-min-bill-sec') || 0;
+      minBillSecComp = $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportNameID, "\"]")).attr('data-min-bill-sec-comp') || '>';
+    }
+    $('#currentMinBillSec').val(minBillSec);
+    $('#currentMinBillSecComp').dropdown('set selected', minBillSecComp);
+    $('#currentMinBillSecComp').attr('data-value', minBillSecComp);
     if (settings.dateRangeSelector !== undefined && settings.dateRangeSelector !== '') {
       var periods = ModuleExtendedCDRs.getStandardPeriods();
       var defPeriod = [moment(), moment()];
@@ -1021,13 +1069,12 @@ var ModuleExtendedCDRs = {
     }
     var reportNameID = $('#currentReportNameID').val();
     var currentVariantId = $('#currentVariantId').val();
-    var minBilSec = $("h4#".concat(reportNameID)).attr('data-min-bill-sec');
-    if (currentVariantId !== '') {
-      minBilSec = $("a[data-report-id=\"".concat(reportNameID, "\"][data-variant-id=\"").concat(currentVariantId, "\"]")).attr('data-min-bill-sec');
-    }
+    var minBilSec = $('#currentMinBillSec').val() || 0;
+    var minBilSecComp = $('#currentMinBillSecComp').dropdown('get value') || $('#currentMinBillSecComp').attr('data-value') || '>';
     var filter = {
       dateRangeSelector: dateRangeSelector,
       minBilSec: minBilSec,
+      minBilSecComp: minBilSecComp,
       globalSearch: ModuleExtendedCDRs.$globalSearch.val(),
       typeCall: $('#typeCall a.item.active').attr('data-tab'),
       additionalFilter: $('#additionalFilter').dropdown('get value').replace(/,/g, ' ')
@@ -1052,16 +1099,19 @@ var ModuleExtendedCDRs = {
     var currentVariantId = $('#currentVariantId').val();
     var reportId = $('#currentReportNameID').val();
     var variantName = '';
+    var minBillSec = $('#currentMinBillSec').val() || 0;
+    var minBillSecComp = $('#currentMinBillSecComp').dropdown('get value') || $('#currentMinBillSecComp').attr('data-value') || '>';
     var data = {
       'search[value]': search,
       'reportNameID': reportId,
       'variantId': currentVariantId,
-      'variantName': variantName
+      'variantName': variantName,
+      'minBillSec': minBillSec,
+      'minBillSecComp': minBillSecComp
     };
     if (currentVariantId !== '') {
       var parent = $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportId, "\"]"));
       data.variantName = parent.find('div.title').text().trim();
-      data.minBillSec = parent.attr('data-min-bill-sec').trim();
       data.sendingScheduledReport = parent.attr('data-sending-scheduled-report').trim();
       data.dateMonth = parent.attr('data-date-month').trim();
       data.day = parent.attr('data-day').trim();
@@ -1079,8 +1129,12 @@ var ModuleExtendedCDRs = {
       success: function success(response) {
         if (currentVariantId === '') {
           $("#".concat($('#currentReportNameID').val())).attr('data-search-text', encodeURIComponent(search));
+          $("#".concat($('#currentReportNameID').val())).attr('data-min-bill-sec', minBillSec);
+          $("#".concat($('#currentReportNameID').val())).attr('data-min-bill-sec-comp', minBillSecComp);
         } else {
           $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportId, "\"]")).attr('data-search-text', encodeURIComponent(search));
+          $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportId, "\"]")).attr('data-min-bill-sec', minBillSec);
+          $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportId, "\"]")).attr('data-min-bill-sec-comp', minBillSecComp);
         }
       },
       error: function error(xhr, status, _error5) {

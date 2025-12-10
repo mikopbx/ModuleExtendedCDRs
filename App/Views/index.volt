@@ -136,7 +136,7 @@
                  </div>
              </div>
          </div>
-         <div class="ui row" style="padding-top:0; padding-left:9px">
+          <div class="ui row" style="padding-top: 10px; padding-left:9px; display: flex; justify-content: space-between; align-items: center;">
              <div id='additionalFilter' class="ui multiple dropdown">
                <input type="hidden" name="filters" value="{{additionalFilterString}}">
                <i class="filter icon"></i>
@@ -178,6 +178,25 @@
 
                </div>
 
+             </div>
+             <div id="minBillSecContainer" style="margin-right: 18px; display: flex; align-items: center; white-space: nowrap;">
+               <label style="margin-right: 10px; line-height: 32px; font-weight: 600;">{{ t._('repModuleExtendedCDRs_Form_minBillSec') }}:</label>
+               <div id="currentMinBillSecComp" class="ui compact button dropdown" data-value=">" style="height: 32px; min-width: 40px; padding: 8px 10px; line-height: 16px;">
+                  &gt;
+                  <div class="menu">
+                    <div class="item" data-value=">">&gt;</div>
+                    <div class="item" data-value=">=">&gt;=</div>
+                    <div class="item" data-value="<">&lt;</div>
+                    <div class="item" data-value="<=">&lt;=</div>
+                    <div class="item" data-value="=">=</div>
+                  </div>
+                </div>
+                <div class="ui mini right labeled input" style="margin-left: 5px; width: 110px;">
+                  <input type="number" id="currentMinBillSec" placeholder="0" min="0" max="1000" maxlength="6" style="text-align: right; height: 32px; padding: 5px 8px; width: 60px;">
+                  <div class="ui basic label" style="height: 32px; line-height: 20px; padding: 5px 10px; font-size: 12px;">
+                    {{ t._('repModuleExtendedCDRs_Form_minBillSec_s') }}
+                  </div>
+                </div>
              </div>
          </div>
      </div>

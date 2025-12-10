@@ -68,7 +68,7 @@ return [
 
     'repModuleExtendedCDRs_Form_titleReport'   => 'Наименование',
     'repModuleExtendedCDRs_Form_titleReportError'   => 'Наименование не может быть пустым!',
-    'repModuleExtendedCDRs_Form_minBillSec'    => 'Минимальная длительность',
+    'repModuleExtendedCDRs_Form_minBillSec'    => 'Min. длительность разговора',
     'repModuleExtendedCDRs_Form_minBillSecError'    => 'Значение минимальной длительности должно быть от 0 до 1000',
     'repModuleExtendedCDRs_Form_minBillSec_s'  => 'с.',
     'repModuleExtendedCDRs_Form_SendingScheduledReport'  => 'Отправка отчета по расписанию',
