@@ -19,7 +19,6 @@
 
 namespace Modules\ModuleExtendedCDRs\Lib;
 
-use MikoPBX\Common\Models\CallDetailRecordsTmp;
 use MikoPBX\Common\Models\CallQueues;
 use MikoPBX\Common\Models\Extensions;
 use MikoPBX\Common\Providers\CDRDatabaseProvider;

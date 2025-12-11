@@ -51,6 +51,22 @@ class ConnectorDB extends WorkerBase
 
     private int $lastSyncTime = 0;
 
+
+    /**
+     * Handles the received signal.
+     *
+     * @param int $signal The signal to handle.
+     *
+     * @return void
+     */
+    public function signalHandler(int $signal): void
+    {
+        parent::signalHandler($signal);
+        cli_set_process_title('SHUTDOWN_'.cli_get_process_title());
+        $this->logger->writeError("Get signal SHUTDOWN: $signal");
+        $this->needRestart = true;
+    }
+
     /**
      * Старт работы листнера.
      *
@@ -67,16 +83,8 @@ class ConnectorDB extends WorkerBase
         while ($this->needRestart === false) {
             try {
                 $this->syncCdrData();
-                $this->syncCdrData(true);
-                $this->syncCdrData(true);
-                $this->syncCdrData(true);
-                $this->syncCdrData(true);
-                $this->syncCdrData(true);
-                $this->syncCdrData(true);
-                $this->syncCdrData(true);
-                $this->syncCdrData(true);
             }catch (Throwable $exception){
-                $this->logger->writeInfo("Throwable:".$exception->getMessage(). ' Line: '.$exception->getLine());
+                $this->logger->writeError("Throwable:".$exception->getMessage(). ' Line: '.$exception->getLine());
             }
             $beanstalk->wait(10);
             $this->logger->rotate();
@@ -135,13 +143,15 @@ class ConnectorDB extends WorkerBase
                 $data = json_decode(file_get_contents($pathToData), true, 512, JSON_THROW_ON_ERROR);
                 unlink($pathToData);
             }
+            $this->logger->writeInfo(['data'=> $data, 'pathToData' => $pathToData], 'onEvents');
         }catch (Throwable $exception){
-            $this->logger->writeInfo("Throwable:".$exception->getMessage(). ' Line: '.$exception->getLine());
+            $this->logger->writeError("Throwable:".$exception->getMessage(). ' Line: '.$exception->getLine());
             return;
         }
         $action = $data['action']??'';
         try {
             if($action === 'invoke'){
+
                 $res_data = [];
                 $funcName = $data['function']??'';
                 if(method_exists($this, $funcName)){
@@ -157,9 +167,10 @@ class ConnectorDB extends WorkerBase
                     $res_data = self::saveInTmpFile($res_data);
                     $tube->reply($res_data);
                 }
+                $this->logger->writeInfo(['data'=> $data, 'result' => $res_data], 'invoke');
             }
         }catch (Throwable $exception){
-            $this->logger->writeInfo("Throwable:".$exception->getMessage(). ' Line: '.$exception->getLine());
+            $this->logger->writeError($data, "Throwable:".$exception->getMessage(). ' Line: '.$exception->getLine());
             return;
         }
     }
