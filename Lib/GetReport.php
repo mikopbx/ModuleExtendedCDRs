@@ -416,7 +416,12 @@ class GetReport
                 $cdr->waitTime = strtotime($cdr->endtime) - strtotime($cdr->start);
             }
             $additionalClass = (empty($cdr->answered)) ? 'ui' : 'detailed';
-            $realWaitTime = max(0,strtotime($cdr->answerTime)-strtotime($cdr->start));
+
+            if(!empty($cdr->answerTime)){
+                $realWaitTime = max(0,strtotime($cdr->answerTime)-strtotime($cdr->start));
+            }else{
+                $realWaitTime = max(0,strtotime($cdr->endtime)-strtotime($cdr->start));
+            }
             $output[] = [
                 date('d-m-Y H:i:s', strtotime($cdr->start)),
                 $cdr->src_num,
