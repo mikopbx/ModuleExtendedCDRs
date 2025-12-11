@@ -65,7 +65,19 @@ class ConnectorDB extends WorkerBase
         $beanstalk->subscribe(self::class, [$this, 'onEvents']);
         $beanstalk->subscribe($this->makePingTubeName(self::class), [$this, 'pingCallBack']);
         while ($this->needRestart === false) {
-            $this->syncCdrData();
+            try {
+                $this->syncCdrData();
+                $this->syncCdrData(true);
+                $this->syncCdrData(true);
+                $this->syncCdrData(true);
+                $this->syncCdrData(true);
+                $this->syncCdrData(true);
+                $this->syncCdrData(true);
+                $this->syncCdrData(true);
+                $this->syncCdrData(true);
+            }catch (Throwable $exception){
+                $this->logger->writeInfo("Throwable:".$exception->getMessage(). ' Line: '.$exception->getLine());
+            }
             $beanstalk->wait(10);
             $this->logger->rotate();
         }
@@ -123,25 +135,32 @@ class ConnectorDB extends WorkerBase
                 $data = json_decode(file_get_contents($pathToData), true, 512, JSON_THROW_ON_ERROR);
                 unlink($pathToData);
             }
-        }catch (Exception $e){
+        }catch (Throwable $exception){
+            $this->logger->writeInfo("Throwable:".$exception->getMessage(). ' Line: '.$exception->getLine());
             return;
         }
-        if($data['action'] === 'invoke'){
-            $res_data = [];
-            $funcName = $data['function']??'';
-            if(method_exists($this, $funcName)){
-                if(count($data['args']) === 0){
-                    $res_data = $this->$funcName();
+        $action = $data['action']??'';
+        try {
+            if($action === 'invoke'){
+                $res_data = [];
+                $funcName = $data['function']??'';
+                if(method_exists($this, $funcName)){
+                    if(count($data['args']) === 0){
+                        $res_data = $this->$funcName();
+                    }else{
+                        $res_data = $this->$funcName(...$data['args']??[]);
+                    }
                 }else{
-                    $res_data = $this->$funcName(...$data['args']??[]);
+                    $this->logger->writeError($data);
                 }
-            }else{
-                $this->logger->writeError($data);
+                if(isset($data['need-ret'])){
+                    $res_data = self::saveInTmpFile($res_data);
+                    $tube->reply($res_data);
+                }
             }
-            if(isset($data['need-ret'])){
-                $res_data = self::saveInTmpFile($res_data);
-                $tube->reply($res_data);
-            }
+        }catch (Throwable $exception){
+            $this->logger->writeInfo("Throwable:".$exception->getMessage(). ' Line: '.$exception->getLine());
+            return;
         }
     }
 
@@ -239,19 +258,20 @@ class ConnectorDB extends WorkerBase
 
     /**
      * Запускаем парсер истории звонков. Парсер сохраняет кэш, кто последний говорил с клиентом.
+     * @param bool $force
      * @return void
      */
-    public function syncCdrData():void
+    public function syncCdrData(bool $force = false):void
     {
-        if(time() - $this->lastSyncTime < 10){
+        if($force === false && time() - $this->lastSyncTime < 10){
             return;
         }
         $this->lastSyncTime = time();
         $oldOffset = $this->cdrOffset;
-        $this->logger->writeInfo('Start offset...'. $oldOffset);
+        $this->logger->writeInfo('Start sync with offset...'. $oldOffset);
 
         $cdrData = HistoryParser::getHistoryData($this->cdrOffset);
-        $this->logger->writeInfo("New offset $this->cdrOffset, ".'count ...'. count($cdrData));
+        $this->logger->writeInfo("New max offset $this->cdrOffset. ".'Get new rows count:'. count($cdrData));
 
         $arrKeys = (new CallHistory())->toArray();
         unset($arrKeys['id']);
@@ -300,7 +320,7 @@ class ConnectorDB extends WorkerBase
             }
         }
         if($oldOffset !== $this->cdrOffset){
-            $this->logger->writeInfo(" $oldOffset !== $this->cdrOffset ");
+            $this->logger->writeInfo("Update progress, offset $oldOffset to new value $this->cdrOffset ");
             $lastCdrData = HistoryParser::getLastCdrData();
             if(!empty($lastCdrData)){
                 $tmpCdrData = [
@@ -312,6 +332,7 @@ class ConnectorDB extends WorkerBase
             }
             $this->updateSettings($this->cdrOffset);
         }
+        $this->logger->writeInfo('End sync with offset...'. $this->cdrOffset);
     }
 
     /**
