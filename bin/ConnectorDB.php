@@ -286,14 +286,23 @@ class ConnectorDB extends WorkerBase
 
         $arrKeys = (new CallHistory())->toArray();
         unset($arrKeys['id']);
+
+        $this->db->begin();
+
+        $CallHistoryFindTime = 0;
+        $CallHistorySaveTime = 0;
+        $CallQueuesHistoryFindTime = 0;
+        $CallQueuesHistorySaveTime = 0;
         foreach ($cdrData as $linkedId => $cdr){
 
             if(in_array($cdr['typeCall'],[CallHistory::CALL_TYPE_INCOMING, CallHistory::CALL_TYPE_MISSED], true)){
-                $cdrQueue = CallQueuesHistory::findFirst(['linkedid=:linkedid:', 'bind' => [':linkedid'=>$linkedId]]);
+                $start = microtime(true);
+                $cdrQueue = CallQueuesHistory::findFirst(['linkedid=:linkedid:', 'bind' => ['linkedid'=>$linkedId]]);
                 if(!$cdrQueue){
                     $cdrQueue = new CallQueuesHistory();
                     $cdrQueue->linkedid = $linkedId;
                 }
+                $CallQueuesHistoryFindTime += microtime(true) - $start;
 
                 $dateParts = explode(' ', $cdr['firstQueue']['start']??$cdr['rows'][0]['start']??'');
                 $cdrQueue->date          = $dateParts[0]??'';
@@ -303,12 +312,17 @@ class ConnectorDB extends WorkerBase
                 $cdrQueue->answeredQueue = $cdr['firstQueue']['answered']??0;
                 $cdrQueue->waitTimeQueue = $cdr['firstQueue']['queueWait']??0;
                 $cdrQueue->waitTime = ($cdr['answered'] === 1)?($cdr['q_answer'] - $cdr['q_start']):($cdr['q_endtime'] - $cdr['q_start']);
+
+                $start = microtime(true);
                 $cdrQueue->save();
+                $CallQueuesHistorySaveTime += microtime(true) - $start;
             }
 
             foreach ($cdr['rows'] as $row){
+                $start = microtime(true);
                 /** @var CallHistory $dbData */
                 $dbData = CallHistory::findFirst("UNIQUEID='{$row['UNIQUEID']}'");
+                $CallHistoryFindTime += microtime(true) - $start;
                 if(!$dbData){
                     $dbData = new CallHistory();
                 }
@@ -326,10 +340,22 @@ class ConnectorDB extends WorkerBase
                 }
                 $this->updateMp3Tags($dbData);
                 $this->setCallType($dbData);
+
+                $start = microtime(true);
                 $dbData->save();
+                $CallHistorySaveTime += microtime(true) - $start;
                 unset($dbData);
             }
         }
+
+        $this->logger->writeInfo([
+                                     '$CallHistoryFindTime' => $CallHistoryFindTime,
+                                     '$CallHistorySaveTime' => $CallHistorySaveTime,
+                                     '$CallQueuesHistoryFindTime' => $CallQueuesHistoryFindTime,
+                                     '$CallQueuesHistorySaveTime' => $CallQueuesHistorySaveTime],
+                                 "Timing");
+        $this->db->commit();
+
         if($oldOffset !== $this->cdrOffset){
             $this->logger->writeInfo("Update progress, offset $oldOffset to new value $this->cdrOffset ");
             $lastCdrData = HistoryParser::getLastCdrData();
