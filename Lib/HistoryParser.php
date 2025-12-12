@@ -197,20 +197,27 @@ class HistoryParser
                 }
 
                 $firstQueue = &$resultRows[$cdr['linkedid']]['firstQueue'];
-                if(stripos( $cdr['dst_chan'], 'queue:') !== false){
+                if(stripos( $cdr['dst_chan'], 'app:') !== false && !empty($firstQueue) && $firstQueue['ended'] === 0){
+                    // Следующие приложения этого звонкаю
+                    // Если прошлая очередь не была завершена / отвечена, то завершим ее обработку.
+                    $firstQueue['ended'] = 1;
+                    $firstQueue['queueWait'] = max(strtotime($cdr['start']) - strtotime($firstQueue['start']), 0);
+                }elseif(stripos( $cdr['dst_chan'], 'queue:') !== false){
+                    $queueId = $queues[$cdr['dst_num']]??'';
                     if(empty($firstQueue)){
                         // Первая очередь в этом звонке.
                         $firstQueue = [
-                            'id'        => $queues[$cdr['dst_num']]??'',
+                            'id'        => $queueId,
                             'number'    => $cdr['dst_num'],
                             'start'     => $cdr['start'],
                             'queueWait' => 0,
                             'answered'   => 0,
                             'ended'     => 0
                         ];
-                    }elseif($firstQueue['ended'] === 0){
+                    }elseif($firstQueue['ended'] === 0 && $queueId !== $firstQueue['id']){
                         // Следующие очереди этого звонкаю
                         // Если прошлая очередь не была завершена / отвечена, то завершим ее обработку.
+                        // Исключаем повторный звонок на эту же очередь
                         $firstQueue['ended'] = 1;
                         $firstQueue['queueWait'] = max(strtotime($cdr['start']) - strtotime($firstQueue['start']), 0);
                     }

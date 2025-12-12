@@ -142,7 +142,7 @@ class ApiController extends ModulesControllerBase
         $result = [];
         foreach ($groups as $tmpGroup) {
             $uniqueCalls = count($tmpGroup['linkedids']);
-            $avgMissed        = $uniqueCalls > 0 ? round($tmpGroup['missed_sum'] / $uniqueCalls, 2) *100: 0;
+            $avgMissed        = $uniqueCalls > 0 ? round($tmpGroup['missed_sum'] / $uniqueCalls * 100, 2) : 0;
             $avgWaitTime      = $uniqueCalls > 0 ? round($tmpGroup['waitTime_sum'] / $uniqueCalls, 2) : 0;
             $avgWaitTimeQueue = $uniqueCalls > 0 ? round($tmpGroup['waitTimeQueue_sum'] / $uniqueCalls, 2) : 0;
             $result[] = [

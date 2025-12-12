@@ -83,12 +83,6 @@ class ConnectorDB extends WorkerBase
         while ($this->needRestart === false) {
             try {
                 $this->syncCdrData();
-//                $this->syncCdrData(true);
-//                $this->syncCdrData(true);
-//                $this->syncCdrData(true);
-//                $this->syncCdrData(true);
-//                $this->syncCdrData(true);
-//                $this->syncCdrData(true);
             }catch (Throwable $exception){
                 $this->logger->writeError("Throwable:".$exception->getMessage(). ' Line: '.$exception->getLine());
             }
