@@ -42,7 +42,7 @@ class ExtendedCDRsConf extends ConfigClass
     {
         return [
             [
-                'type'   => WorkerSafeScriptsCore::CHECK_BY_BEANSTALK,
+                'type'   => WorkerSafeScriptsCore::CHECK_BY_PID_NOT_ALERT,
                 'worker' => ConnectorDB::class,
             ],
         ];

@@ -31,7 +31,7 @@ use Modules\ModuleExtendedCDRs\Models\CallHistory;
 
 class HistoryParser
 {
-    public const LIMIT_CDR = 500;
+    public const LIMIT_CDR = 100;
     public const CDR_SYNC_PROGRESS_KEY = "cdrSyncProgress";
 
     /**

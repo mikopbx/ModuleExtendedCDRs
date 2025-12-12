@@ -83,6 +83,12 @@ class ConnectorDB extends WorkerBase
         while ($this->needRestart === false) {
             try {
                 $this->syncCdrData();
+//                $this->syncCdrData(true);
+//                $this->syncCdrData(true);
+//                $this->syncCdrData(true);
+//                $this->syncCdrData(true);
+//                $this->syncCdrData(true);
+//                $this->syncCdrData(true);
             }catch (Throwable $exception){
                 $this->logger->writeError("Throwable:".$exception->getMessage(). ' Line: '.$exception->getLine());
             }
@@ -279,83 +285,210 @@ class ConnectorDB extends WorkerBase
         }
         $this->lastSyncTime = time();
         $oldOffset = $this->cdrOffset;
-        $this->logger->writeInfo('Start sync with offset...'. $oldOffset);
+        $this->logger->writeInfo('...Start sync with offset...'. $oldOffset);
 
         $cdrData = HistoryParser::getHistoryData($this->cdrOffset);
-        $this->logger->writeInfo("New max offset $this->cdrOffset. ".'Get new rows count:'. count($cdrData));
+        $totalRows = array_sum(array_map(fn($cdr) => count($cdr['rows'] ?? []), $cdrData));
+        $this->logger->writeInfo("New max offset $this->cdrOffset. linkedIds:" . count($cdrData) . ", totalRows:$totalRows");
 
         $arrKeys = (new CallHistory())->toArray();
         unset($arrKeys['id']);
 
-        $this->db->begin();
-
-        $CallHistoryFindTime = 0;
         $CallHistorySaveTime = 0;
-        $CallQueuesHistoryFindTime = 0;
         $CallQueuesHistorySaveTime = 0;
-        foreach ($cdrData as $linkedId => $cdr){
 
-            if(in_array($cdr['typeCall'],[CallHistory::CALL_TYPE_INCOMING, CallHistory::CALL_TYPE_MISSED], true)){
-                $start = microtime(true);
-                $cdrQueue = CallQueuesHistory::findFirst(['linkedid=:linkedid:', 'bind' => ['linkedid'=>$linkedId]]);
-                if(!$cdrQueue){
+        // Разделяем linkedId на нормальные (<=100 rows) и тяжёлые (>100 rows)
+        $incomingLinkedIds = [];
+        $normalLinkedIds = [];
+        $heavyLinkedIds = [];
+        $normalUniqueIds = [];
+        $allRowIds = []; // Все id для расчёта offset
+
+        foreach ($cdrData as $linkedId => $cdr) {
+            if (in_array($cdr['typeCall'], [CallHistory::CALL_TYPE_INCOMING, CallHistory::CALL_TYPE_MISSED], true)) {
+                $incomingLinkedIds[] = $linkedId;
+            }
+            $rowCount = count($cdr['rows'] ?? []);
+            if ($rowCount > 100) {
+                $heavyLinkedIds[] = $linkedId;
+            } else {
+                $normalLinkedIds[] = $linkedId;
+                foreach ($cdr['rows'] as $row) {
+                    $normalUniqueIds[] = $row['UNIQUEID'];
+                }
+            }
+            // Собираем все id ДО merge
+            foreach ($cdr['rows'] ?? [] as $row) {
+                $rowId = (int)($row['id'] ?? 0);
+                if ($rowId > 0) {
+                    $allRowIds[] = $rowId;
+                }
+            }
+        }
+
+        if (!empty($heavyLinkedIds)) {
+            $this->logger->writeInfo("Heavy linkedIds (>100 rows): " . count($heavyLinkedIds));
+        }
+
+        // Batch загрузка CallQueuesHistory (1 запрос вместо N)
+        $start = microtime(true);
+        $existingQueues = [];
+        if (!empty($incomingLinkedIds)) {
+            $queuesResult = CallQueuesHistory::find([
+                'linkedid IN ({ids:array})',
+                'bind' => ['ids' => $incomingLinkedIds]
+            ]);
+            foreach ($queuesResult as $q) {
+                $existingQueues[$q->linkedid] = $q;
+            }
+        }
+        $CallQueuesHistoryFindTime = microtime(true) - $start;
+        $this->logger->writeInfo(sprintf("CallQueuesHistoryFindTime: %.4f", $CallQueuesHistoryFindTime));
+
+        // Batch загрузка CallHistory только для нормальных linkedId
+        $start = microtime(true);
+        $existingHistory = [];
+        if (!empty($normalLinkedIds)) {
+            $historyResult = CallHistory::find([
+               'linkedid IN ({ids:array})',
+               'bind' => ['ids' => $normalLinkedIds]
+            ]);
+            foreach ($historyResult as $h) {
+                $existingHistory[$h->UNIQUEID] = $h;
+            }
+        }
+        $CallHistoryFindTime = microtime(true) - $start;
+        $this->logger->writeInfo(sprintf("CallHistoryFindTime: %.4f, normalIds: %d", $CallHistoryFindTime, count($normalUniqueIds)));
+
+        $Mp3TagsTime = 0;
+        $SetCallTypeTime = 0;
+        $rowsToSave = [];
+
+        // Основной цикл — поиск O(1) по массиву
+        foreach ($cdrData as $linkedId => $cdr) {
+            $isHeavy = in_array($linkedId, $heavyLinkedIds, true);
+
+            // Для тяжёлых linkedId предобработка и загрузка данных
+            if ($isHeavy) {
+                $heavyStart = microtime(true);
+                $originalCount = count($cdr['rows'] ?? []);
+
+                // Объединяем дублирующиеся NOANSWER записи
+                $cdr['rows'] = $this->mergeNoAnswerRows($cdr['rows']);
+                $mergedCount = count($cdr['rows']);
+
+                $heavyHistory = [];
+                $heavyResult = CallHistory::find([
+                    'linkedid = :linkedid:',
+                    'bind' => ['linkedid' => $linkedId]
+                ]);
+                foreach ($heavyResult as $h) {
+                    $heavyHistory[$h->UNIQUEID] = $h;
+                }
+                $heavyTime = microtime(true) - $heavyStart;
+                $this->logger->writeInfo(sprintf("Heavy linkedId: %s, original: %d, merged: %d, loadTime: %.4f", $linkedId, $originalCount, $mergedCount, $heavyTime));
+            }
+
+            if (in_array($cdr['typeCall'], [CallHistory::CALL_TYPE_INCOMING, CallHistory::CALL_TYPE_MISSED], true)) {
+                $cdrQueue = $existingQueues[$linkedId] ?? null;
+                if (!$cdrQueue) {
                     $cdrQueue = new CallQueuesHistory();
                     $cdrQueue->linkedid = $linkedId;
                 }
-                $CallQueuesHistoryFindTime += microtime(true) - $start;
 
-                $dateParts = explode(' ', $cdr['firstQueue']['start']??$cdr['rows'][0]['start']??'');
-                $cdrQueue->date          = $dateParts[0]??'';
-                $cdrQueue->time          = $dateParts[1]??'';
-                $cdrQueue->queueId       = $cdr['firstQueue']['id']??'';
+                $dateParts = explode(' ', $cdr['firstQueue']['start'] ?? $cdr['rows'][0]['start'] ?? '');
+                $cdrQueue->date          = $dateParts[0] ?? '';
+                $cdrQueue->time          = $dateParts[1] ?? '';
+                $cdrQueue->queueId       = $cdr['firstQueue']['id'] ?? '';
                 $cdrQueue->answered      = $cdr['answered'];
-                $cdrQueue->answeredQueue = $cdr['firstQueue']['answered']??0;
-                $cdrQueue->waitTimeQueue = $cdr['firstQueue']['queueWait']??0;
-                $cdrQueue->waitTime = ($cdr['answered'] === 1)?($cdr['q_answer'] - $cdr['q_start']):($cdr['q_endtime'] - $cdr['q_start']);
+                $cdrQueue->answeredQueue = $cdr['firstQueue']['answered'] ?? 0;
+                $cdrQueue->waitTimeQueue = $cdr['firstQueue']['queueWait'] ?? 0;
+                $cdrQueue->waitTime      = ($cdr['answered'] === 1)
+                    ? ($cdr['q_answer'] - $cdr['q_start'])
+                    : ($cdr['q_endtime'] - $cdr['q_start']);
 
                 $start = microtime(true);
                 $cdrQueue->save();
                 $CallQueuesHistorySaveTime += microtime(true) - $start;
             }
 
-            foreach ($cdr['rows'] as $row){
-                $start = microtime(true);
+            // Выбираем источник данных: для тяжёлых — отдельный кеш
+            $historySource = $isHeavy ? ($heavyHistory ?? []) : $existingHistory;
+
+            foreach ($cdr['rows'] as $row) {
                 /** @var CallHistory $dbData */
-                $dbData = CallHistory::findFirst("UNIQUEID='{$row['UNIQUEID']}'");
-                $CallHistoryFindTime += microtime(true) - $start;
-                if(!$dbData){
-                    $dbData = new CallHistory();
-                }
-                foreach ($row as $key => $value){
-                    if(!array_key_exists($key, $arrKeys)){
+                $isNew = !isset($historySource[$row['UNIQUEID']]);
+                $dbData = $historySource[$row['UNIQUEID']] ?? new CallHistory();
+
+                foreach ($row as $key => $value) {
+                    if (!array_key_exists($key, $arrKeys)) {
                         continue;
                     }
                     $dbData->$key = $value;
                 }
-                foreach ($cdr as $key => $value){
-                    if(!array_key_exists($key, $arrKeys)){
+                foreach ($cdr as $key => $value) {
+                    if (!array_key_exists($key, $arrKeys)) {
                         continue;
                     }
                     $dbData->$key = $value;
                 }
-                $this->updateMp3Tags($dbData);
-                $this->setCallType($dbData);
 
                 $start = microtime(true);
-                $dbData->save();
-                $CallHistorySaveTime += microtime(true) - $start;
-                unset($dbData);
+                $this->updateMp3Tags($dbData);
+                $Mp3TagsTime += microtime(true) - $start;
+
+                $start = microtime(true);
+                $this->setCallType($dbData, $isNew);
+                $SetCallTypeTime += microtime(true) - $start;
+
+                // Собираем для batch save
+                $rowsToSave[] = $dbData;
+            }
+        }
+
+        // Batch save через raw SQL
+        $start = microtime(true);
+        [$insertCount, $updateCount] = $this->batchSaveCallHistory($rowsToSave, $arrKeys);
+        $CallHistorySaveTime = microtime(true) - $start;
+        $this->logger->writeInfo("BatchSave: insert=$insertCount, update=$updateCount");
+
+        // Обновляем offset: ищем максимальный последовательный id начиная от текущего offset
+        if (!empty($allRowIds)) {
+            $allRowIds = array_unique($allRowIds);
+            sort($allRowIds);
+            $allRowIds = array_values($allRowIds);
+
+            // Создаём set для быстрой проверки O(1)
+            $idSet = array_flip($allRowIds);
+
+            // Ищем максимальный последовательный id начиная от cdrOffset+1
+            $sequentialMaxId = $this->cdrOffset;
+            $nextExpected = $this->cdrOffset + 1;
+
+            while (isset($idSet[$nextExpected])) {
+                $sequentialMaxId = $nextExpected;
+                $nextExpected++;
+            }
+
+            if ($sequentialMaxId > $this->cdrOffset) {
+                $this->logger->writeInfo("Adjusting offset from {$this->cdrOffset} to $sequentialMaxId (sequential from offset)");
+                $this->cdrOffset = $sequentialMaxId;
+            } else {
+                // Нет последовательных id от текущего offset — разрыв
+                $minId = min($allRowIds);
+                $maxId = max($allRowIds);
+                $this->logger->writeInfo("Gap detected: offset={$this->cdrOffset}, minId=$minId, maxId=$maxId, count=" . count($allRowIds));
             }
         }
 
         $this->logger->writeInfo([
-                                     '$CallHistoryFindTime' => $CallHistoryFindTime,
-                                     '$CallHistorySaveTime' => $CallHistorySaveTime,
-                                     '$CallQueuesHistoryFindTime' => $CallQueuesHistoryFindTime,
-                                     '$CallQueuesHistorySaveTime' => $CallQueuesHistorySaveTime],
-                                 "Timing");
-        $this->db->commit();
-
+            'CallHistoryFindTime' => round($CallHistoryFindTime, 4),
+            'CallHistorySaveTime' => round($CallHistorySaveTime, 4),
+            'CallQueuesHistoryFindTime' => round($CallQueuesHistoryFindTime, 4),
+            'CallQueuesHistorySaveTime' => round($CallQueuesHistorySaveTime, 4),
+            'Mp3TagsTime' => round($Mp3TagsTime, 4),
+            'SetCallTypeTime' => round($SetCallTypeTime, 4)],
+        "Timing");
         if($oldOffset !== $this->cdrOffset){
             $this->logger->writeInfo("Update progress, offset $oldOffset to new value $this->cdrOffset ");
             $lastCdrData = HistoryParser::getLastCdrData();
@@ -369,7 +502,8 @@ class ConnectorDB extends WorkerBase
             }
             $this->updateSettings($this->cdrOffset);
         }
-        $this->logger->writeInfo('End sync with offset...'. $this->cdrOffset);
+        $offsetDelta = $this->cdrOffset - $oldOffset;
+        $this->logger->writeInfo("End sync with offset {$this->cdrOffset} (+$offsetDelta)");
     }
 
     /**
@@ -441,11 +575,83 @@ class ConnectorDB extends WorkerBase
     }
 
     /**
+     * Объединяет NOANSWER записи с одинаковыми src_num/dst_num и близким временем (<20 сек)
+     * @param array $rows
+     * @return array
+     */
+    private function mergeNoAnswerRows(array $rows): array
+    {
+        if (empty($rows)) {
+            return $rows;
+        }
+
+        // Группируем по src_num + dst_num + disposition=NOANSWER
+        $groups = [];
+        $otherRows = [];
+
+        foreach ($rows as $row) {
+            if (($row['disposition'] ?? '') === 'NOANSWER') {
+                $key = ($row['src_num'] ?? '') . '|' . ($row['dst_num'] ?? '');
+                $groups[$key][] = $row;
+            } else {
+                $otherRows[] = $row;
+            }
+        }
+
+        // Обрабатываем каждую группу NOANSWER
+        $mergedRows = [];
+        foreach ($groups as $key => $groupRows) {
+            // Сортируем по start
+            usort($groupRows, fn($a, $b) => strtotime($a['start'] ?? 0) - strtotime($b['start'] ?? 0));
+
+            $merged = null;
+            foreach ($groupRows as $row) {
+                if ($merged === null) {
+                    $merged = $row;
+                    continue;
+                }
+
+                $mergedEnd = strtotime($merged['endtime'] ?? $merged['start'] ?? 0);
+                $rowStart = strtotime($row['start'] ?? 0);
+
+                // Если разница < 20 секунд — объединяем
+                if (($rowStart - $mergedEnd) < 20) {
+                    $rowEnd = strtotime($row['endtime'] ?? $row['start'] ?? 0);
+                    $mergedStart = strtotime($merged['start'] ?? 0);
+
+                    // Берём min/max значения
+                    $newStart = min($mergedStart, $rowStart);
+                    $newEnd = max($mergedEnd, $rowEnd);
+
+                    $merged['start'] = date('Y-m-d H:i:s', $newStart);
+                    $merged['endtime'] = date('Y-m-d H:i:s', $newEnd);
+                    $merged['duration'] = $newEnd - $newStart;
+                    $merged['UNIQUEID'] = min($merged['UNIQUEID'] ?? '', $row['UNIQUEID'] ?? '');
+                    $merged['dst_chan'] = min($merged['dst_chan'] ?? '', $row['dst_chan'] ?? '');
+                } else {
+                    // Разрыв > 20 сек — сохраняем текущую и начинаем новую
+                    $mergedRows[] = $merged;
+                    $merged = $row;
+                }
+            }
+            if ($merged !== null) {
+                $mergedRows[] = $merged;
+            }
+        }
+
+        return array_merge($mergedRows, $otherRows);
+    }
+
+    /**
      * @param $dbData
      * @return void
      */
-    private function setCallType($dbData):void
+    private function setCallType($dbData, bool $isNew = true):void
     {
+        // Для существующих записей с установленным stateCall — пропускаем
+        if (!$isNew && !empty($dbData->stateCall)) {
+            return;
+        }
         $number = '';
         if($dbData->typeCall === CallHistory::CALL_TYPE_OUTGOING){
             if($dbData->billsec === '0'){
@@ -516,6 +722,68 @@ class ConnectorDB extends WorkerBase
                 $dbData->stateCall = CallHistory::CALL_STATE_TRANSFER;
             }
         }
+    }
+
+    /**
+     * Batch save CallHistory records
+     * @param array $records
+     * @param array $columns
+     * @return array [insertCount, updateCount]
+     */
+    private function batchSaveCallHistory(array $records, array $columns): array
+    {
+        if (empty($records)) {
+            return [0, 0];
+        }
+
+        $newRecords = [];
+        $existingRecords = [];
+
+        foreach ($records as $record) {
+            if (empty($record->id)) {
+                $newRecords[] = $record;
+            } else {
+                $existingRecords[] = $record;
+            }
+        }
+
+        // Batch INSERT для новых записей
+        if (!empty($newRecords)) {
+            if (!$this->di->has(CdrDbProvider::SERVICE_NAME)) {
+                $this->di->register(new CdrDbProvider());
+            }
+            $db = $this->di->getShared(CdrDbProvider::SERVICE_NAME);
+
+            $columnNames = array_keys($columns);
+            $columnsStr = implode(', ', $columnNames);
+            $placeholders = '(' . implode(', ', array_fill(0, count($columnNames), '?')) . ')';
+
+            foreach (array_chunk($newRecords, 100) as $chunk) {
+                $allPlaceholders = [];
+                $allValues = [];
+
+                foreach ($chunk as $record) {
+                    $allPlaceholders[] = $placeholders;
+                    foreach ($columnNames as $col) {
+                        $allValues[] = $record->$col ?? '';
+                    }
+                }
+
+                $sql = "INSERT INTO cdr_general ($columnsStr) VALUES " . implode(', ', $allPlaceholders);
+                $db->execute($sql, $allValues);
+            }
+        }
+
+        // UPDATE для существующих — только если есть изменения
+        $actualUpdates = 0;
+        foreach ($existingRecords as $record) {
+            if ($record->hasChanged()) {
+                $record->save();
+                $actualUpdates++;
+            }
+        }
+
+        return [count($newRecords), $actualUpdates];
     }
 
     public function getCdr(array $filter = []): array
@@ -718,7 +986,6 @@ class ConnectorDB extends WorkerBase
 
 if(isset($argv) && count($argv) !== 1
     && Util::getFilePathByClassName(ConnectorDB::class) === $argv[0]){
-
-    ini_set('memory_limit', '512M');
+    ini_set('memory_limit', '2024M');
     ConnectorDB::startWorker($argv??[]);
 }
