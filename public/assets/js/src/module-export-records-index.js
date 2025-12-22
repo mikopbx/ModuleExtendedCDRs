@@ -688,6 +688,13 @@ const ModuleExtendedCDRs = {
 			ModuleExtendedCDRs.applyFilter();
 		});
 
+		// Handle Enter key in minBillSec field
+		$('#currentMinBillSec').on('keyup', function(e) {
+			if (e.keyCode === 13) {
+				$(this).trigger('change');
+			}
+		});
+
 		// Initialize minBillSecComp dropdown
 		$('#currentMinBillSecComp').dropdown();
 		
