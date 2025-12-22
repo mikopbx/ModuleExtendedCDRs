@@ -209,6 +209,12 @@ class GetReport
         $view->recordsIncoming = $recordsFilteredReq['cINCOMING'] ?? 0;
         $view->recordsMissed = $recordsFilteredReq['cMISSED'] ?? 0;
 
+        $allIncoming= $view->recordsIncoming + $view->recordsMissed;
+        if($allIncoming === 0){
+            $view->recordsMissedPercent = 0;
+        }else{
+            $view->recordsMissedPercent = round(100*($recordsFilteredReq['cMISSED'] ?? 0) / ($allIncoming), 1);
+        }
         // Find all LinkedIDs that match the specified filter
         $parameters['columns'] = 'DISTINCT(linkedid) as linkedid';
         $parameters['order'] = ['start desc'];

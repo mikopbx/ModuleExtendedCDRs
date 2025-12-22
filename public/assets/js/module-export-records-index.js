@@ -157,7 +157,11 @@ var ModuleExtendedCDRs = {
           success: function success(json) {
             $('a.item[data-tab="all-calls"] b').html(': ' + json.recordsFiltered);
             $('a.item[data-tab="incoming-calls"] b').html(': ' + json.recordsIncoming);
-            $('a.item[data-tab="missed-calls"] b').html(': ' + json.recordsMissed);
+            var recordsMissed = json.recordsMissed;
+            if (json.recordsMissedPercent !== 0) {
+              recordsMissed = json.recordsMissed + ' (' + json.recordsMissedPercent + '%)';
+            }
+            $('a.item[data-tab="missed-calls"] b').html(': ' + recordsMissed);
             $('a.item[data-tab="outgoing-calls"] b').html(': ' + json.recordsOutgoing);
             var typeCall = $('#typeCall a.item.active').attr('data-tab');
             if (typeCall === 'incoming-calls') {

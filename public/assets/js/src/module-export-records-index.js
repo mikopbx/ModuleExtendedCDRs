@@ -141,7 +141,13 @@ const ModuleExtendedCDRs = {
 					success: function(json) {
 						$('a.item[data-tab="all-calls"] b').html(': '+json.recordsFiltered)
 						$('a.item[data-tab="incoming-calls"] b').html(': '+json.recordsIncoming)
-						$('a.item[data-tab="missed-calls"] b').html(': '+json.recordsMissed)
+						
+						let recordsMissed = json.recordsMissed;
+						if(json.recordsMissedPercent !== 0){
+							recordsMissed = json.recordsMissed + ' (' +json.recordsMissedPercent+ '%)';
+						}
+
+						$('a.item[data-tab="missed-calls"] b').html(': '+recordsMissed)
 						$('a.item[data-tab="outgoing-calls"] b').html(': '+json.recordsOutgoing)
 
 						let typeCall = $('#typeCall a.item.active').attr('data-tab');
