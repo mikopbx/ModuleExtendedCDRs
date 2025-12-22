@@ -58,6 +58,9 @@ const ModuleExtendedCDRs = {
 	 * Flag to prevent initial data loading
 	 * @type {boolean}
 	 */
+	applyFilterTimer: null,
+	applyFilterRunning: false,
+
 	tablesInitialized: false,
 
 	tableInitDataOutgoingEmployeeCalls: {
@@ -738,7 +741,8 @@ const ModuleExtendedCDRs = {
 		ModuleExtendedCDRs.updateSettings();
 		ModuleExtendedCDRs.applyFilter();
 
-		window[className].$dropDowns.dropdown({onChange: ModuleExtendedCDRs.applyFilter});
+		// Initialize dropdowns except #additionalFilter (it has its own handler)
+		window[className].$dropDowns.not('#additionalFilter').dropdown({onChange: ModuleExtendedCDRs.applyFilter});
 		window[className].updateSyncState();
 		setInterval(window[className].updateSyncState, 5000);
 	},
@@ -1125,9 +1129,35 @@ const ModuleExtendedCDRs = {
 	},
 
 	/**
-	 * Applies the filter to the data table.
+	 * Applies the filter to the data table (with debounce to prevent double calls).
 	 */
-	applyFilter() {
+	applyFilter()
+	{
+		// Debounce: cancel previous timer and set new one
+		if (ModuleExtendedCDRs.applyFilterTimer) {
+			clearTimeout(ModuleExtendedCDRs.applyFilterTimer);
+		}
+		ModuleExtendedCDRs.applyFilterTimer = setTimeout(() => {
+			ModuleExtendedCDRs.applyFilterInternal();
+		}, 100);
+	},
+
+	/**
+	 * Internal filter application (called after debounce).
+	 */
+	applyFilterInternal()
+	{
+		// Prevent concurrent execution
+		if (ModuleExtendedCDRs.applyFilterRunning) {
+			return;
+		}
+		ModuleExtendedCDRs.applyFilterRunning = true;
+		
+		// Reset flag after short delay
+		setTimeout(() => {
+			ModuleExtendedCDRs.applyFilterRunning = false;
+		}, 500);
+
 		const text  = ModuleExtendedCDRs.getSearchText();
 		listenedIDs = [];
 		
@@ -1186,7 +1216,7 @@ const ModuleExtendedCDRs = {
 
 			}
 			let table = ModuleExtendedCDRs.$cdrTable.DataTable();
-			table.page.len(ModuleExtendedCDRs.calculatePageLength()).draw();
+			table.page.len(ModuleExtendedCDRs.calculatePageLength());
 			table.search(text).draw();
 		}else if(reportName === ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.id){
 			if(ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.wasInit === false) {
@@ -1194,7 +1224,7 @@ const ModuleExtendedCDRs = {
 				ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.wasInit = true;
 			}
 			let table = ModuleExtendedCDRs.$outgoingEmployeeCalls.DataTable();
-			table.page.len(ModuleExtendedCDRs.calculatePageLength()).draw();
+			table.page.len(ModuleExtendedCDRs.calculatePageLength());
 			table.search(text).draw();
 		}else if(reportName === ModuleExtendedCDRs.tableInitDataCdrQueue.id){
 			if(ModuleExtendedCDRs.tableInitDataCdrQueue.wasInit === false) {
@@ -1202,7 +1232,7 @@ const ModuleExtendedCDRs = {
 				ModuleExtendedCDRs.tableInitDataCdrQueue.wasInit = true;
 			}
 			let table = ModuleExtendedCDRs.$cdrQueueTable.DataTable();
-			table.page.len(ModuleExtendedCDRs.calculatePageLength()).draw();
+			table.page.len(ModuleExtendedCDRs.calculatePageLength());
 			table.search(text).draw();
 		}
 		ModuleExtendedCDRs.$globalSearch.closest('div').addClass('loading');

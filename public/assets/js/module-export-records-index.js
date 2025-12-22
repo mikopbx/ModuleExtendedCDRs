@@ -68,6 +68,8 @@ var ModuleExtendedCDRs = {
    * Flag to prevent initial data loading
    * @type {boolean}
    */
+  applyFilterTimer: null,
+  applyFilterRunning: false,
   tablesInitialized: false,
   tableInitDataOutgoingEmployeeCalls: {
     wasInit: false,
@@ -689,7 +691,9 @@ var ModuleExtendedCDRs = {
     });
     ModuleExtendedCDRs.updateSettings();
     ModuleExtendedCDRs.applyFilter();
-    window[className].$dropDowns.dropdown({
+
+    // Initialize dropdowns except #additionalFilter (it has its own handler)
+    window[className].$dropDowns.not('#additionalFilter').dropdown({
       onChange: ModuleExtendedCDRs.applyFilter
     });
     window[className].updateSyncState();
@@ -1004,9 +1008,31 @@ var ModuleExtendedCDRs = {
     ModuleExtendedCDRs.applyFilter();
   },
   /**
-   * Applies the filter to the data table.
+   * Applies the filter to the data table (with debounce to prevent double calls).
    */
   applyFilter: function applyFilter() {
+    // Debounce: cancel previous timer and set new one
+    if (ModuleExtendedCDRs.applyFilterTimer) {
+      clearTimeout(ModuleExtendedCDRs.applyFilterTimer);
+    }
+    ModuleExtendedCDRs.applyFilterTimer = setTimeout(function () {
+      ModuleExtendedCDRs.applyFilterInternal();
+    }, 100);
+  },
+  /**
+   * Internal filter application (called after debounce).
+   */
+  applyFilterInternal: function applyFilterInternal() {
+    // Prevent concurrent execution
+    if (ModuleExtendedCDRs.applyFilterRunning) {
+      return;
+    }
+    ModuleExtendedCDRs.applyFilterRunning = true;
+
+    // Reset flag after short delay
+    setTimeout(function () {
+      ModuleExtendedCDRs.applyFilterRunning = false;
+    }, 500);
     var text = ModuleExtendedCDRs.getSearchText();
     listenedIDs = [];
 
@@ -1062,7 +1088,7 @@ var ModuleExtendedCDRs = {
         });
       }
       var table = ModuleExtendedCDRs.$cdrTable.DataTable();
-      table.page.len(ModuleExtendedCDRs.calculatePageLength()).draw();
+      table.page.len(ModuleExtendedCDRs.calculatePageLength());
       table.search(text).draw();
     } else if (reportName === ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.id) {
       if (ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.wasInit === false) {
@@ -1070,7 +1096,7 @@ var ModuleExtendedCDRs = {
         ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.wasInit = true;
       }
       var _table = ModuleExtendedCDRs.$outgoingEmployeeCalls.DataTable();
-      _table.page.len(ModuleExtendedCDRs.calculatePageLength()).draw();
+      _table.page.len(ModuleExtendedCDRs.calculatePageLength());
       _table.search(text).draw();
     } else if (reportName === ModuleExtendedCDRs.tableInitDataCdrQueue.id) {
       if (ModuleExtendedCDRs.tableInitDataCdrQueue.wasInit === false) {
@@ -1078,7 +1104,7 @@ var ModuleExtendedCDRs = {
         ModuleExtendedCDRs.tableInitDataCdrQueue.wasInit = true;
       }
       var _table2 = ModuleExtendedCDRs.$cdrQueueTable.DataTable();
-      _table2.page.len(ModuleExtendedCDRs.calculatePageLength()).draw();
+      _table2.page.len(ModuleExtendedCDRs.calculatePageLength());
       _table2.search(text).draw();
     }
     ModuleExtendedCDRs.$globalSearch.closest('div').addClass('loading');
