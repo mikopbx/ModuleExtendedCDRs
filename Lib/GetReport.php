@@ -1160,7 +1160,6 @@ class GetReport
             $parameters['conditions'] .= '(srcIndex IN ({additionslNumbers:array}) OR dstIndex IN ({additionslNumbers:array}))';
             $parameters['bind']['additionslNumbers'] = array_unique($additionalNumbers);
         }
-
         return [$start, $end, $globalNumbers, $additionalNumbers, $ids];
     }
 

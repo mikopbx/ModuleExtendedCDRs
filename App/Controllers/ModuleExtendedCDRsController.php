@@ -658,9 +658,9 @@ class ModuleExtendedCDRsController extends BaseController
     {
         $this->view->draw = $this->request->get('draw');
         $searchPhrase     = $this->request->get('search');
-        $length           = is_numeric($this->request->get('length'))?(int)$this->request->get('length'):null;
+        // $length           = is_numeric($this->request->get('length'))?(int)$this->request->get('length'):null;
         $gr = new GetReport();
-        $view = $gr->outgoingEmployeeCalls($searchPhrase['value']??'',  $this->request->get('start'), $length);
+        $view = $gr->outgoingEmployeeCalls($searchPhrase['value']??'');
         foreach ($view as $key => $value) {
             $this->view->$key = $value;
         }
