@@ -345,7 +345,9 @@ class GetReport
             }
             $linkedRecord->disposition = $linkedRecord->disposition !== 'ANSWERED' ? $disposition : 'ANSWERED';
             $linkedRecord->start = $linkedRecord->start === '' ? $record->start : $linkedRecord->start;
-            if ($record->stateCall === CallHistory::CALL_STATE_OK) {
+
+            $okState = [CallHistory::CALL_STATE_OK, CallHistory::CALL_STATE_RECALL_CLIENT, CallHistory::CALL_STATE_RECALL_USER];
+            if (in_array($record->stateCall, $okState,true)) {
                 $linkedRecord->stateCall = $statsCall[$record->stateCall];
                 $linkedRecord->stateCallIndex = $record->stateCall;
             } elseif ($record->stateCall !== CallHistory::CALL_STATE_APPLICATION) {
@@ -361,13 +363,12 @@ class GetReport
             $linkedRecord->src_num = $linkedRecord->src_num === '' ? $record->src_num : $linkedRecord->src_num;
             $linkedRecord->dst_num = $linkedRecord->dst_num === '' ? $record->dst_num : $linkedRecord->dst_num;
             $linkedRecord->billsec += (int)$record->billsec;
-            $isAppWithRecord = ($record->is_app === '1' && file_exists($record->recordingfile));
+            $isAppWithRecord = (intval($record->is_app) === 1 && file_exists($record->recordingfile));
             if ($disposition === 'ANSWERED' || $isAppWithRecord) {
-                if ($record->is_app === '1') {
+                if (intval($record->is_app) === 1) {
                     $waitTime = 0;
                 } else {
                     $linkedRecord->answerTime = empty($linkedRecord->answerTime) ? $record->answer : $linkedRecord->answerTime;
-
                     $waitTime = strtotime($record->answer) - strtotime($record->start);
                 }
 
