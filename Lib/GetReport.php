@@ -63,9 +63,22 @@ class GetReport
         return ConnectorDB::invoke('getCdrQueue', [$parameters]);
     }
 
-    public static function exportHistoryQueuePdf($view, $saveInFile = false): string
+    public static function getTmpDir():string
     {
         $tmpDir = '/tmp';
+        $di = MikoPBXVersion::getDefaultDi();
+        if ($di) {
+            $dirsConfig = $di->getShared('config');
+            $tmpDir     = $dirsConfig->path('core.tempDir') . '/ModuleExtendedCDRs/reports/';
+            Util::mwMkdir($tmpDir, true);
+        }
+
+        return $tmpDir;
+    }
+
+    public static function exportHistoryQueuePdf($view, $saveInFile = false): string
+    {
+        $tmpDir = self::getTmpDir();
         $mpdf = new Mpdf(['tempDir' => $tmpDir]);
         $html = '';
         if(!empty($view->title)){
@@ -553,18 +566,25 @@ class GetReport
 
     public static function exportHistoryPdf($view, $saveInFile = false): string
     {
-        $tmpDir = '/tmp';
-        $mpdf = new Mpdf(['tempDir' => $tmpDir]);
-        $html = '';
-        if(!empty($view->title)){
-            $html.= '<h2>' . $view->title . '</h2>';
+        $tmpDir = self::getTmpDir();
+        // mPDF can consume a lot of RAM for large tables.
+        // 1) Don't build one huge HTML string
+        // 2) Split output into multiple small tables (repeat header) so mPDF can release table data sooner.
+        $mpdf = new Mpdf([
+            'tempDir' => $tmpDir,
+            'simpleTables' => true,
+            'packTableData' => true,
+        ]);
+
+        if (!empty($view->title)) {
+            $mpdf->WriteHTML('<h2>' . htmlspecialchars((string)$view->title, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</h2>');
         }
-        $html.= '<h3>' . json_decode($view->searchPhrase, true)['dateRangeSelector'] . '</h3>';
+        $search = json_decode((string)($view->searchPhrase ?? ''), true);
+        $dateRangeSelector = $search['dateRangeSelector'] ?? '';
+        $mpdf->WriteHTML('<h3>' . htmlspecialchars((string)$dateRangeSelector, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</h3>');
 
-        $html .= '<table border="1" cellpadding="10" cellspacing="0" style="width: 100%;">';
-        $html .= '<tr>';
-
-        $html .= '<thead>' .
+        $tableHeader = '<table border="1" cellpadding="4" cellspacing="0" style="width: 100%;">' .
+            '<thead><tr>' .
             '<th>' . Util::translate('repModuleExtendedCDRs_cdr_ColumnTypeState') . '</th>' .
             '<th>' . Util::translate('cdr_ColumnDate') . '</th>' .
             '<th>' . Util::translate('cdr_ColumnFrom') . '</th>' .
@@ -574,26 +594,42 @@ class GetReport
             '<th>' . Util::translate('cdr_ColumnDuration') . '</th>' .
             '<th>' . Util::translate('repModuleExtendedCDRs_cdr_ColumnCallState') . '</th>' .
             '<th>id</th>' .
-            '</thead>';
-        $html .= '<tbody>';
+            '</tr></thead><tbody>';
+        $tableFooter = '</tbody></table>';
 
-        foreach ($view->data as $baseItem) {
-            foreach ($baseItem['4'] as $item) {
-                $html .= '<tr>';
-                $html .= '<td>' . htmlspecialchars($baseItem['typeCallDesc']) . '</td>';
-                $html .= '<td>' . htmlspecialchars($item['start']) . '</td>';
-                $html .= '<td>' . htmlspecialchars($item['src_num']) . '</td>';
-                $html .= '<td>' . htmlspecialchars($item['dst_num']) . '</td>';
-                $html .= '<td>' . htmlspecialchars($baseItem['line']) . '</td>';
-                $html .= '<td>' . htmlspecialchars($item['waitTime']) . '</td>';
-                $html .= '<td>' . htmlspecialchars($item['billsec']) . '</td>';
-                $html .= '<td>' . htmlspecialchars($item['stateCall']) . '</td>';
-                $html .= '<td>' . htmlspecialchars($baseItem['DT_RowId']) . '</td>';
-                $html .= '</tr>';
+        $rowsChunk = '';
+        $rowsInChunk = 0;
+        $flushEvery = 250; // rows per table chunk
+
+        foreach (($view->data ?? []) as $baseItem) {
+            $typeCallDesc = htmlspecialchars((string)($baseItem['typeCallDesc'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $line = htmlspecialchars((string)($baseItem['line'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $linkedId = htmlspecialchars((string)($baseItem['DT_RowId'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            foreach (($baseItem['4'] ?? []) as $item) {
+                $rowsChunk .= '<tr>' .
+                    '<td>' . $typeCallDesc . '</td>' .
+                    '<td>' . htmlspecialchars((string)($item['start'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>' .
+                    '<td>' . htmlspecialchars((string)($item['src_num'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>' .
+                    '<td>' . htmlspecialchars((string)($item['dst_num'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>' .
+                    '<td>' . $line . '</td>' .
+                    '<td>' . htmlspecialchars((string)($item['waitTime'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>' .
+                    '<td>' . htmlspecialchars((string)($item['billsec'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>' .
+                    '<td>' . htmlspecialchars((string)($item['stateCall'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>' .
+                    '<td>' . $linkedId . '</td>' .
+                    '</tr>';
+
+                $rowsInChunk++;
+                if ($rowsInChunk >= $flushEvery) {
+                    $mpdf->WriteHTML($tableHeader . $rowsChunk . $tableFooter . '<pagebreak />');
+                    $rowsChunk = '';
+                    $rowsInChunk = 0;
+                }
             }
         }
-        $html .= '</tbody></table>';
-        $mpdf->WriteHTML($html);
+
+        if ($rowsChunk !== '') {
+            $mpdf->WriteHTML($tableHeader . $rowsChunk . $tableFooter);
+        }
         $filename = $tmpDir . '/calls_report-' . time() . '.pdf';
 
         if ($saveInFile === true) {
@@ -711,7 +747,7 @@ class GetReport
 
     public static function exportOutgoingEmployeeCallsPrintPdf($view, $saveInFile = false): string
     {
-        $tmpDir = '/tmp';
+        $tmpDir = self::getTmpDir();
         $mpdf = new Mpdf(['tempDir' => $tmpDir]);
         $html = '';
         if(!empty($view->title)){
