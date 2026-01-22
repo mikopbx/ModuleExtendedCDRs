@@ -835,10 +835,18 @@ var ModuleExtendedCDRs = {
       var srcAudio = '';
       var srcDownloadAudio = '';
       if (!(record.recordingfile === undefined || record.recordingfile === null || record.recordingfile.length === 0)) {
-        var recordFileName = encodeURIComponent(record.prettyFilename);
+        // Use real file extension from the recording file path for download name.
         var recordFileUri = encodeURIComponent(record.recordingfile);
+        var fileNameFromPath = (record.recordingfile.split(/[\\/]/).pop() || '').split('?')[0].split('#')[0];
+        var extMatch = fileNameFromPath.match(/\.([a-zA-Z0-9]+)$/);
+        var fileExt = extMatch && extMatch[1] ? extMatch[1].toLowerCase() : 'mp3';
+        var downloadFileName = record.prettyFilename || 'record';
+        if (!downloadFileName.toLowerCase().endsWith(".".concat(fileExt))) {
+          downloadFileName += ".".concat(fileExt);
+        }
+        var recordFileName = encodeURIComponent(downloadFileName);
         srcAudio = "/pbxcore/api/cdr/v2/playback?view=".concat(recordFileUri);
-        srcDownloadAudio = "/pbxcore/api/cdr/v2/playback?view=".concat(recordFileUri, "&download=1&filename=").concat(recordFileName, ".mp3");
+        srcDownloadAudio = "/pbxcore/api/cdr/v2/playback?view=".concat(recordFileUri, "&download=1&filename=").concat(recordFileName);
       }
       htmlPlayer += "\n\t\t\t<tr id=\"".concat(record.id, "\" data-row-id=\"").concat(id, "-detailed\" class=\"warning detailed odd shown\" role=\"row\">\n\t\t\t\t<td></td>\n\t\t\t\t<td class=\"right aligned\">").concat(record.start, "</td>\n\t\t\t\t<td data-phone=\"").concat(record.src_num, "\" class=\"right aligned need-update\">").concat(record.src_num, "</td>\n\t\t\t   \t<td data-phone=\"").concat(record.dst_num, "\" class=\"left aligned need-update\">").concat(record.dst_num, "</td>\n\t\t\t\t<td class=\"right aligned\">\t\t\t\n\t\t\t\t</td>\n\t\t\t\t<td class=\"right aligned\">").concat(record.waitTime, "</td>\n\t\t\t\t<td class=\"right aligned\" style=\"padding-right: 3px\">\n\t\t\t\t  <div class=\"ui horizontal list\" style=\"width: 100%; display: flex; align-items: center;\">\n\t\t\t\t\t<div class=\"item\">\n\t\t\t\t\t  <i class=\"ui icon play\"></i>\n\t\t\t\t\t</div>\n\t\t\t\t\t<div class=\"item\" style=\"margin-left:0; flex-grow: 1;\">\n\t\t\t\t\t  <div class=\"ui range cdr-player\" data-value=\"").concat(record.id, "\"></div>\n\t\t\t\t\t</div>\n\t\t\t\t\t<div class=\"item\">\n\t\t\t\t\t  ").concat(record.billsec, "\n\t\t\t\t\t  <i class=\"ui icon download\" data-value=\"").concat(srcDownloadAudio, "\" onclick=\"ModuleExtendedCDRs.audioPlayHandler(event)\"></i>\n\t\t\t\t\t</div>\n\t\t\t\t  </div>\n\t\t\t\t  <audio preload=\"metadata\" id=\"audio-player-").concat(record.id, "\" src=\"").concat(srcAudio, "\" onplay=\"ModuleExtendedCDRs.audioPlayHandler(event)\"></audio>\n\t\t\t\t</td>\n\t\t\t\t<td class=\"right aligned\" data-state-index=\"").concat(record.stateCallIndex, "\">").concat(record.stateCall, "</td>\n\t\t\t</tr>");
     });

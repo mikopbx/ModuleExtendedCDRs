@@ -889,10 +889,19 @@ const ModuleExtendedCDRs = {
 			let srcAudio = '';
 			let srcDownloadAudio = '';
 			if (!(record.recordingfile === undefined || record.recordingfile === null || record.recordingfile.length === 0)) {
-				let recordFileName = encodeURIComponent(record.prettyFilename);
+				// Use real file extension from the recording file path for download name.
 				const recordFileUri = encodeURIComponent(record.recordingfile);
+				const fileNameFromPath = (record.recordingfile.split(/[\\/]/).pop() || '').split('?')[0].split('#')[0];
+				const extMatch = fileNameFromPath.match(/\.([a-zA-Z0-9]+)$/);
+				const fileExt = (extMatch && extMatch[1]) ? extMatch[1].toLowerCase() : 'mp3';
+
+				let downloadFileName = record.prettyFilename || 'record';
+				if (!downloadFileName.toLowerCase().endsWith(`.${fileExt}`)) {
+					downloadFileName += `.${fileExt}`;
+				}
+				const recordFileName = encodeURIComponent(downloadFileName);
 				srcAudio = `/pbxcore/api/cdr/v2/playback?view=${recordFileUri}`;
-				srcDownloadAudio = `/pbxcore/api/cdr/v2/playback?view=${recordFileUri}&download=1&filename=${recordFileName}.mp3`;
+				srcDownloadAudio = `/pbxcore/api/cdr/v2/playback?view=${recordFileUri}&download=1&filename=${recordFileName}`;
 			}
 
 			htmlPlayer +=`
