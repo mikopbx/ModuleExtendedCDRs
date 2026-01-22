@@ -54,16 +54,29 @@ class ApiController extends ModulesControllerBase
             [$filename] = ConnectorDB::invoke('getRecordingPathByID', [$id]);
         }
 
-        if(!file_exists($filename) || Processes::mwExec("/usr/bin/soxi '$filename'") !== 0){
+        if(!file_exists($filename)){
             $this->sendError(404);
             return;
         }
         $size = filesize($filename);
         $fp = fopen($filename, 'rb');
         if ($fp) {
-            $this->response->setHeader('Content-Description', 'mp3 file');
+            // Detect and validate file extension (allowed: wav, webm, mp3) to set correct headers.
+            $ext = strtolower((string)pathinfo($filename, PATHINFO_EXTENSION));
+            $allowedMimeTypes = [
+                'mp3'  => 'audio/mpeg',
+                'wav'  => 'audio/wav',
+                'webm' => 'audio/webm',
+            ];
+            if (!array_key_exists($ext, $allowedMimeTypes)) {
+                fclose($fp);
+                $this->sendError(415);
+                return;
+            }
+
+            $this->response->setHeader('Content-Description', $ext . ' file');
             $this->response->setHeader('Content-Disposition', 'attachment; filename=' . basename($filename));
-            $this->response->setHeader('Content-type', 'audio/mpeg');
+            $this->response->setHeader('Content-type', $allowedMimeTypes[$ext]);
             $this->response->setHeader('Content-Transfer-Encoding', 'binary');
             $this->response->setContentLength($size);
             $this->response->sendHeaders();
