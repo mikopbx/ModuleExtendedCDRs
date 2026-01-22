@@ -456,6 +456,61 @@ class GetReport
 
     public static function exportHistoryXls($view): void
     {
+        /**
+         * PhpSpreadsheet keeps the whole workbook in memory and can easily OOM on large exports.
+         * Prefer streaming XLSXWriter (already installed via composer) to minimize RAM usage.
+         */
+        if (class_exists(\XLSXWriter::class)) {
+            $sheetName = 'Calls';
+            $writer = new \XLSXWriter();
+            $writer->setTempDir(sys_get_temp_dir());
+
+            $headers = [
+                Util::translate('repModuleExtendedCDRs_cdr_ColumnTypeState') => 'string',
+                Util::translate('cdr_ColumnDate') => 'string',
+                Util::translate('cdr_ColumnFrom') => 'string',
+                Util::translate('cdr_ColumnTo') => 'string',
+                Util::translate('repModuleExtendedCDRs_cdr_ColumnLine') => 'string',
+                Util::translate('repModuleExtendedCDRs_cdr_ColumnWaitTime') => 'string',
+                Util::translate('cdr_ColumnDuration') => 'string',
+                Util::translate('repModuleExtendedCDRs_cdr_ColumnCallState') => 'string',
+                'id' => 'string',
+            ];
+
+            $writer->writeSheetHeader($sheetName, $headers, [
+                'freeze_rows' => 1,
+                // Fixed widths avoid expensive "scan entire sheet to autosize" logic.
+                'widths' => [18, 20, 18, 18, 18, 14, 12, 18, 24],
+            ]);
+
+            foreach ($view->data as $baseItem) {
+                $typeCallDesc = (string)($baseItem['typeCallDesc'] ?? '');
+                $line = (string)($baseItem['line'] ?? '');
+                $linkedId = (string)($baseItem['DT_RowId'] ?? '');
+                $records = $baseItem['4'] ?? [];
+                foreach ($records as $item) {
+                    $writer->writeSheetRow($sheetName, [
+                        $typeCallDesc,
+                        (string)($item['start'] ?? ''),
+                        (string)($item['src_num'] ?? ''),
+                        (string)($item['dst_num'] ?? ''),
+                        $line,
+                        (string)($item['waitTime'] ?? ''),
+                        (string)($item['billsec'] ?? ''),
+                        (string)($item['stateCall'] ?? ''),
+                        $linkedId,
+                    ]);
+                }
+            }
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment; filename="calls_report.xlsx"');
+            header('Cache-Control: max-age=0');
+            $writer->writeToStdOut();
+            return;
+        }
+
+        // Fallback to PhpSpreadsheet if XLSXWriter is not available.
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
         $headers = [
@@ -472,33 +527,23 @@ class GetReport
         $sheet->fromArray($headers, null, 'A1');
         $rowIndex = 2;
         foreach ($view->data as $baseItem) {
-            foreach ($baseItem['4'] as $item) {
-                $sheet->setCellValue('A' . $rowIndex, htmlspecialchars($baseItem['typeCallDesc']));
-                $sheet->setCellValue('B' . $rowIndex, htmlspecialchars($item['start']));
-                $sheet->setCellValue('C' . $rowIndex, htmlspecialchars($item['src_num']));
-                $sheet->setCellValue('D' . $rowIndex, htmlspecialchars($item['dst_num']));
-                $sheet->setCellValue('E' . $rowIndex, htmlspecialchars($baseItem['line']));
-                $sheet->setCellValue('F' . $rowIndex, htmlspecialchars($item['waitTime']));
-                $sheet->setCellValue('G' . $rowIndex, htmlspecialchars($item['billsec']));
-                $sheet->setCellValue('H' . $rowIndex, htmlspecialchars($item['stateCall']));
-                $sheet->setCellValue('I' . $rowIndex, htmlspecialchars($baseItem['DT_RowId']));
+            foreach (($baseItem['4'] ?? []) as $item) {
+                $sheet->setCellValue('A' . $rowIndex, (string)($baseItem['typeCallDesc'] ?? ''));
+                $sheet->setCellValue('B' . $rowIndex, (string)($item['start'] ?? ''));
+                $sheet->setCellValue('C' . $rowIndex, (string)($item['src_num'] ?? ''));
+                $sheet->setCellValue('D' . $rowIndex, (string)($item['dst_num'] ?? ''));
+                $sheet->setCellValue('E' . $rowIndex, (string)($baseItem['line'] ?? ''));
+                $sheet->setCellValue('F' . $rowIndex, (string)($item['waitTime'] ?? ''));
+                $sheet->setCellValue('G' . $rowIndex, (string)($item['billsec'] ?? ''));
+                $sheet->setCellValue('H' . $rowIndex, (string)($item['stateCall'] ?? ''));
+                $sheet->setCellValue('I' . $rowIndex, (string)($baseItem['DT_RowId'] ?? ''));
                 $rowIndex++;
             }
         }
-        $highestRow = $sheet->getHighestRow();
-        $highestColumn = $sheet->getHighestColumn();
-        $highestColumnIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($highestColumn);
-        for ($col = 1; $col <= $highestColumnIndex; $col++) {
-            $maxLength = 0;
-            for ($row = 1; $row <= $highestRow; $row++) {
-                $cellValue = $sheet->getCellByColumnAndRow($col, $row)->getValue();
-                if ($cellValue !== null) {
-                    $maxLength = max($maxLength, strlen($cellValue));
-                }
-            }
-            $sheet->getColumnDimensionByColumn($col)->setWidth($maxLength + 2);
-        }
+
         $writer = new Xlsx($spreadsheet);
+        $writer->setPreCalculateFormulas(false);
+        $writer->setUseDiskCaching(true, sys_get_temp_dir());
 
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="calls_report.xlsx"');
