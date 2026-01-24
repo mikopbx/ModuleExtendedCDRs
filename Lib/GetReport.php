@@ -387,7 +387,7 @@ class GetReport
 
                 $formattedDate = date('Y-m-d-H_i', strtotime($linkedRecord->start));
                 $uid = str_replace('mikopbx-', '', $linkedRecord->linkedid);
-                $prettyFilename = "$uid-$formattedDate-$linkedRecord->src_num-$linkedRecord->dst_num";
+                $prettyFilename = "$uid-$formattedDate-$record->src_num-$record->dst_num";
                 $linkedRecord->answered[] = [
                     'id' => $record->id,
                     'start' => date('d-m-Y H:i:s', strtotime($record->start)),
