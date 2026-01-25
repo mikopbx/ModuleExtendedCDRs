@@ -119,11 +119,13 @@ Build process uses Babel via PHPStorm File Watcher:
 To rebuild manually:
 ```bash
 cd /Users/apor/Developement/MikoPBX/MikoPBXUtils && \
+cp babel.config.json babel.config.json.bak && \
+echo '{"presets":[["@babel/preset-env",{"targets":{"chrome":50,"ie":11,"firefox":45}}]]}' > babel.config.json && \
 ./node_modules/.bin/babel \
   /Volumes/DevDisk/apor/Developement/MikoPBX/Extensions/ModuleExtendedCDRs/public/assets/js/src/module-export-records-index.js \
-  --out-file /Volumes/DevDisk/apor/Developement/MikoPBX/Extensions/ModuleExtendedCDRs/public/assets/js/module-export-records-index.js \
-  --source-maps \
-  --presets airbnb
+  --out-dir /Volumes/DevDisk/apor/Developement/MikoPBX/Extensions/ModuleExtendedCDRs/public/assets/js/ \
+  --source-maps && \
+mv babel.config.json.bak babel.config.json
 ```
 
 ## Conventions
