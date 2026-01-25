@@ -33,6 +33,7 @@ use Modules\ModuleExtendedCDRs\Lib\MikoPBXVersion;
 use Modules\ModuleExtendedCDRs\Lib\Providers\CdrDbProvider;
 use Modules\ModuleExtendedCDRs\Models\CallHistory;
 use Modules\ModuleExtendedCDRs\Models\CallQueuesHistory;
+use Modules\ModuleExtendedCDRs\Models\DailyCallStats;
 use Modules\ModuleExtendedCDRs\Models\ModuleExtendedCDRs;
 use Phalcon\Db\Enum;
 use DateTime;
@@ -90,6 +91,7 @@ class ConnectorDB extends WorkerBase
         $this->logger   = new Logger('ConnectorDB', 'ModuleExtendedCDRs');
         $this->mp3TagService = new Mp3TagService(dirname(__DIR__));
         $this->logger->writeInfo('Starting...');
+        $this->ensureDailyStatsTableExists();
         $this->updateSettings();
         $beanstalk      = new BeanstalkClient(self::class);
         $beanstalk->subscribe(self::class, [$this, 'onEvents']);
@@ -837,17 +839,25 @@ class ConnectorDB extends WorkerBase
 
 
     /**
-     * Возвращает количество записпей за период с отбором по номерам.
+     * Возвращает количество записей за период с отбором по номерам.
+     * Использует lazy-кэш для запросов без фильтров.
      * @param string $start
      * @param string $end
      * @param array  $numbers
      * @param array  $additionalNumbers
      * @param array  $additionalFilter
      * @param int  $minBilSec
+     * @param array  $ids
      * @return array
      */
     public function getCountCdr(string $start, string $end, array $numbers, array $additionalNumbers, array $additionalFilter, int $minBilSec = 0, array $ids = []): array
     {
+        // Проверяем возможность использования lazy-кэша
+        if ($this->canUseDailyStatsCache($numbers, $additionalNumbers, $additionalFilter, $minBilSec, $ids)) {
+            return $this->getCountCdrCached($start, $end);
+        }
+
+        // Прямой запрос для фильтрованных данных
         $queryBuilder = (new CdrQueryBuilder())
             ->whereDateRange($start, $end)
             ->whereNumbers($numbers, 'Index')
@@ -893,6 +903,238 @@ class ConnectorDB extends WorkerBase
         return is_array($row) ? $row : [];
     }
 
+
+    /**
+     * Создаёт таблицу daily_call_stats если она не существует.
+     * @return void
+     */
+    private function ensureDailyStatsTableExists(): void
+    {
+        if (!$this->di->has(CdrDbProvider::SERVICE_NAME)) {
+            $this->di->register(new CdrDbProvider());
+        }
+        $db = $this->di->getShared(CdrDbProvider::SERVICE_NAME);
+
+        $sql = "CREATE TABLE IF NOT EXISTS daily_call_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL UNIQUE,
+            cInner INTEGER DEFAULT 0,
+            cOutgoing INTEGER DEFAULT 0,
+            cIncoming INTEGER DEFAULT 0,
+            cMissed INTEGER DEFAULT 0,
+            cTotal INTEGER DEFAULT 0,
+            updatedAt TEXT DEFAULT ''
+        )";
+        $db->execute($sql);
+        $this->logger->writeInfo('Ensured daily_call_stats table exists');
+    }
+
+    /**
+     * Вычисляет статистику звонков за один день.
+     * @param string $date Дата в формате 'YYYY-MM-DD'
+     * @return array ['cInner'=>X, 'cOutgoing'=>Y, 'cIncoming'=>Z, 'cMissed'=>W, 'cTotal'=>N]
+     */
+    private function calculateStatsForDay(string $date): array
+    {
+        if (!$this->di->has(CdrDbProvider::SERVICE_NAME)) {
+            $this->di->register(new CdrDbProvider());
+        }
+        $db = $this->di->getShared(CdrDbProvider::SERVICE_NAME);
+
+        $startOfDay = $date . ' 00:00:00';
+        $endOfDay = $date . ' 23:59:59';
+
+        $sql = "
+            SELECT
+                COALESCE(SUM(IIF(t.typeCall=0,1,0)),0) AS cInner,
+                COALESCE(SUM(IIF(t.typeCall=1,1,0)),0) AS cOutgoing,
+                COALESCE(SUM(IIF(t.typeCall=2,1,0)),0) AS cIncoming,
+                COALESCE(SUM(IIF(t.typeCall=3,1,0)),0) AS cMissed,
+                COUNT(t.linkedid) AS cTotal
+            FROM (
+                SELECT
+                    MIN(cdr_general.id) AS id,
+                    MAX(cdr_general.typeCall) AS typeCall,
+                    cdr_general.linkedid AS linkedid
+                FROM cdr_general
+                WHERE start BETWEEN :startOfDay AND :endOfDay
+                GROUP BY cdr_general.linkedid
+            ) AS t
+        ";
+
+        try {
+            $result = $db->query($sql, [
+                'startOfDay' => $startOfDay,
+                'endOfDay' => $endOfDay,
+            ]);
+            $result->setFetchMode(Enum::FETCH_ASSOC);
+            $row = $result->fetch();
+            return is_array($row) ? $row : [
+                'cInner' => 0,
+                'cOutgoing' => 0,
+                'cIncoming' => 0,
+                'cMissed' => 0,
+                'cTotal' => 0,
+            ];
+        } catch (Throwable $e) {
+            $this->logger->writeError("calculateStatsForDay error: " . $e->getMessage());
+            return [
+                'cInner' => 0,
+                'cOutgoing' => 0,
+                'cIncoming' => 0,
+                'cMissed' => 0,
+                'cTotal' => 0,
+            ];
+        }
+    }
+
+    /**
+     * Получает закэшированную статистику для списка дат.
+     * @param array $dates Массив дат в формате 'YYYY-MM-DD'
+     * @return array Массив [date => ['cInner'=>X, ...]]
+     */
+    private function getCachedStats(array $dates): array
+    {
+        if (empty($dates)) {
+            return [];
+        }
+
+        $cached = DailyCallStats::find([
+            'date IN ({dates:array})',
+            'bind' => ['dates' => $dates],
+        ]);
+
+        $result = [];
+        foreach ($cached as $row) {
+            $result[$row->date] = [
+                'cInner' => (int)$row->cInner,
+                'cOutgoing' => (int)$row->cOutgoing,
+                'cIncoming' => (int)$row->cIncoming,
+                'cMissed' => (int)$row->cMissed,
+                'cTotal' => (int)$row->cTotal,
+            ];
+        }
+        return $result;
+    }
+
+    /**
+     * Сохраняет статистику за день в кэш.
+     * @param string $date Дата в формате 'YYYY-MM-DD'
+     * @param array $stats Статистика ['cInner'=>X, ...]
+     * @return void
+     */
+    private function saveDailyStats(string $date, array $stats): void
+    {
+        $existing = DailyCallStats::findFirst([
+            'date = :date:',
+            'bind' => ['date' => $date],
+        ]);
+
+        if ($existing) {
+            $record = $existing;
+        } else {
+            $record = new DailyCallStats();
+            $record->date = $date;
+        }
+
+        $record->cInner = (int)($stats['cInner'] ?? 0);
+        $record->cOutgoing = (int)($stats['cOutgoing'] ?? 0);
+        $record->cIncoming = (int)($stats['cIncoming'] ?? 0);
+        $record->cMissed = (int)($stats['cMissed'] ?? 0);
+        $record->cTotal = (int)($stats['cTotal'] ?? 0);
+        $record->updatedAt = date('Y-m-d H:i:s');
+
+        if (!$record->save()) {
+            $this->logger->writeError("Failed to save DailyCallStats for $date");
+        }
+    }
+
+    /**
+     * Проверяет, можно ли использовать lazy-кэш для данных параметров.
+     * Кэш НЕ используется при наличии фильтров.
+     * @param array $numbers
+     * @param array $additionalNumbers
+     * @param array $additionalFilter
+     * @param int $minBilSec
+     * @param array $ids
+     * @return bool
+     */
+    private function canUseDailyStatsCache(array $numbers, array $additionalNumbers, array $additionalFilter, int $minBilSec, array $ids): bool
+    {
+        return empty($numbers)
+            && empty($additionalNumbers)
+            && empty($additionalFilter)
+            && empty($ids)
+            && $minBilSec === 0;
+    }
+
+    /**
+     * Возвращает количество записей за период с использованием lazy-кэша.
+     * @param string $start
+     * @param string $end
+     * @return array
+     */
+    private function getCountCdrCached(string $start, string $end): array
+    {
+        $startDate = substr($start, 0, 10); // 'YYYY-MM-DD'
+        $endDate = substr($end, 0, 10);
+        $today = date('Y-m-d');
+
+        // Генерируем список дат в периоде
+        $allDates = [];
+        $current = new DateTime($startDate);
+        $endDt = new DateTime($endDate);
+        while ($current <= $endDt) {
+            $allDates[] = $current->format('Y-m-d');
+            $current->modify('+1 day');
+        }
+
+        // Разделяем на завершённые дни (можно кэшировать) и сегодня (всегда живой)
+        $completedDates = array_filter($allDates, fn($d) => $d < $today);
+        $todayInRange = in_array($today, $allDates, true);
+
+        // Получаем кэш для завершённых дней
+        $cachedStats = $this->getCachedStats($completedDates);
+
+        // Находим отсутствующие даты
+        $missingDates = array_diff($completedDates, array_keys($cachedStats));
+
+        // Вычисляем и кэшируем отсутствующие
+        foreach ($missingDates as $date) {
+            $stats = $this->calculateStatsForDay($date);
+            $this->saveDailyStats($date, $stats);
+            $cachedStats[$date] = $stats;
+        }
+
+        // Суммируем статистику из кэша
+        $totals = [
+            'cINNER' => 0,
+            'cOUTGOING' => 0,
+            'cINCOMING' => 0,
+            'cMISSED' => 0,
+            'cCalls' => 0,
+        ];
+
+        foreach ($cachedStats as $stats) {
+            $totals['cINNER'] += (int)$stats['cInner'];
+            $totals['cOUTGOING'] += (int)$stats['cOutgoing'];
+            $totals['cINCOMING'] += (int)$stats['cIncoming'];
+            $totals['cMISSED'] += (int)$stats['cMissed'];
+            $totals['cCalls'] += (int)$stats['cTotal'];
+        }
+
+        // Добавляем живой подсчёт за сегодня
+        if ($todayInRange) {
+            $todayStats = $this->calculateStatsForDay($today);
+            $totals['cINNER'] += (int)$todayStats['cInner'];
+            $totals['cOUTGOING'] += (int)$todayStats['cOutgoing'];
+            $totals['cINCOMING'] += (int)$todayStats['cIncoming'];
+            $totals['cMISSED'] += (int)$todayStats['cMissed'];
+            $totals['cCalls'] += (int)$todayStats['cTotal'];
+        }
+
+        return $totals;
+    }
 
     /**
      * Check if the filter has any invalid bind parameters.

@@ -29,6 +29,7 @@ use Phalcon\Mvc\Model\Resultset\Simple;
  *     [name='dstIndex', columns=['dstIndex'], type=''],
  *     [name='UNIQUEID', columns=['UNIQUEID'], type=''],
  *     [name='typeCall', columns=['typeCall'], type=''],
+ *     [name='typeCall_start', columns=['typeCall', 'start'], type=''],
  *     [name='line', columns=['line'], type=''],
  *     [name='linkedid', columns=['linkedid'], type='']
  * )
