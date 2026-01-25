@@ -20,6 +20,22 @@ use Modules\ModuleExtendedCDRs\Models\ReportSettings;
 
 class ExtendedCDRsConf extends ConfigClass
 {
+    /**
+     * Called before module disable.
+     *
+     * Skips the standard makeBeforeDisableTest() check which loads ALL records
+     * from module tables into memory. With 2+ million records in CallHistory
+     * (1.3GB database), this causes timeout/OOM during module installation.
+     *
+     * Our tables (CallHistory, CallQueuesHistory, etc.) have no foreign key
+     * relations with MikoPBX Core models, so the check is unnecessary.
+     *
+     * @return bool Always returns true to allow module disable.
+     */
+    public function onBeforeModuleDisable(): bool
+    {
+        return true;
+    }
 
     /**
      * Receive information about mikopbx main database changes
