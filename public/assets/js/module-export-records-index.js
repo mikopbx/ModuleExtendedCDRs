@@ -1,19 +1,9 @@
 "use strict";
 
-function _typeof(o) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (o) { return typeof o; } : function (o) { return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o; }, _typeof(o); }
-function _defineProperty(e, r, t) { return (r = _toPropertyKey(r)) in e ? Object.defineProperty(e, r, { value: t, enumerable: !0, configurable: !0, writable: !0 }) : e[r] = t, e; }
-function _toPropertyKey(t) { var i = _toPrimitive(t, "string"); return "symbol" == _typeof(i) ? i : i + ""; }
-function _toPrimitive(t, r) { if ("object" != _typeof(t) || !t) return t; var e = t[Symbol.toPrimitive]; if (void 0 !== e) { var i = e.call(t, r || "default"); if ("object" != _typeof(i)) return i; throw new TypeError("@@toPrimitive must return a primitive value."); } return ("string" === r ? String : Number)(t); }
-function _slicedToArray(r, e) { return _arrayWithHoles(r) || _iterableToArrayLimit(r, e) || _unsupportedIterableToArray(r, e) || _nonIterableRest(); }
-function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
-function _iterableToArrayLimit(r, l) { var t = null == r ? null : "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (null != t) { var e, n, i, u, a = [], f = !0, o = !1; try { if (i = (t = t.call(r)).next, 0 === l) { if (Object(t) !== t) return; f = !1; } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = !0); } catch (r) { o = !0, n = r; } finally { try { if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u)) return; } finally { if (o) throw n; } } return a; } }
-function _arrayWithHoles(r) { if (Array.isArray(r)) return r; }
-function _toConsumableArray(r) { return _arrayWithoutHoles(r) || _iterableToArray(r) || _unsupportedIterableToArray(r) || _nonIterableSpread(); }
-function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
-function _unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return _arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? _arrayLikeToArray(r, a) : void 0; } }
-function _iterableToArray(r) { if ("undefined" != typeof Symbol && null != r[Symbol.iterator] || null != r["@@iterator"]) return Array.from(r); }
-function _arrayWithoutHoles(r) { if (Array.isArray(r)) return _arrayLikeToArray(r); }
-function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
+var _interopRequireDefault = require("@babel/runtime/helpers/interopRequireDefault");
+var _defineProperty2 = _interopRequireDefault(require("@babel/runtime/helpers/defineProperty"));
+var _slicedToArray2 = _interopRequireDefault(require("@babel/runtime/helpers/slicedToArray"));
+var _toConsumableArray2 = _interopRequireDefault(require("@babel/runtime/helpers/toConsumableArray"));
 /*
  * Copyright (C) MIKO LLC - All Rights Reserved
  * Unauthorized copying of this file, via any medium is strictly prohibited
@@ -101,6 +91,14 @@ var ModuleExtendedCDRs = {
           data: data,
           success: function success(json) {
             callback(json);
+          },
+          error: function error(xhr, status, _error) {
+            console.error('getOutgoingEmployeeCalls error:', status, _error);
+            callback({
+              data: [],
+              recordsTotal: 0,
+              recordsFiltered: 0
+            });
           }
         });
       },
@@ -123,6 +121,7 @@ var ModuleExtendedCDRs = {
       },
       drawCallback: function drawCallback(settings) {
         ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
+        ModuleExtendedCDRs.applyFilterRunning = false;
       },
       language: SemanticLocalization.dataTableLocalisation,
       ordering: false
@@ -174,6 +173,14 @@ var ModuleExtendedCDRs = {
               json.recordsFiltered = json.recordsOutgoing;
             }
             callback(json);
+          },
+          error: function error(xhr, status, _error2) {
+            console.error('getHistory error:', status, _error2);
+            callback({
+              data: [],
+              recordsTotal: 0,
+              recordsFiltered: 0
+            });
           }
         });
       },
@@ -230,6 +237,7 @@ var ModuleExtendedCDRs = {
           }
         });
         ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
+        ModuleExtendedCDRs.applyFilterRunning = false;
       },
       language: SemanticLocalization.dataTableLocalisation,
       ordering: false
@@ -265,6 +273,14 @@ var ModuleExtendedCDRs = {
           data: data,
           success: function success(json) {
             callback(json);
+          },
+          error: function error(xhr, status, _error3) {
+            console.error('getCdrQueue error:', status, _error3);
+            callback({
+              data: [],
+              recordsTotal: 0,
+              recordsFiltered: 0
+            });
           }
         });
       },
@@ -308,6 +324,7 @@ var ModuleExtendedCDRs = {
       },
       drawCallback: function drawCallback(settings) {
         ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
+        ModuleExtendedCDRs.applyFilterRunning = false;
       },
       language: SemanticLocalization.dataTableLocalisation,
       ordering: false
@@ -569,8 +586,8 @@ var ModuleExtendedCDRs = {
           $('#menu-reports i.star').addClass('outline');
           self.removeClass('outline');
         },
-        error: function error(xhr, status, _error) {
-          console.error(_error);
+        error: function error(xhr, status, _error4) {
+          console.error(_error4);
         }
       });
     });
@@ -593,8 +610,8 @@ var ModuleExtendedCDRs = {
         success: function success(response) {
           self.parent().remove();
         },
-        error: function error(xhr, status, _error2) {
-          console.error(_error2);
+        error: function error(xhr, status, _error5) {
+          console.error(_error5);
         }
       });
     });
@@ -870,7 +887,7 @@ var ModuleExtendedCDRs = {
       $("[id=\"".concat(callId, "\"]")).addClass('positive');
       listenedIDs.push(callId);
     }
-    listenedIDs = _toConsumableArray(new Set(listenedIDs));
+    listenedIDs = (0, _toConsumableArray2["default"])(new Set(listenedIDs));
   },
   calculatePageLength: function calculatePageLength() {
     // Calculate row height
@@ -933,8 +950,8 @@ var ModuleExtendedCDRs = {
             }
           }
         },
-        error: function error(xhr, status, _error3) {
-          console.error("Ошибка запроса", status, _error3);
+        error: function error(xhr, status, _error6) {
+          console.error("Ошибка запроса", status, _error6);
         }
       });
     });
@@ -956,8 +973,8 @@ var ModuleExtendedCDRs = {
         console.log("Успешный запрос", response);
         $('#sync-rules tr#' + id).remove();
       },
-      error: function error(xhr, status, _error4) {
-        console.error("Ошибка запроса", status, _error4);
+      error: function error(xhr, status, _error7) {
+        console.error("Ошибка запроса", status, _error7);
       }
     });
   },
@@ -970,7 +987,7 @@ var ModuleExtendedCDRs = {
     if (period !== '' && period !== undefined) {
       if ($('#pDateRangeSelector').val() === period) {
         var _period$split = period.split(' - '),
-          _period$split2 = _slicedToArray(_period$split, 2),
+          _period$split2 = (0, _slicedToArray2["default"])(_period$split, 2),
           startStr = _period$split2[0],
           endStr = _period$split2[1];
         defPeriod = [moment(startStr, 'DD/MM/YYYY'), moment(endStr, 'DD/MM/YYYY')];
@@ -982,7 +999,7 @@ var ModuleExtendedCDRs = {
       }
     }
     var options = {};
-    options.ranges = _defineProperty(_defineProperty(_defineProperty(_defineProperty(_defineProperty(_defineProperty({}, globalTranslate.repModuleExtendedCDRs_cdr_cal_Today, [moment(), moment()]), globalTranslate.repModuleExtendedCDRs_cdr_cal_Yesterday, [moment().subtract(1, 'days'), moment().subtract(1, 'days')]), globalTranslate.repModuleExtendedCDRs_cdr_cal_LastWeek, [moment().subtract(6, 'days'), moment()]), globalTranslate.repModuleExtendedCDRs_cdr_cal_Last30Days, [moment().subtract(29, 'days'), moment()]), globalTranslate.repModuleExtendedCDRs_cdr_cal_ThisMonth, [moment().startOf('month'), moment().endOf('month')]), globalTranslate.repModuleExtendedCDRs_cdr_cal_LastMonth, [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]);
+    options.ranges = (0, _defineProperty2["default"])((0, _defineProperty2["default"])((0, _defineProperty2["default"])((0, _defineProperty2["default"])((0, _defineProperty2["default"])((0, _defineProperty2["default"])({}, globalTranslate.repModuleExtendedCDRs_cdr_cal_Today, [moment(), moment()]), globalTranslate.repModuleExtendedCDRs_cdr_cal_Yesterday, [moment().subtract(1, 'days'), moment().subtract(1, 'days')]), globalTranslate.repModuleExtendedCDRs_cdr_cal_LastWeek, [moment().subtract(6, 'days'), moment()]), globalTranslate.repModuleExtendedCDRs_cdr_cal_Last30Days, [moment().subtract(29, 'days'), moment()]), globalTranslate.repModuleExtendedCDRs_cdr_cal_ThisMonth, [moment().startOf('month'), moment().endOf('month')]), globalTranslate.repModuleExtendedCDRs_cdr_cal_LastMonth, [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]);
     options.alwaysShowCalendars = true;
     options.autoUpdateInput = true;
     options.linkedCalendars = true;
@@ -1036,11 +1053,8 @@ var ModuleExtendedCDRs = {
       return;
     }
     ModuleExtendedCDRs.applyFilterRunning = true;
+    // Flag will be reset in drawCallback after table is rendered
 
-    // Reset flag after short delay
-    setTimeout(function () {
-      ModuleExtendedCDRs.applyFilterRunning = false;
-    }, 500);
     var text = ModuleExtendedCDRs.getSearchText();
     listenedIDs = [];
 
@@ -1201,8 +1215,8 @@ var ModuleExtendedCDRs = {
           $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportId, "\"]")).attr('data-min-bill-sec-comp', minBillSecComp);
         }
       },
-      error: function error(xhr, status, _error5) {
-        console.error(_error5);
+      error: function error(xhr, status, _error8) {
+        console.error(_error8);
       }
     });
   },
@@ -1369,4 +1383,5 @@ var ModuleExtendedCDRs = {
 $(document).ready(function () {
   window[className].initialize();
 });
+
 //# sourceMappingURL=module-export-records-index.js.map

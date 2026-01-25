@@ -89,6 +89,10 @@ const ModuleExtendedCDRs = {
 					data: data,
 					success: function(json) {
 						callback(json);
+					},
+					error: function(xhr, status, error) {
+						console.error('getOutgoingEmployeeCalls error:', status, error);
+						callback({ data: [], recordsTotal: 0, recordsFiltered: 0 });
 					}
 				});
 			},
@@ -112,6 +116,7 @@ const ModuleExtendedCDRs = {
 			},
 			drawCallback(settings) {
 				ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
+				ModuleExtendedCDRs.applyFilterRunning = false;
 			},
 			language: SemanticLocalization.dataTableLocalisation,
 			ordering: false,
@@ -144,7 +149,7 @@ const ModuleExtendedCDRs = {
 					success: function(json) {
 						$('a.item[data-tab="all-calls"] b').html(': '+json.recordsFiltered)
 						$('a.item[data-tab="incoming-calls"] b').html(': '+json.recordsIncoming)
-						
+
 						let recordsMissed = json.recordsMissed;
 						if(json.recordsMissedPercent !== 0){
 							recordsMissed = json.recordsMissed + ' (' +json.recordsMissedPercent+ '%)';
@@ -162,6 +167,10 @@ const ModuleExtendedCDRs = {
 							json.recordsFiltered = json.recordsOutgoing;
 						}
 						callback(json);
+					},
+					error: function(xhr, status, error) {
+						console.error('getHistory error:', status, error);
+						callback({ data: [], recordsTotal: 0, recordsFiltered: 0 });
 					}
 				});
 			},
@@ -230,6 +239,7 @@ const ModuleExtendedCDRs = {
 					}
 				});
 				ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
+				ModuleExtendedCDRs.applyFilterRunning = false;
 			},
 			language: SemanticLocalization.dataTableLocalisation,
 			ordering: false,
@@ -261,6 +271,10 @@ const ModuleExtendedCDRs = {
 					data: data,
 					success: function(json) {
 						callback(json);
+					},
+					error: function(xhr, status, error) {
+						console.error('getCdrQueue error:', status, error);
+						callback({ data: [], recordsTotal: 0, recordsFiltered: 0 });
 					}
 				});
 			},
@@ -306,6 +320,7 @@ const ModuleExtendedCDRs = {
 		},
 			drawCallback(settings) {
 				ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
+				ModuleExtendedCDRs.applyFilterRunning = false;
 			},
 			language: SemanticLocalization.dataTableLocalisation,
 			ordering: false,
@@ -1161,11 +1176,7 @@ const ModuleExtendedCDRs = {
 			return;
 		}
 		ModuleExtendedCDRs.applyFilterRunning = true;
-		
-		// Reset flag after short delay
-		setTimeout(() => {
-			ModuleExtendedCDRs.applyFilterRunning = false;
-		}, 500);
+		// Flag will be reset in drawCallback after table is rendered
 
 		const text  = ModuleExtendedCDRs.getSearchText();
 		listenedIDs = [];
