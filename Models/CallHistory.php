@@ -12,8 +12,11 @@
  */
 
 namespace Modules\ModuleExtendedCDRs\Models;
+
 use MikoPBX\Common\Models\CallDetailRecordsBase;
 use Modules\ModuleExtendedCDRs\Lib\Providers\CdrDbProvider;
+use Phalcon\Mvc\Model\ResultsetInterface;
+use Phalcon\Mvc\Model\Resultset\Simple;
 
 /**
  * Class CallDetailRecords
@@ -263,12 +266,59 @@ class CallHistory extends CallDetailRecordsBase
      */
     public ?string $line = '';
 
+    /**
+     * Переопределяем find() для обхода проблемы с makeBeforeEnableTest().
+     *
+     * MikoPBX Core при enable/disable модуля вызывает find() на всех моделях
+     * для проверки broken references. Для CallHistory (миллионы записей) это
+     * вызывает deadlock с ConnectorDB. Поскольку у модели нет relations,
+     * проверка всё равно пропускается — возвращаем пустой результат.
+     *
+     * @param mixed $parameters Query parameters
+     * @return ResultsetInterface
+     */
+    public static function find($parameters = null): ResultsetInterface
+    {
+        // Только для вызовов без параметров (как в makeBeforeEnableTest)
+        if ($parameters === null && self::isEnableCheckContext()) {
+            // Возвращаем пустой Resultset — проверка relations пропустится
+            return new Simple(
+                ['id'],
+                new self(),
+                null  // null resource = пустой результат
+            );
+        }
+
+        return parent::find($parameters);
+    }
+
+    /**
+     * Проверяет, вызван ли find() из контекста проверки enable/disable модуля.
+     *
+     * @return bool
+     */
+    private static function isEnableCheckContext(): bool
+    {
+        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 15);
+        foreach ($trace as $frame) {
+            $class = $frame['class'] ?? '';
+            $function = $frame['function'] ?? '';
+
+            // Проверка enable/disable модуля
+            if ($class === 'MikoPBX\\Modules\\PbxExtensionState'
+                && in_array($function, ['makeBeforeEnableTest', 'makeBeforeDisableTest'], true)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public function initialize(): void
     {
         $this->setSource('cdr_general');
         parent::initialize();
         $this->useDynamicUpdate(true);
-        if(!$this->di->has(CdrDbProvider::SERVICE_NAME)){
+        if (!$this->di->has(CdrDbProvider::SERVICE_NAME)) {
             $this->di->register(new CdrDbProvider());
         }
         $this->setConnectionService(CdrDbProvider::SERVICE_NAME);
