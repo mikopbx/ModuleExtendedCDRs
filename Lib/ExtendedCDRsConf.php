@@ -38,6 +38,19 @@ class ExtendedCDRsConf extends ConfigClass
     }
 
     /**
+     * Called before module enable.
+     *
+     * Skips the standard makeBeforeEnableTest() check which loads ALL records
+     * from module tables into memory. Same issue as onBeforeModuleDisable().
+     *
+     * @return bool Always returns true to allow module enable.
+     */
+    public function onBeforeModuleEnable(): bool
+    {
+        return true;
+    }
+
+    /**
      * Receive information about mikopbx main database changes
      *
      * @param $data
