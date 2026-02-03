@@ -34,6 +34,7 @@ class Logger
     private $logger;
     private string $module_name;
     private string $logFile;
+    private int $lastRotateCheckTs = 0;
 
     /**
      * Logger constructor.
@@ -51,8 +52,45 @@ class Logger
             Util::addRegularWWWRights($logPath);
         }
         $this->logFile  = $logPath . $class . '.log';
+        $this->init();
+
+    }
+
+    /**
+     * Ротация лог файла.
+     * @return void
+     */
+    public function rotate(): void
+    {
+        // Throttle rotation checks to reduce overhead in tight loops (fixed interval).
+        $rotateInterval = 30;
+        $now = time();
+        if ($this->lastRotateCheckTs !== 0 && ($now - $this->lastRotateCheckTs) < $rotateInterval) {
+            return;
+        }
+        $this->lastRotateCheckTs = $now;
+        $rotation = new Rotation([
+             'files' => 5,
+             'compress' => false,
+             'min-size' => 10*1024*1024,
+             'truncate' => false,
+             'catch' => function (RotationFailed $exception) {
+                 Util::sysLogMsg('ModuleExtendedCDRs-Log', $exception->getMessage());
+             },
+        ]);
+        if($rotation->rotate($this->logFile)){
+            $this->init();
+        }
+    }
+
+    /**
+     * Инициализация логгера.
+     * @return void
+     */
+    private function init():void
+    {
         $adapter       = new Stream($this->logFile);
-        $lineFormatter = new LineFormatter("[%date%] %message%", "Y-m-d H:i:s");
+        $lineFormatter = new LineFormatter("[%date%][%type%] %message%", "Y-m-d H:i:s");
         $adapter->setFormatter($lineFormatter);
         $loggerClass = MikoPBXVersion::getLoggerClass();
         $this->logger  = new $loggerClass(
@@ -62,43 +100,52 @@ class Logger
             ]
         );
     }
-
-    public function rotate(): void
+    /**
+     * Записать в лог ошибку.
+     * @param $data
+     * @param string $preMessage
+     * @return void
+     */
+    public function writeError($data, string $preMessage=''): void
     {
-        $rotation = new Rotation([
-             'files' => 5,
-             'compress' => false,
-             'min-size' => 10*1024*1024,
-             'truncate' => false,
-             'catch' => function (RotationFailed $exception) {
-                Util::sysLogMsg('ModuleExport-Log', $exception->getMessage());
-             },
-        ]);
-        $rotation->rotate($this->logFile);
-    }
-
-    public function writeError($data): void
-    {
+        $this->rotate();
         if ($this->debug) {
-            $this->logger->error($this->getDecodedString($data));
+            if(!empty($preMessage)){
+                $preMessage.= ': ';
+            }
+            $this->logger->error('['.getmypid().'] '.$preMessage.$this->getDecodedString($data));
         }
     }
 
-    public function writeInfo($data): void
+    /**
+     * Записать в лог информационное сообщение.
+     * @param $data
+     * @param string $preMessage
+     * @return void
+     */
+    public function writeInfo($data, string $preMessage=''): void
     {
+        $this->rotate();
         if ($this->debug) {
-            $this->logger->info($this->getDecodedString($data));
+            if(!empty($preMessage)){
+                $preMessage.= ': ';
+            }
+            $this->logger->info('['.getmypid().'] '.$preMessage.$this->getDecodedString($data));
         }
     }
 
-    public function info(string $data): void
-    {
-        $this->logger->info($data);
-    }
-
+    /**
+     * Кодирование данных в виде json.
+     * @param $data
+     * @return string
+     */
     private function getDecodedString($data):string
     {
-        $printedData = json_encode($data, JSON_THROW_ON_ERROR);
+        try {
+            $printedData = json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        }catch (\Exception $e){
+            $printedData = print_r($data, true);
+        }
         if(is_bool($printedData)){
             $result = '';
         }else{
@@ -106,5 +153,4 @@ class Logger
         }
         return $result;
     }
-
 }

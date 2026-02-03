@@ -4,6 +4,10 @@ function _typeof(o) { "@babel/helpers - typeof"; return _typeof = "function" == 
 function _defineProperty(e, r, t) { return (r = _toPropertyKey(r)) in e ? Object.defineProperty(e, r, { value: t, enumerable: !0, configurable: !0, writable: !0 }) : e[r] = t, e; }
 function _toPropertyKey(t) { var i = _toPrimitive(t, "string"); return "symbol" == _typeof(i) ? i : i + ""; }
 function _toPrimitive(t, r) { if ("object" != _typeof(t) || !t) return t; var e = t[Symbol.toPrimitive]; if (void 0 !== e) { var i = e.call(t, r || "default"); if ("object" != _typeof(i)) return i; throw new TypeError("@@toPrimitive must return a primitive value."); } return ("string" === r ? String : Number)(t); }
+function _slicedToArray(r, e) { return _arrayWithHoles(r) || _iterableToArrayLimit(r, e) || _unsupportedIterableToArray(r, e) || _nonIterableRest(); }
+function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
+function _iterableToArrayLimit(r, l) { var t = null == r ? null : "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (null != t) { var e, n, i, u, a = [], f = !0, o = !1; try { if (i = (t = t.call(r)).next, 0 === l) { if (Object(t) !== t) return; f = !1; } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = !0); } catch (r) { o = !0, n = r; } finally { try { if (!f && null != t.return && (u = t.return(), Object(u) !== u)) return; } finally { if (o) throw n; } } return a; } }
+function _arrayWithHoles(r) { if (Array.isArray(r)) return r; }
 function _toConsumableArray(r) { return _arrayWithoutHoles(r) || _iterableToArray(r) || _unsupportedIterableToArray(r) || _nonIterableSpread(); }
 function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
 function _unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return _arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? _arrayLikeToArray(r, a) : void 0; } }
@@ -39,6 +43,7 @@ var ModuleExtendedCDRs = {
    */
   $cdrTable: $('#CallDetails-table'),
   $outgoingEmployeeCalls: $('#OutgoingEmployeeCalls-table'),
+  $cdrQueueTable: $('#CdrQueue-table'),
   /**
    * The global search input element.
    * @type {jQuery}
@@ -63,6 +68,8 @@ var ModuleExtendedCDRs = {
    * Flag to prevent initial data loading
    * @type {boolean}
    */
+  applyFilterTimer: null,
+  applyFilterRunning: false,
   tablesInitialized: false,
   tableInitDataOutgoingEmployeeCalls: {
     wasInit: false,
@@ -94,10 +101,18 @@ var ModuleExtendedCDRs = {
           data: data,
           success: function success(json) {
             callback(json);
+          },
+          error: function error(xhr, status, _error) {
+            console.error('getOutgoingEmployeeCalls error:', status, _error);
+            callback({
+              data: [],
+              recordsTotal: 0,
+              recordsFiltered: 0
+            });
           }
         });
       },
-      paging: true,
+      paging: false,
       sDom: 'rtip',
       deferRender: true,
       // pageLength: ModuleExtendedCDRs.calculatePageLength(),
@@ -115,12 +130,8 @@ var ModuleExtendedCDRs = {
         $('td', row).eq(5).html(data.countCalls);
       },
       drawCallback: function drawCallback(settings) {
-        var pagination = $(this).closest('.dataTables_wrapper').find('.dataTables_paginate');
-        if (settings._iDisplayLength >= settings.fnRecordsDisplay()) {
-          pagination.hide();
-        } else {
-          pagination.show();
-        }
+        ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
+        ModuleExtendedCDRs.applyFilterRunning = false;
       },
       language: SemanticLocalization.dataTableLocalisation,
       ordering: false
@@ -157,7 +168,11 @@ var ModuleExtendedCDRs = {
           success: function success(json) {
             $('a.item[data-tab="all-calls"] b').html(': ' + json.recordsFiltered);
             $('a.item[data-tab="incoming-calls"] b').html(': ' + json.recordsIncoming);
-            $('a.item[data-tab="missed-calls"] b').html(': ' + json.recordsMissed);
+            var recordsMissed = json.recordsMissed;
+            if (json.recordsMissedPercent !== 0) {
+              recordsMissed = json.recordsMissed + ' (' + json.recordsMissedPercent + '%)';
+            }
+            $('a.item[data-tab="missed-calls"] b').html(': ' + recordsMissed);
             $('a.item[data-tab="outgoing-calls"] b').html(': ' + json.recordsOutgoing);
             var typeCall = $('#typeCall a.item.active').attr('data-tab');
             if (typeCall === 'incoming-calls') {
@@ -168,6 +183,14 @@ var ModuleExtendedCDRs = {
               json.recordsFiltered = json.recordsOutgoing;
             }
             callback(json);
+          },
+          error: function error(xhr, status, _error2) {
+            console.error('getHistory error:', status, _error2);
+            callback({
+              data: [],
+              recordsTotal: 0,
+              recordsFiltered: 0
+            });
           }
         });
       },
@@ -223,12 +246,95 @@ var ModuleExtendedCDRs = {
             element.removeClass('warning').addClass('positive');
           }
         });
-        var pagination = $(this).closest('.dataTables_wrapper').find('.dataTables_paginate');
-        if (settings._iDisplayLength >= settings.fnRecordsDisplay()) {
-          pagination.hide();
-        } else {
-          pagination.show();
+        ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
+        ModuleExtendedCDRs.applyFilterRunning = false;
+      },
+      language: SemanticLocalization.dataTableLocalisation,
+      ordering: false
+    }
+  },
+  tableInitDataCdrQueue: {
+    wasInit: false,
+    id: 'CdrQueue',
+    data: {
+      search: {
+        search: ''
+      },
+      serverSide: true,
+      processing: true,
+      info: false,
+      columnDefs: [{
+        defaultContent: "",
+        targets: "_all"
+      }],
+      ajax: function ajax(data, callback, settings) {
+        if (data.search.value === '' || !ModuleExtendedCDRs.tablesInitialized || $('#currentReportNameID').val() !== 'CdrQueue') {
+          // Skip initial load
+          callback({
+            data: [],
+            recordsTotal: 0,
+            recordsFiltered: 0
+          });
+          return;
         }
+        $.ajax({
+          url: "".concat(globalRootUrl).concat(idUrl, "/getCdrQueue"),
+          type: 'POST',
+          data: data,
+          success: function success(json) {
+            callback(json);
+          },
+          error: function error(xhr, status, _error3) {
+            console.error('getCdrQueue error:', status, _error3);
+            callback({
+              data: [],
+              recordsTotal: 0,
+              recordsFiltered: 0
+            });
+          }
+        });
+      },
+      paging: false,
+      sDom: 'rtip',
+      deferRender: true,
+      // pageLength: ModuleExtendedCDRs.calculatePageLength(),
+      /**
+       * Constructs the CDR Queue row.
+       * @param {HTMLElement} row - The row element.
+       * @param {Array} data - The row data.
+       */
+      createdRow: function createdRow(row, data) {
+        $(row).attr('data-queue', data.queueId);
+        $(row).attr('data-date', data.date);
+
+        // Format date for display and URL
+        var dateForUrl = '';
+        if (data.date) {
+          var dateParts = data.date.split('-');
+          if (dateParts.length === 3) {
+            dateForUrl = "".concat(dateParts[2], "/").concat(dateParts[1], "/").concat(dateParts[0]);
+          }
+        }
+
+        // Create detail button
+        var dateHtml = data.date;
+        if (dateForUrl && data.queueId) {
+          var detailUrl = "".concat(globalRootUrl, "module-extended-c-d-rs/index/?reportNameID=CallDetails&dateRangeSelector=").concat(encodeURIComponent(dateForUrl + ' - ' + dateForUrl), "&queue=").concat(encodeURIComponent(data.queueId));
+          dateHtml = "".concat(data.date, " <i class=\"external alternate icon link\" style=\"cursor: pointer; margin-left: 5px;\" onclick=\"window.open('").concat(detailUrl, "', '_blank')\" title=\"Open details\"></i>");
+        }
+        $('td', row).eq(0).html(dateHtml);
+        $('td', row).eq(1).html(data.queueName || '-').addClass('center aligned');
+        $('td', row).eq(2).html(data.totalCalls).addClass('center aligned');
+        $('td', row).eq(3).html(data.answered).addClass('center aligned');
+        $('td', row).eq(4).html(data.missed).addClass('center aligned');
+        $('td', row).eq(5).html(data.answeredQueue).addClass('center aligned');
+        $('td', row).eq(6).html(data.avgWaitTime).addClass('center aligned');
+        $('td', row).eq(7).html(data.avgMissed + '%').addClass('center aligned');
+        $('td', row).eq(8).html(data.avgWaitTimeQueue).addClass('center aligned');
+      },
+      drawCallback: function drawCallback(settings) {
+        ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
+        ModuleExtendedCDRs.applyFilterRunning = false;
       },
       language: SemanticLocalization.dataTableLocalisation,
       ordering: false
@@ -288,9 +394,59 @@ var ModuleExtendedCDRs = {
     }
   },
   /**
+   * Process URL parameters for filtering
+   */
+  processUrlParameters: function processUrlParameters() {
+    var urlParams = new URLSearchParams(window.location.search);
+    var reportNameID = urlParams.get('reportNameID');
+    var dateRangeSelector = urlParams.get('dateRangeSelector');
+    var queue = urlParams.get('queue');
+
+    // Set report type if specified
+    if (reportNameID) {
+      $('#currentReportNameID').val(reportNameID);
+    }
+
+    // Set date range if specified
+    if (dateRangeSelector) {
+      var dates = dateRangeSelector.split(' - ');
+      if (dates.length === 2) {
+        var startDate = moment(dates[0], 'DD/MM/YYYY');
+        var endDate = moment(dates[1], 'DD/MM/YYYY');
+        if (startDate.isValid() && endDate.isValid()) {
+          ModuleExtendedCDRs.$dateRangeSelector.attr('data-start', startDate.format('YYYY/MM/DD'));
+          ModuleExtendedCDRs.$dateRangeSelector.attr('data-end', endDate.endOf('day').format('YYYY/MM/DD'));
+          ModuleExtendedCDRs.$dateRangeSelector.val("".concat(startDate.format('DD/MM/YYYY'), " - ").concat(endDate.format('DD/MM/YYYY')));
+        }
+      }
+    }
+
+    // Set queue filter if specified
+    if (queue) {
+      // Temporarily disable onChange to avoid multiple applyFilter calls
+      $('#additionalFilter').dropdown('setting', 'onChange', function () {});
+
+      // Add queue to filter
+      var currentFilter = $('#additionalFilter').dropdown('get value');
+      var filterArray = currentFilter ? currentFilter.split(',') : [];
+      var queueValue = 'queue_' + queue;
+      if (!filterArray.includes(queueValue)) {
+        filterArray.push(queueValue);
+      }
+      $('#additionalFilter').dropdown('set selected', filterArray);
+
+      // Re-enable onChange
+      $('#additionalFilter').dropdown('setting', 'onChange', ModuleExtendedCDRs.applyFilter);
+    }
+  },
+  /**
    * On page load we init some Semantic UI library
    */
   initialize: function initialize() {
+    if (window.location.search) {
+      var newUrl = window.location.pathname;
+      window.history.replaceState(null, '', newUrl);
+    }
     //////
     // Удаляем отступы контейнера.
     $('#main-content-container').removeClass('container');
@@ -312,6 +468,9 @@ var ModuleExtendedCDRs = {
     //////
     ModuleExtendedCDRs.changeReportVariant();
     ModuleExtendedCDRs.initializeDateRangeSelector();
+
+    // Process URL parameters
+    ModuleExtendedCDRs.processUrlParameters();
 
     // инициализируем чекбоксы и выподающие менюшки
     window[className].$checkBoxes.checkbox();
@@ -403,7 +562,7 @@ var ModuleExtendedCDRs = {
       var parentTitle = $(this).parent().find('div.content').text().trim();
       var html = "<i class=\"small star outline yellow icon\" style=\"display: none;padding-top: 3px\"></i>\n<i class=\"small edit outline icon\" style=\"padding-top: 3px\"></i>\n<i class=\"small trash alternate outline outline red icon\" style=\"padding-top: 3px\"></i>\n<div class=\"content\">\n\t<div class=\"title\">".concat(parentTitle, " (").concat(timestamp, ")</div>\n\t<div class=\"ui mini input fluid hidden\" style=\"display: none;\">\n\t  <input type=\"text\" value=\"").concat(parentTitle, " (").concat(timestamp, ")\">\n\t</div>\n</div>");
       var newItem = $('<a>', {
-        "class": 'item',
+        class: 'item',
         html: html,
         'data-report-id': reportId,
         'data-is-main': '0',
@@ -437,8 +596,8 @@ var ModuleExtendedCDRs = {
           $('#menu-reports i.star').addClass('outline');
           self.removeClass('outline');
         },
-        error: function error(xhr, status, _error) {
-          console.error(_error);
+        error: function error(xhr, status, _error4) {
+          console.error(_error4);
         }
       });
     });
@@ -461,8 +620,8 @@ var ModuleExtendedCDRs = {
         success: function success(response) {
           self.parent().remove();
         },
-        error: function error(xhr, status, _error2) {
-          console.error(_error2);
+        error: function error(xhr, status, _error5) {
+          console.error(_error5);
         }
       });
     });
@@ -503,6 +662,54 @@ var ModuleExtendedCDRs = {
         ModuleExtendedCDRs.applyFilter();
       }
     });
+
+    // Handle minBillSec field changes
+    $('#currentMinBillSec').on('change', function () {
+      var value = $(this).val();
+      var reportNameID = $('#currentReportNameID').val();
+      var currentVariantId = $('#currentVariantId').val();
+
+      // Update data attribute
+      if (currentVariantId === '') {
+        $("h4#".concat(reportNameID)).attr('data-min-bill-sec', value);
+      } else {
+        $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportNameID, "\"]")).attr('data-min-bill-sec', value);
+      }
+      ModuleExtendedCDRs.applyFilter();
+    });
+
+    // Handle Enter key in minBillSec field
+    $('#currentMinBillSec').on('keyup', function (e) {
+      if (e.keyCode === 13) {
+        $(this).trigger('change');
+      }
+    });
+
+    // Initialize minBillSecComp dropdown
+    $('#currentMinBillSecComp').dropdown();
+
+    // Handle minBillSecComp dropdown changes via click on menu items
+    $(document).on('click', '#currentMinBillSecComp .menu .item', function (e) {
+      var value = $(this).attr('data-value');
+      var text = $(this).html();
+      var reportNameID = $('#currentReportNameID').val();
+      var currentVariantId = $('#currentVariantId').val();
+
+      // Update button text and data attribute
+      $('#currentMinBillSecComp').attr('data-value', value);
+      // Update button text content - remove menu and update text
+      var $button = $('#currentMinBillSecComp');
+      var $menu = $button.find('.menu');
+      $button.contents().not($menu).remove();
+      $button.prepend(text + ' ');
+      $button.append($menu);
+      if (currentVariantId === '') {
+        $("h4#".concat(reportNameID)).attr('data-min-bill-sec-comp', value);
+      } else {
+        $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportNameID, "\"]")).attr('data-min-bill-sec-comp', value);
+      }
+      ModuleExtendedCDRs.applyFilter();
+    });
     ModuleExtendedCDRs.$formObj.keydown(function (event) {
       if (event.keyCode === 13) {
         event.preventDefault();
@@ -511,7 +718,9 @@ var ModuleExtendedCDRs = {
     });
     ModuleExtendedCDRs.updateSettings();
     ModuleExtendedCDRs.applyFilter();
-    window[className].$dropDowns.dropdown({
+
+    // Initialize dropdowns except #additionalFilter (it has its own handler)
+    window[className].$dropDowns.not('#additionalFilter').dropdown({
       onChange: ModuleExtendedCDRs.applyFilter
     });
     window[className].updateSyncState();
@@ -526,11 +735,15 @@ var ModuleExtendedCDRs = {
     }
     $('[id$="-table-div"]').hide();
     $("#".concat(reportNameID, "-table-div")).show();
-    if (reportNameID === 'CallDetails' && ModuleExtendedCDRs.dataTable.page !== undefined) {
-      ModuleExtendedCDRs.dataTable.page.len(ModuleExtendedCDRs.calculatePageLength()).draw();
-    }
     $('#currentReportNameID').val(reportNameID);
     $('#currentVariantId').val(currentVariantId);
+    if (reportNameID === 'CdrQueue') {
+      $('#typeCall').closest('.ui.column').hide();
+      $('#minBillSecContainer').hide();
+    } else {
+      $('#typeCall').closest('.ui.column').show();
+      $('#minBillSecContainer').show();
+    }
     var variantName = '';
     if (currentVariantId !== '') {
       variantName = $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportNameID, "\"] div.title")).text().trim();
@@ -554,7 +767,31 @@ var ModuleExtendedCDRs = {
     } else {
       settings = JSON.parse(decodeURIComponent($("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportNameID, "\"]")).attr('data-search-text')));
     }
-    if (settings.dateRangeSelector !== undefined && settings.dateRangeSelector !== '') {
+
+    // Update minBillSec field
+    var minBillSec = 0;
+    var minBillSecComp = '>';
+    if (currentVariantId === '') {
+      minBillSec = $("h4#".concat(reportNameID)).attr('data-min-bill-sec') || 0;
+      minBillSecComp = $("h4#".concat(reportNameID)).attr('data-min-bill-sec-comp') || '>';
+    } else {
+      minBillSec = $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportNameID, "\"]")).attr('data-min-bill-sec') || 0;
+      minBillSecComp = $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportNameID, "\"]")).attr('data-min-bill-sec-comp') || '>';
+    }
+    $('#currentMinBillSec').val(minBillSec);
+    $('#currentMinBillSecComp').dropdown('set selected', minBillSecComp);
+    $('#currentMinBillSecComp').attr('data-value', minBillSecComp);
+    // Update button text content
+    var $button = $('#currentMinBillSecComp');
+    var $menu = $button.find('.menu');
+    $button.contents().not($menu).remove();
+    $button.prepend(minBillSecComp + ' ');
+    $button.append($menu);
+    var setDate = $('#pDateRangeSelector').val() === "";
+    if (setDate) {
+      $('#pDateRangeSelector').val('');
+    }
+    if (setDate && settings.dateRangeSelector !== undefined && settings.dateRangeSelector !== '') {
       var periods = ModuleExtendedCDRs.getStandardPeriods();
       var defPeriod = [moment(), moment()];
       if (periods[settings.dateRangeSelector] !== undefined) {
@@ -564,18 +801,21 @@ var ModuleExtendedCDRs = {
       ModuleExtendedCDRs.$dateRangeSelector.attr('data-end', moment(defPeriod[1].format('YYYYMMDD')).endOf('day').format('YYYY/MM/DD'));
       ModuleExtendedCDRs.$dateRangeSelector.val("".concat(defPeriod[0].format('DD/MM/YYYY'), " - ").concat(defPeriod[1].format('DD/MM/YYYY')));
     }
-    if (settings.globalSearch !== undefined) {
-      ModuleExtendedCDRs.$globalSearch.val(settings.globalSearch);
-    }
-
     // Temporarily disable onChange to avoid multiple applyFilter calls
     $('#additionalFilter').dropdown('setting', 'onChange', function () {});
     $('#additionalFilter').dropdown('clear');
-    if (settings.additionalFilter !== undefined) {
+    if ($('#pAdditionalFilterString').val() !== '-') {
+      $('#additionalFilter').dropdown('set selected', $('#pAdditionalFilterString').val().split(' '));
+      settings.typeCall = undefined;
+      settings.globalSearch = undefined;
+    } else if (settings.additionalFilter !== undefined) {
       $('#additionalFilter').dropdown('set selected', settings.additionalFilter.split(' '));
     }
     // Re-enable onChange
     $('#additionalFilter').dropdown('setting', 'onChange', ModuleExtendedCDRs.applyFilter);
+    if (settings.globalSearch !== undefined) {
+      ModuleExtendedCDRs.$globalSearch.val(settings.globalSearch);
+    }
     if (settings.typeCall !== undefined) {
       $('#typeCall.menu a.item').tab('change tab', settings.typeCall);
     } else {
@@ -622,10 +862,18 @@ var ModuleExtendedCDRs = {
       var srcAudio = '';
       var srcDownloadAudio = '';
       if (!(record.recordingfile === undefined || record.recordingfile === null || record.recordingfile.length === 0)) {
-        var recordFileName = encodeURIComponent(record.prettyFilename);
+        // Use real file extension from the recording file path for download name.
         var recordFileUri = encodeURIComponent(record.recordingfile);
+        var fileNameFromPath = (record.recordingfile.split(/[\\/]/).pop() || '').split('?')[0].split('#')[0];
+        var extMatch = fileNameFromPath.match(/\.([a-zA-Z0-9]+)$/);
+        var fileExt = extMatch && extMatch[1] ? extMatch[1].toLowerCase() : 'mp3';
+        var downloadFileName = record.prettyFilename || 'record';
+        if (!downloadFileName.toLowerCase().endsWith(".".concat(fileExt))) {
+          downloadFileName += ".".concat(fileExt);
+        }
+        var recordFileName = encodeURIComponent(downloadFileName);
         srcAudio = "/pbxcore/api/cdr/v2/playback?view=".concat(recordFileUri);
-        srcDownloadAudio = "/pbxcore/api/cdr/v2/playback?view=".concat(recordFileUri, "&download=1&filename=").concat(recordFileName, ".mp3");
+        srcDownloadAudio = "/pbxcore/api/cdr/v2/playback?view=".concat(recordFileUri, "&download=1&filename=").concat(recordFileName);
       }
       htmlPlayer += "\n\t\t\t<tr id=\"".concat(record.id, "\" data-row-id=\"").concat(id, "-detailed\" class=\"warning detailed odd shown\" role=\"row\">\n\t\t\t\t<td></td>\n\t\t\t\t<td class=\"right aligned\">").concat(record.start, "</td>\n\t\t\t\t<td data-phone=\"").concat(record.src_num, "\" class=\"right aligned need-update\">").concat(record.src_num, "</td>\n\t\t\t   \t<td data-phone=\"").concat(record.dst_num, "\" class=\"left aligned need-update\">").concat(record.dst_num, "</td>\n\t\t\t\t<td class=\"right aligned\">\t\t\t\n\t\t\t\t</td>\n\t\t\t\t<td class=\"right aligned\">").concat(record.waitTime, "</td>\n\t\t\t\t<td class=\"right aligned\" style=\"padding-right: 3px\">\n\t\t\t\t  <div class=\"ui horizontal list\" style=\"width: 100%; display: flex; align-items: center;\">\n\t\t\t\t\t<div class=\"item\">\n\t\t\t\t\t  <i class=\"ui icon play\"></i>\n\t\t\t\t\t</div>\n\t\t\t\t\t<div class=\"item\" style=\"margin-left:0; flex-grow: 1;\">\n\t\t\t\t\t  <div class=\"ui range cdr-player\" data-value=\"").concat(record.id, "\"></div>\n\t\t\t\t\t</div>\n\t\t\t\t\t<div class=\"item\">\n\t\t\t\t\t  ").concat(record.billsec, "\n\t\t\t\t\t  <i class=\"ui icon download\" data-value=\"").concat(srcDownloadAudio, "\" onclick=\"ModuleExtendedCDRs.audioPlayHandler(event)\"></i>\n\t\t\t\t\t</div>\n\t\t\t\t  </div>\n\t\t\t\t  <audio preload=\"metadata\" id=\"audio-player-").concat(record.id, "\" src=\"").concat(srcAudio, "\" onplay=\"ModuleExtendedCDRs.audioPlayHandler(event)\"></audio>\n\t\t\t\t</td>\n\t\t\t\t<td class=\"right aligned\" data-state-index=\"").concat(record.stateCallIndex, "\">").concat(record.stateCall, "</td>\n\t\t\t</tr>");
     });
@@ -712,8 +960,8 @@ var ModuleExtendedCDRs = {
             }
           }
         },
-        error: function error(xhr, status, _error3) {
-          console.error("Ошибка запроса", status, _error3);
+        error: function error(xhr, status, _error6) {
+          console.error("Ошибка запроса", status, _error6);
         }
       });
     });
@@ -735,8 +983,8 @@ var ModuleExtendedCDRs = {
         console.log("Успешный запрос", response);
         $('#sync-rules tr#' + id).remove();
       },
-      error: function error(xhr, status, _error4) {
-        console.error("Ошибка запроса", status, _error4);
+      error: function error(xhr, status, _error7) {
+        console.error("Ошибка запроса", status, _error7);
       }
     });
   },
@@ -747,9 +995,17 @@ var ModuleExtendedCDRs = {
     var period = ModuleExtendedCDRs.$dateRangeSelector.attr('data-def-value');
     var defPeriod = [moment(), moment()];
     if (period !== '' && period !== undefined) {
-      var periods = ModuleExtendedCDRs.getStandardPeriods();
-      if (periods[period] !== undefined) {
-        defPeriod = periods[period];
+      if ($('#pDateRangeSelector').val() === period) {
+        var _period$split = period.split(' - '),
+          _period$split2 = _slicedToArray(_period$split, 2),
+          startStr = _period$split2[0],
+          endStr = _period$split2[1];
+        defPeriod = [moment(startStr, 'DD/MM/YYYY'), moment(endStr, 'DD/MM/YYYY')];
+      } else {
+        var periods = ModuleExtendedCDRs.getStandardPeriods();
+        if (periods[period] !== undefined) {
+          defPeriod = periods[period];
+        }
       }
     }
     var options = {};
@@ -787,9 +1043,28 @@ var ModuleExtendedCDRs = {
     ModuleExtendedCDRs.applyFilter();
   },
   /**
-   * Applies the filter to the data table.
+   * Applies the filter to the data table (with debounce to prevent double calls).
    */
   applyFilter: function applyFilter() {
+    // Debounce: cancel previous timer and set new one
+    if (ModuleExtendedCDRs.applyFilterTimer) {
+      clearTimeout(ModuleExtendedCDRs.applyFilterTimer);
+    }
+    ModuleExtendedCDRs.applyFilterTimer = setTimeout(function () {
+      ModuleExtendedCDRs.applyFilterInternal();
+    }, 100);
+  },
+  /**
+   * Internal filter application (called after debounce).
+   */
+  applyFilterInternal: function applyFilterInternal() {
+    // Prevent concurrent execution
+    if (ModuleExtendedCDRs.applyFilterRunning) {
+      return;
+    }
+    ModuleExtendedCDRs.applyFilterRunning = true;
+    // Flag will be reset in drawCallback after table is rendered
+
     var text = ModuleExtendedCDRs.getSearchText();
     listenedIDs = [];
 
@@ -800,10 +1075,6 @@ var ModuleExtendedCDRs = {
       if (ModuleExtendedCDRs.tableInitDataCallDetails.wasInit === false) {
         ModuleExtendedCDRs.$cdrTable.dataTable(ModuleExtendedCDRs.tableInitDataCallDetails.data);
         ModuleExtendedCDRs.tableInitDataCallDetails.wasInit = true;
-        ModuleExtendedCDRs.dataTable = ModuleExtendedCDRs.$cdrTable.DataTable();
-        ModuleExtendedCDRs.dataTable.on('draw', function () {
-          ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
-        });
         ModuleExtendedCDRs.$cdrTable.on('click', 'tr.negative', function (e) {
           var ids = $(e.target).attr('data-ids');
           if (ids !== undefined && ids !== '') {
@@ -818,7 +1089,7 @@ var ModuleExtendedCDRs = {
             return;
           }
           var tr = $(e.target).closest('tr');
-          var row = ModuleExtendedCDRs.dataTable.row(tr);
+          var row = ModuleExtendedCDRs.$cdrTable.DataTable().row(tr);
           if (row.length === 0) {
             return;
           }
@@ -848,13 +1119,25 @@ var ModuleExtendedCDRs = {
           }
         });
       }
-      ModuleExtendedCDRs.dataTable.search(text).draw();
+      var table = ModuleExtendedCDRs.$cdrTable.DataTable();
+      table.page.len(ModuleExtendedCDRs.calculatePageLength());
+      table.search(text).draw();
     } else if (reportName === ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.id) {
       if (ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.wasInit === false) {
         ModuleExtendedCDRs.$outgoingEmployeeCalls.dataTable(ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.data);
         ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.wasInit = true;
       }
-      ModuleExtendedCDRs.$outgoingEmployeeCalls.DataTable().search(text).draw();
+      var _table = ModuleExtendedCDRs.$outgoingEmployeeCalls.DataTable();
+      _table.page.len(ModuleExtendedCDRs.calculatePageLength());
+      _table.search(text).draw();
+    } else if (reportName === ModuleExtendedCDRs.tableInitDataCdrQueue.id) {
+      if (ModuleExtendedCDRs.tableInitDataCdrQueue.wasInit === false) {
+        ModuleExtendedCDRs.$cdrQueueTable.dataTable(ModuleExtendedCDRs.tableInitDataCdrQueue.data);
+        ModuleExtendedCDRs.tableInitDataCdrQueue.wasInit = true;
+      }
+      var _table2 = ModuleExtendedCDRs.$cdrQueueTable.DataTable();
+      _table2.page.len(ModuleExtendedCDRs.calculatePageLength());
+      _table2.search(text).draw();
     }
     ModuleExtendedCDRs.$globalSearch.closest('div').addClass('loading');
   },
@@ -874,13 +1157,12 @@ var ModuleExtendedCDRs = {
     }
     var reportNameID = $('#currentReportNameID').val();
     var currentVariantId = $('#currentVariantId').val();
-    var minBilSec = $("h4#".concat(reportNameID)).attr('data-min-bill-sec');
-    if (currentVariantId !== '') {
-      minBilSec = $("a[data-report-id=\"".concat(reportNameID, "\"][data-variant-id=\"").concat(currentVariantId, "\"]")).attr('data-min-bill-sec');
-    }
+    var minBilSec = $('#currentMinBillSec').val() || 0;
+    var minBilSecComp = $('#currentMinBillSecComp').dropdown('get value') || $('#currentMinBillSecComp').attr('data-value') || '>';
     var filter = {
       dateRangeSelector: dateRangeSelector,
       minBilSec: minBilSec,
+      minBilSecComp: minBilSecComp,
       globalSearch: ModuleExtendedCDRs.$globalSearch.val(),
       typeCall: $('#typeCall a.item.active').attr('data-tab'),
       additionalFilter: $('#additionalFilter').dropdown('get value').replace(/,/g, ' ')
@@ -905,16 +1187,19 @@ var ModuleExtendedCDRs = {
     var currentVariantId = $('#currentVariantId').val();
     var reportId = $('#currentReportNameID').val();
     var variantName = '';
+    var minBillSec = $('#currentMinBillSec').val() || 0;
+    var minBillSecComp = $('#currentMinBillSecComp').dropdown('get value') || $('#currentMinBillSecComp').attr('data-value') || '>';
     var data = {
       'search[value]': search,
       'reportNameID': reportId,
       'variantId': currentVariantId,
-      'variantName': variantName
+      'variantName': variantName,
+      'minBillSec': minBillSec,
+      'minBillSecComp': minBillSecComp
     };
     if (currentVariantId !== '') {
       var parent = $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportId, "\"]"));
       data.variantName = parent.find('div.title').text().trim();
-      data.minBillSec = parent.attr('data-min-bill-sec').trim();
       data.sendingScheduledReport = parent.attr('data-sending-scheduled-report').trim();
       data.dateMonth = parent.attr('data-date-month').trim();
       data.day = parent.attr('data-day').trim();
@@ -932,12 +1217,16 @@ var ModuleExtendedCDRs = {
       success: function success(response) {
         if (currentVariantId === '') {
           $("#".concat($('#currentReportNameID').val())).attr('data-search-text', encodeURIComponent(search));
+          $("#".concat($('#currentReportNameID').val())).attr('data-min-bill-sec', minBillSec);
+          $("#".concat($('#currentReportNameID').val())).attr('data-min-bill-sec-comp', minBillSecComp);
         } else {
           $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportId, "\"]")).attr('data-search-text', encodeURIComponent(search));
+          $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportId, "\"]")).attr('data-min-bill-sec', minBillSec);
+          $("a[data-variant-id=\"".concat(currentVariantId, "\"][data-report-id=\"").concat(reportId, "\"]")).attr('data-min-bill-sec-comp', minBillSecComp);
         }
       },
-      error: function error(xhr, status, _error5) {
-        console.error(_error5);
+      error: function error(xhr, status, _error8) {
+        console.error(_error8);
       }
     });
   },

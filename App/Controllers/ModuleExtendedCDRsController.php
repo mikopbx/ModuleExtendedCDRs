@@ -21,6 +21,7 @@ use Modules\ModuleExtendedCDRs\bin\ConnectorDB;
 use Modules\ModuleExtendedCDRs\Lib\CacheManager;
 use Modules\ModuleExtendedCDRs\Lib\GetReport;
 use Modules\ModuleExtendedCDRs\Lib\HistoryParser;
+use Modules\ModuleExtendedCDRs\Lib\RestAPI\Controllers\ApiController;
 use Modules\ModuleExtendedCDRs\Models\CallHistory;
 use Modules\ModuleExtendedCDRs\Models\ExportRules;
 use Modules\ModuleExtendedCDRs\Models\ModuleExtendedCDRs;
@@ -145,8 +146,12 @@ class ModuleExtendedCDRsController extends BaseController
         $this->view->form = new ModuleExtendedCDRsForm($settings, $options);
         $this->view->pick("{$this->moduleDir}/App/Views/index");
 
+        $queues = CallQueues::find(['columns' => ['uniqid As id', 'name']])->toArray();
+        if(!empty($queues)){
+            $queues[] = ['id' => '-', "name" => Util::translate('repModuleExtendedCDRs_WithOutQueues')];
+        }
         // Список выбора очередей.
-        $this->view->queues = CallQueues::find(['columns' => ['id', 'name']]);
+        $this->view->queues = $queues;
         $this->view->groups = [];
 
         if(class_exists('\Modules\ModuleUsersGroups\Models\UsersGroups')){
@@ -183,6 +188,16 @@ class ModuleExtendedCDRsController extends BaseController
             }
         }
 
+        foreach ($this->view->queues as $queue){
+            foreach ($filterNumbers as $number){
+                if('queue_'.$queue['id'] === $number){
+                    $additionalFilter[] = [
+                        'name'   => $queue['name'],
+                        'number' => $number
+                    ];
+                }
+            }
+        }
         foreach ($this->view->users as $user){
             foreach ($filterNumbers as $number){
                 if($user['number'] === $number){
@@ -193,7 +208,32 @@ class ModuleExtendedCDRsController extends BaseController
                 }
             }
         }
-        $this->view->dateRangeSelector      = $searchSettings['dateRangeSelector']??'';
+        $pDateRangeSelector  = $_REQUEST['dateRangeSelector']??'';
+        if(!empty($pDateRangeSelector)){
+            $this->view->dateRangeSelector      = $pDateRangeSelector;
+            $this->view->pDateRangeSelector      = $pDateRangeSelector;
+            $additionalFilter = [];
+            foreach ($this->view->queues as $queue){
+                if($queue['id'] === $_REQUEST['queue']??'' ){
+                    $additionalFilter[] = [
+                        'name'   => $queue['name'],
+                        'number' => 'queue_'.$queue['id']
+                    ];
+                }
+            }
+            $this->view->pAdditionalFilterString = implode(',',array_column($additionalFilter, 'number'));
+        }else{
+            $this->view->pDateRangeSelector      = '';
+            $this->view->pAdditionalFilterString = '-';
+            $this->view->dateRangeSelector      = $searchSettings['dateRangeSelector']??'';
+        }
+
+        $pReportNameID = $_REQUEST['reportNameID']??'';
+        if($pReportNameID === ReportSettings::REPORT_MAIN){
+            $this->view->currentReportNameID = $pReportNameID;
+            $this->view->currentVariantId    = null;
+        }
+
         $this->view->additionalFilter       = $additionalFilter;
         $this->view->additionalFilterString = implode(',',array_column($additionalFilter, 'number'));
         $this->view->accessData  = $this->getUserData();
@@ -214,6 +254,12 @@ class ModuleExtendedCDRsController extends BaseController
                 'minBillSec' => 0,
                 'isMain' => 0,
                 'variantName' => Util::translate('repModuleExtendedCDRs_'.ReportSettings::REPORT_OUTGOING_EMPLOYEE_CALLS)
+            ],
+            ReportSettings::REPORT_QUEUES => [
+                'searchText' => '{}',
+                'minBillSec' => 0,
+                'isMain' => 0,
+                'variantName' => Util::translate('repModuleExtendedCDRs_'.ReportSettings::REPORT_QUEUES)
             ],
         ];
         $filterVariantReport = [
@@ -588,6 +634,21 @@ class ModuleExtendedCDRsController extends BaseController
             $this->view->$key = $value;
         }
     }
+    public function getCdrQueueAction(): void
+    {
+        $this->view->draw = $this->request->get('draw');
+        $searchPhrase     = $this->request->get('search');
+        $length           = is_numeric($this->request->get('length'))?(int)$this->request->get('length'):null;
+
+        $gr = new GetReport();
+        $params = [];
+        $view = ApiController::aggregateCdrData($gr->historyQueue($searchPhrase['value']??'',  $this->request->get('start'), $length));
+        foreach ($view as $key => $value) {
+            $this->view->$key = $value;
+        }
+        $this->view->params = $params;
+        $this->view->length = count($view);
+    }
 
     /**
      * Запрос отвчета по исходящим сотрудников
@@ -597,9 +658,9 @@ class ModuleExtendedCDRsController extends BaseController
     {
         $this->view->draw = $this->request->get('draw');
         $searchPhrase     = $this->request->get('search');
-        $length           = is_numeric($this->request->get('length'))?(int)$this->request->get('length'):null;
+        // $length           = is_numeric($this->request->get('length'))?(int)$this->request->get('length'):null;
         $gr = new GetReport();
-        $view = $gr->outgoingEmployeeCalls($searchPhrase['value']??'',  $this->request->get('start'), $length);
+        $view = $gr->outgoingEmployeeCalls($searchPhrase['value']??'');
         foreach ($view as $key => $value) {
             $this->view->$key = $value;
         }

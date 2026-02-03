@@ -19,6 +19,7 @@ class ReportSettings extends ModulesModelsBase
 {
     public const REPORT_MAIN = 'CallDetails';
     public const REPORT_OUTGOING_EMPLOYEE_CALLS = 'OutgoingEmployeeCalls';
+    public const REPORT_QUEUES = 'CdrQueue';
 
     /**
      * @Primary

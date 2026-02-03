@@ -39,6 +39,141 @@ require_once(dirname(__DIR__) . '/vendor/autoload.php');
 
 class GetReport
 {
+
+    public function historyQueue(string $searchPhrase = '', ?int $offset = null, ?int $limit = null)
+    {
+        $tmpSearchPhrase = json_decode($searchPhrase, true);
+        $minBilSec  = intval($tmpSearchPhrase['minBilSec']??0);
+        $tmpSearchPhrase['dateRangeSelector'] = self::getDateRanges($tmpSearchPhrase['dateRangeSelector']);
+        $searchPhrase = json_encode($tmpSearchPhrase, JSON_UNESCAPED_SLASHES);
+        unset($tmpSearchPhrase);
+
+
+        $parameters = [];
+        [$start, $end, $numbers, $additionalNumbers] = $this->prepareConditionsForSearchPhrasesQueue($searchPhrase, $parameters);
+        $params = [$start, $end, $numbers, $additionalNumbers];
+
+        $parameters['order'] = ['date desc'];
+//        if (!empty($limit)) {
+//            $parameters['limit'] = $limit;
+//        }
+//        if (!empty($offset)) {
+//            $parameters['offset'] = $offset;
+//        }
+        return ConnectorDB::invoke('getCdrQueue', [$parameters]);
+    }
+
+    public static function getTmpDir():string
+    {
+        $tmpDir = '/tmp';
+        $di = MikoPBXVersion::getDefaultDi();
+        if ($di) {
+            $dirsConfig = $di->getShared('config');
+            $tmpDir     = $dirsConfig->path('core.tempDir') . '/ModuleExtendedCDRs/reports/';
+            Util::mwMkdir($tmpDir, true);
+        }
+
+        return $tmpDir;
+    }
+
+    public static function exportHistoryQueuePdf($view, $saveInFile = false): string
+    {
+        $tmpDir = self::getTmpDir();
+        $mpdf = new Mpdf(['tempDir' => $tmpDir]);
+        $html = '';
+        if(!empty($view->title)){
+            $html.= '<h2>' . $view->title . '</h2>';
+        }
+        $html.= '<h3>' . json_decode($view->searchPhrase, true)['dateRangeSelector'] . '</h3>';
+        $html .= '<table border="1" cellpadding="10" cellspacing="0" style="width: 100%;">';
+        $html .= '<thead><tr>' . 
+            '<th>' . Util::translate('repModuleExtendedCDRs_CdrQueue_Date') . '</th>' .
+            '<th>' . Util::translate('repModuleExtendedCDRs_CdrQueue_Queue') . '</th>' .
+            '<th>' . Util::translate('repModuleExtendedCDRs_CdrQueue_TotalCalls') . '</th>' .
+            '<th>' . Util::translate('repModuleExtendedCDRs_CdrQueue_Answered') . '</th>' .
+            '<th>' . Util::translate('repModuleExtendedCDRs_CdrQueue_Missed') . '</th>' .
+            '<th>' . Util::translate('repModuleExtendedCDRs_CdrQueue_AnsweredQueue') . '</th>' .
+            '<th>' . Util::translate('repModuleExtendedCDRs_CdrQueue_AvgWaitTime') . '</th>' .
+            '<th>' . Util::translate('repModuleExtendedCDRs_CdrQueue_AvgMissed') . '</th>' .
+            '<th>' . Util::translate('repModuleExtendedCDRs_CdrQueue_AvgWaitTimeQueue') . '</th>' .
+            '</tr></thead>';
+        $html .= '<tbody>';
+        foreach ($view->data as $index => $item) {
+            $rowStyle = ($index % 2 == 1) ? 'background-color: #f0f0f0;' : '';
+            $html .= '<tr>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['date']) . '</td>';
+            $html .= '<td style="background-color: #d3d3d3;">' . htmlspecialchars($item['queueName']) . '</td>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['totalCalls']) . '</td>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['answered']) . '</td>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['missed']) . '</td>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['answeredQueue']) . '</td>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['avgWaitTime']) . '</td>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['avgMissed']) . '</td>';
+            $html .= '<td style="' . $rowStyle . '">' . htmlspecialchars($item['avgWaitTimeQueue']) . '</td>';
+            $html .= '</tr>';
+        }
+        $html .= '</tbody></table>';
+        $mpdf->WriteHTML($html);
+        $filename = $tmpDir . '/history-queue-calls-' . time() . '.pdf';
+        if ($saveInFile === true) {
+            $mpdf->Output($filename, Destination::FILE);
+        } else {
+            $mpdf->Output('history-queue-calls.pdf', Destination::DOWNLOAD);
+        }
+        return $filename;
+    }
+
+    public static function exporthistoryQueueXls($view): void
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $headers = [
+            Util::translate('repModuleExtendedCDRs_CdrQueue_Date'),
+            Util::translate('repModuleExtendedCDRs_CdrQueue_Queue'),
+            Util::translate('repModuleExtendedCDRs_CdrQueue_TotalCalls'),
+            Util::translate('repModuleExtendedCDRs_CdrQueue_Answered'),
+            Util::translate('repModuleExtendedCDRs_CdrQueue_Missed'),
+            Util::translate('repModuleExtendedCDRs_CdrQueue_AnsweredQueue'),
+            Util::translate('repModuleExtendedCDRs_CdrQueue_AvgWaitTime'),
+            Util::translate('repModuleExtendedCDRs_CdrQueue_AvgMissed'),
+            Util::translate('repModuleExtendedCDRs_CdrQueue_AvgWaitTimeQueue'),
+        ];
+        $sheet->fromArray($headers, null, 'A1');
+        $rowIndex = 2;
+        foreach ($view->data as $item) {
+            $sheet->setCellValueExplicit('A' . $rowIndex, htmlspecialchars($item['date']), DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit('B' . $rowIndex, htmlspecialchars($item['queueName']), DataType::TYPE_STRING);
+            $sheet->setCellValue('C' . $rowIndex, htmlspecialchars($item['totalCalls']));
+            $sheet->setCellValue('D' . $rowIndex, htmlspecialchars($item['answered']));
+            $sheet->setCellValue('E' . $rowIndex, htmlspecialchars($item['missed']));
+            $sheet->setCellValue('F' . $rowIndex, htmlspecialchars($item['answeredQueue']));
+            $sheet->setCellValue('G' . $rowIndex, htmlspecialchars($item['avgWaitTime']));
+            $sheet->setCellValue('H' . $rowIndex, htmlspecialchars($item['avgMissed']));
+            $sheet->setCellValue('I' . $rowIndex, htmlspecialchars($item['avgWaitTimeQueue']));
+            $rowIndex++;
+        }
+        $highestRow = $sheet->getHighestRow();
+        $highestColumn = $sheet->getHighestColumn();
+        $highestColumnIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($highestColumn);
+        for ($col = 1; $col <= $highestColumnIndex; $col++) {
+            $maxLength = 0;
+            for ($row = 1; $row <= $highestRow; $row++) {
+                $cellValue = $sheet->getCellByColumnAndRow($col, $row)->getValue();
+                if ($cellValue !== null) {
+                    $maxLength = max($maxLength, strlen($cellValue));
+                }
+            }
+            $sheet->getColumnDimensionByColumn($col)->setWidth($maxLength + 2);
+        }
+        $writer = new Xlsx($spreadsheet);
+
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="history-queue-calls.xlsx"');
+        header('Cache-Control: max-age=0');
+        $writer->save('php://output');
+    }
+
+
     /**
      * Формирование журнала звонков.
      * @param string   $searchPhrase
@@ -67,7 +202,7 @@ class GetReport
             return $view;
         }
 
-        [$start, $end, $numbers, $additionalNumbers] = $this->prepareConditionsForSearchPhrases($searchPhrase, $parameters);
+        [$start, $end, $numbers, $additionalNumbers, $ids] = $this->prepareConditionsForSearchPhrases($searchPhrase, $parameters);
         // If we couldn't understand the search phrase, return empty result
         if (empty($parameters['conditions'])) {
             $view->conditions = 'empty';
@@ -80,13 +215,19 @@ class GetReport
         $view->additionalFilter = $additionalFilter;
         $view->baseNumberFilter = array_merge($numbers, $additionalNumbers, $additionalFilter);
 
-        $recordsFilteredReq = ConnectorDB::invoke('getCountCdr', [$start, $end, $numbers, $additionalNumbers, $additionalFilter, $minBilSec]);
+        $recordsFilteredReq = ConnectorDB::invoke('getCountCdr', [$start, $end, $numbers, $additionalNumbers, $additionalFilter, $minBilSec, $ids]);
         $view->recordsFiltered = $recordsFilteredReq['cCalls'] ?? 0;
         $view->recordsInner = $recordsFilteredReq['cINNER'] ?? 0;
         $view->recordsOutgoing = $recordsFilteredReq['cOUTGOING'] ?? 0;
         $view->recordsIncoming = $recordsFilteredReq['cINCOMING'] ?? 0;
         $view->recordsMissed = $recordsFilteredReq['cMISSED'] ?? 0;
 
+        $allIncoming= $view->recordsIncoming + $view->recordsMissed;
+        if($allIncoming === 0){
+            $view->recordsMissedPercent = 0;
+        }else{
+            $view->recordsMissedPercent = round(100*($recordsFilteredReq['cMISSED'] ?? 0) / ($allIncoming), 1);
+        }
         // Find all LinkedIDs that match the specified filter
         $parameters['columns'] = 'DISTINCT(linkedid) as linkedid';
         $parameters['order'] = ['start desc'];
@@ -98,6 +239,10 @@ class GetReport
             $parameters['offset'] = $offset;
         }
 
+        if(!empty($ids)){
+            $parameters['conditions'] = '('.$parameters['conditions']. ') AND linkedid IN ({queueIds:array})';
+            $parameters['bind']['queueIds'] = $ids;
+        }
         $selectedLinkedIds = $this->selectCDRRecordsWithFilters($parameters);
         $arrIDS = [];
         foreach ($selectedLinkedIds as $item) {
@@ -213,7 +358,9 @@ class GetReport
             }
             $linkedRecord->disposition = $linkedRecord->disposition !== 'ANSWERED' ? $disposition : 'ANSWERED';
             $linkedRecord->start = $linkedRecord->start === '' ? $record->start : $linkedRecord->start;
-            if ($record->stateCall === CallHistory::CALL_STATE_OK) {
+
+            $okState = [CallHistory::CALL_STATE_OK, CallHistory::CALL_STATE_RECALL_CLIENT, CallHistory::CALL_STATE_RECALL_USER];
+            if (in_array($record->stateCall, $okState,true)) {
                 $linkedRecord->stateCall = $statsCall[$record->stateCall];
                 $linkedRecord->stateCallIndex = $record->stateCall;
             } elseif ($record->stateCall !== CallHistory::CALL_STATE_APPLICATION) {
@@ -229,17 +376,18 @@ class GetReport
             $linkedRecord->src_num = $linkedRecord->src_num === '' ? $record->src_num : $linkedRecord->src_num;
             $linkedRecord->dst_num = $linkedRecord->dst_num === '' ? $record->dst_num : $linkedRecord->dst_num;
             $linkedRecord->billsec += (int)$record->billsec;
-            $isAppWithRecord = ($record->is_app === '1' && file_exists($record->recordingfile));
+            $isAppWithRecord = (intval($record->is_app) === 1 && file_exists($record->recordingfile));
             if ($disposition === 'ANSWERED' || $isAppWithRecord) {
-                if ($record->is_app === '1') {
+                if (intval($record->is_app) === 1) {
                     $waitTime = 0;
                 } else {
+                    $linkedRecord->answerTime = empty($linkedRecord->answerTime) ? $record->answer : $linkedRecord->answerTime;
                     $waitTime = strtotime($record->answer) - strtotime($record->start);
                 }
 
                 $formattedDate = date('Y-m-d-H_i', strtotime($linkedRecord->start));
                 $uid = str_replace('mikopbx-', '', $linkedRecord->linkedid);
-                $prettyFilename = "$uid-$formattedDate-$linkedRecord->src_num-$linkedRecord->dst_num";
+                $prettyFilename = "$uid-$formattedDate-$record->src_num-$record->dst_num-$record->id";
                 $linkedRecord->answered[] = [
                     'id' => $record->id,
                     'start' => date('d-m-Y H:i:s', strtotime($record->start)),
@@ -288,6 +436,12 @@ class GetReport
                 $cdr->waitTime = strtotime($cdr->endtime) - strtotime($cdr->start);
             }
             $additionalClass = (empty($cdr->answered)) ? 'ui' : 'detailed';
+
+            if(!empty($cdr->answerTime)){
+                $realWaitTime = max(0,strtotime($cdr->answerTime)-strtotime($cdr->start));
+            }else{
+                $realWaitTime = max(0,strtotime($cdr->endtime)-strtotime($cdr->start));
+            }
             $output[] = [
                 date('d-m-Y H:i:s', strtotime($cdr->start)),
                 $cdr->src_num,
@@ -295,7 +449,8 @@ class GetReport
                 $timing === '00:00' ? '' : $timing,
                 $cdr->answered,
                 $cdr->disposition,
-                'waitTime' => gmdate($cdr->waitTime < 3600 ? 'i:s' : 'G:i:s', $cdr->waitTime),
+                'waitTime' => gmdate($realWaitTime < 3600 ? 'i:s' : 'G:i:s', $realWaitTime),
+                // 'waitTime' => gmdate($cdr->waitTime < 3600 ? 'i:s' : 'G:i:s', $cdr->waitTime),
                 'stateCall' => $cdr->stateCall,
                 'typeCall' => $cdr->typeCall,
                 'typeCallDesc' => $cdr->typeCallDesc,
@@ -314,6 +469,61 @@ class GetReport
 
     public static function exportHistoryXls($view): void
     {
+        /**
+         * PhpSpreadsheet keeps the whole workbook in memory and can easily OOM on large exports.
+         * Prefer streaming XLSXWriter (already installed via composer) to minimize RAM usage.
+         */
+        if (class_exists(\XLSXWriter::class)) {
+            $sheetName = 'Calls';
+            $writer = new \XLSXWriter();
+            $writer->setTempDir(sys_get_temp_dir());
+
+            $headers = [
+                Util::translate('repModuleExtendedCDRs_cdr_ColumnTypeState') => 'string',
+                Util::translate('cdr_ColumnDate') => 'string',
+                Util::translate('cdr_ColumnFrom') => 'string',
+                Util::translate('cdr_ColumnTo') => 'string',
+                Util::translate('repModuleExtendedCDRs_cdr_ColumnLine') => 'string',
+                Util::translate('repModuleExtendedCDRs_cdr_ColumnWaitTime') => 'string',
+                Util::translate('cdr_ColumnDuration') => 'string',
+                Util::translate('repModuleExtendedCDRs_cdr_ColumnCallState') => 'string',
+                'id' => 'string',
+            ];
+
+            $writer->writeSheetHeader($sheetName, $headers, [
+                'freeze_rows' => 1,
+                // Fixed widths avoid expensive "scan entire sheet to autosize" logic.
+                'widths' => [18, 20, 18, 18, 18, 14, 12, 18, 24],
+            ]);
+
+            foreach ($view->data as $baseItem) {
+                $typeCallDesc = (string)($baseItem['typeCallDesc'] ?? '');
+                $line = (string)($baseItem['line'] ?? '');
+                $linkedId = (string)($baseItem['DT_RowId'] ?? '');
+                $records = $baseItem['4'] ?? [];
+                foreach ($records as $item) {
+                    $writer->writeSheetRow($sheetName, [
+                        $typeCallDesc,
+                        (string)($item['start'] ?? ''),
+                        (string)($item['src_num'] ?? ''),
+                        (string)($item['dst_num'] ?? ''),
+                        $line,
+                        (string)($item['waitTime'] ?? ''),
+                        (string)($item['billsec'] ?? ''),
+                        (string)($item['stateCall'] ?? ''),
+                        $linkedId,
+                    ]);
+                }
+            }
+
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment; filename="calls_report.xlsx"');
+            header('Cache-Control: max-age=0');
+            $writer->writeToStdOut();
+            return;
+        }
+
+        // Fallback to PhpSpreadsheet if XLSXWriter is not available.
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
         $headers = [
@@ -330,33 +540,23 @@ class GetReport
         $sheet->fromArray($headers, null, 'A1');
         $rowIndex = 2;
         foreach ($view->data as $baseItem) {
-            foreach ($baseItem['4'] as $item) {
-                $sheet->setCellValue('A' . $rowIndex, htmlspecialchars($baseItem['typeCallDesc']));
-                $sheet->setCellValue('B' . $rowIndex, htmlspecialchars($item['start']));
-                $sheet->setCellValue('C' . $rowIndex, htmlspecialchars($item['src_num']));
-                $sheet->setCellValue('D' . $rowIndex, htmlspecialchars($item['dst_num']));
-                $sheet->setCellValue('E' . $rowIndex, htmlspecialchars($baseItem['line']));
-                $sheet->setCellValue('F' . $rowIndex, htmlspecialchars($item['waitTime']));
-                $sheet->setCellValue('G' . $rowIndex, htmlspecialchars($item['billsec']));
-                $sheet->setCellValue('H' . $rowIndex, htmlspecialchars($item['stateCall']));
-                $sheet->setCellValue('I' . $rowIndex, htmlspecialchars($baseItem['DT_RowId']));
+            foreach (($baseItem['4'] ?? []) as $item) {
+                $sheet->setCellValue('A' . $rowIndex, (string)($baseItem['typeCallDesc'] ?? ''));
+                $sheet->setCellValue('B' . $rowIndex, (string)($item['start'] ?? ''));
+                $sheet->setCellValue('C' . $rowIndex, (string)($item['src_num'] ?? ''));
+                $sheet->setCellValue('D' . $rowIndex, (string)($item['dst_num'] ?? ''));
+                $sheet->setCellValue('E' . $rowIndex, (string)($baseItem['line'] ?? ''));
+                $sheet->setCellValue('F' . $rowIndex, (string)($item['waitTime'] ?? ''));
+                $sheet->setCellValue('G' . $rowIndex, (string)($item['billsec'] ?? ''));
+                $sheet->setCellValue('H' . $rowIndex, (string)($item['stateCall'] ?? ''));
+                $sheet->setCellValue('I' . $rowIndex, (string)($baseItem['DT_RowId'] ?? ''));
                 $rowIndex++;
             }
         }
-        $highestRow = $sheet->getHighestRow();
-        $highestColumn = $sheet->getHighestColumn();
-        $highestColumnIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($highestColumn);
-        for ($col = 1; $col <= $highestColumnIndex; $col++) {
-            $maxLength = 0;
-            for ($row = 1; $row <= $highestRow; $row++) {
-                $cellValue = $sheet->getCellByColumnAndRow($col, $row)->getValue();
-                if ($cellValue !== null) {
-                    $maxLength = max($maxLength, strlen($cellValue));
-                }
-            }
-            $sheet->getColumnDimensionByColumn($col)->setWidth($maxLength + 2);
-        }
+
         $writer = new Xlsx($spreadsheet);
+        $writer->setPreCalculateFormulas(false);
+        $writer->setUseDiskCaching(true, sys_get_temp_dir());
 
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="calls_report.xlsx"');
@@ -366,18 +566,25 @@ class GetReport
 
     public static function exportHistoryPdf($view, $saveInFile = false): string
     {
-        $tmpDir = '/tmp';
-        $mpdf = new Mpdf(['tempDir' => $tmpDir]);
-        $html = '';
-        if(!empty($view->title)){
-            $html.= '<h2>' . $view->title . '</h2>';
+        $tmpDir = self::getTmpDir();
+        // mPDF can consume a lot of RAM for large tables.
+        // 1) Don't build one huge HTML string
+        // 2) Split output into multiple small tables (repeat header) so mPDF can release table data sooner.
+        $mpdf = new Mpdf([
+            'tempDir' => $tmpDir,
+            'simpleTables' => true,
+            'packTableData' => true,
+        ]);
+
+        if (!empty($view->title)) {
+            $mpdf->WriteHTML('<h2>' . htmlspecialchars((string)$view->title, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</h2>');
         }
-        $html.= '<h3>' . json_decode($view->searchPhrase, true)['dateRangeSelector'] . '</h3>';
+        $search = json_decode((string)($view->searchPhrase ?? ''), true);
+        $dateRangeSelector = $search['dateRangeSelector'] ?? '';
+        $mpdf->WriteHTML('<h3>' . htmlspecialchars((string)$dateRangeSelector, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</h3>');
 
-        $html .= '<table border="1" cellpadding="10" cellspacing="0" style="width: 100%;">';
-        $html .= '<tr>';
-
-        $html .= '<thead>' .
+        $tableHeader = '<table border="1" cellpadding="4" cellspacing="0" style="width: 100%;">' .
+            '<thead><tr>' .
             '<th>' . Util::translate('repModuleExtendedCDRs_cdr_ColumnTypeState') . '</th>' .
             '<th>' . Util::translate('cdr_ColumnDate') . '</th>' .
             '<th>' . Util::translate('cdr_ColumnFrom') . '</th>' .
@@ -387,26 +594,42 @@ class GetReport
             '<th>' . Util::translate('cdr_ColumnDuration') . '</th>' .
             '<th>' . Util::translate('repModuleExtendedCDRs_cdr_ColumnCallState') . '</th>' .
             '<th>id</th>' .
-            '</thead>';
-        $html .= '<tbody>';
+            '</tr></thead><tbody>';
+        $tableFooter = '</tbody></table>';
 
-        foreach ($view->data as $baseItem) {
-            foreach ($baseItem['4'] as $item) {
-                $html .= '<tr>';
-                $html .= '<td>' . htmlspecialchars($baseItem['typeCallDesc']) . '</td>';
-                $html .= '<td>' . htmlspecialchars($item['start']) . '</td>';
-                $html .= '<td>' . htmlspecialchars($item['src_num']) . '</td>';
-                $html .= '<td>' . htmlspecialchars($item['dst_num']) . '</td>';
-                $html .= '<td>' . htmlspecialchars($baseItem['line']) . '</td>';
-                $html .= '<td>' . htmlspecialchars($item['waitTime']) . '</td>';
-                $html .= '<td>' . htmlspecialchars($item['billsec']) . '</td>';
-                $html .= '<td>' . htmlspecialchars($item['stateCall']) . '</td>';
-                $html .= '<td>' . htmlspecialchars($baseItem['DT_RowId']) . '</td>';
-                $html .= '</tr>';
+        $rowsChunk = '';
+        $rowsInChunk = 0;
+        $flushEvery = 250; // rows per table chunk
+
+        foreach (($view->data ?? []) as $baseItem) {
+            $typeCallDesc = htmlspecialchars((string)($baseItem['typeCallDesc'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $line = htmlspecialchars((string)($baseItem['line'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $linkedId = htmlspecialchars((string)($baseItem['DT_RowId'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            foreach (($baseItem['4'] ?? []) as $item) {
+                $rowsChunk .= '<tr>' .
+                    '<td>' . $typeCallDesc . '</td>' .
+                    '<td>' . htmlspecialchars((string)($item['start'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>' .
+                    '<td>' . htmlspecialchars((string)($item['src_num'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>' .
+                    '<td>' . htmlspecialchars((string)($item['dst_num'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>' .
+                    '<td>' . $line . '</td>' .
+                    '<td>' . htmlspecialchars((string)($item['waitTime'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>' .
+                    '<td>' . htmlspecialchars((string)($item['billsec'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>' .
+                    '<td>' . htmlspecialchars((string)($item['stateCall'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</td>' .
+                    '<td>' . $linkedId . '</td>' .
+                    '</tr>';
+
+                $rowsInChunk++;
+                if ($rowsInChunk >= $flushEvery) {
+                    $mpdf->WriteHTML($tableHeader . $rowsChunk . $tableFooter . '<pagebreak />');
+                    $rowsChunk = '';
+                    $rowsInChunk = 0;
+                }
             }
         }
-        $html .= '</tbody></table>';
-        $mpdf->WriteHTML($html);
+
+        if ($rowsChunk !== '') {
+            $mpdf->WriteHTML($tableHeader . $rowsChunk . $tableFooter);
+        }
         $filename = $tmpDir . '/calls_report-' . time() . '.pdf';
 
         if ($saveInFile === true) {
@@ -524,7 +747,7 @@ class GetReport
 
     public static function exportOutgoingEmployeeCallsPrintPdf($view, $saveInFile = false): string
     {
-        $tmpDir = '/tmp';
+        $tmpDir = self::getTmpDir();
         $mpdf = new Mpdf(['tempDir' => $tmpDir]);
         $html = '';
         if(!empty($view->title)){
@@ -754,12 +977,11 @@ class GetReport
      * @param array  $parameters The CDR query parameters.
      * @return array
      */
-    private function prepareConditionsForSearchPhrases(string &$searchPhrase, array &$parameters): array
+    private function prepareConditionsForSearchPhrasesQueue(string &$searchPhrase, array &$parameters): array
     {
         $searchPhrase = json_decode($searchPhrase, true);
-        $minBilSec  = (int)($searchPhrase['minBilSec']??0);
+        $minBilSec    = intval($searchPhrase['minBilSec']??0);
         $dateRangeSelector = $searchPhrase['dateRangeSelector'] ?? '';
-        $typeCall = $searchPhrase['typeCall'] ?? '';
 
         $parameters['conditions'] = '';
         $start = '';
@@ -771,17 +993,18 @@ class GetReport
                 $date = DateTime::createFromFormat('d/m/Y', $matches[0][0]);
                 $start = $date->format('Y-m-d');
                 $end = $date->modify('+1 day')->format('Y-m-d');
-                $parameters['conditions'] .= 'start BETWEEN :dateFromPhrase1: AND :dateFromPhrase2:';
+                $parameters['conditions'] .= 'date BETWEEN :dateFromPhrase1: AND :dateFromPhrase2:';
                 $parameters['bind']['dateFromPhrase1'] = $start;
                 $parameters['bind']['dateFromPhrase2'] = $end;
                 $searchPhrase = str_replace($matches[0][0], "", $searchPhrase);
             } elseif (count($matches[0]) === 2) {
-                $parameters['conditions'] .= 'start BETWEEN :dateFromPhrase1: AND :dateFromPhrase2:';
+                $parameters['conditions'] .= 'date BETWEEN :dateFromPhrase1: AND :dateFromPhrase2:';
                 $date = DateTime::createFromFormat('d/m/Y', $matches[0][0]);
                 $start = $date->format('Y-m-d');
                 $parameters['bind']['dateFromPhrase1'] = $start;
+
                 $date = DateTime::createFromFormat('d/m/Y', $matches[0][1]);
-                $end = $date->modify('+1 day')->format('Y-m-d');
+                $end = $date->modify('+1 day')->setTime(0, 0, 0)->modify('-1 second')->format('Y-m-d H:i:s');
                 $parameters['bind']['dateFromPhrase2'] = $end;
                 $searchPhrase = str_replace(
                     [$matches[0][0], $matches[0][1]],
@@ -792,32 +1015,16 @@ class GetReport
         }
 
 
-        if($minBilSec>0){
-            if ($parameters['conditions'] !== '') {
-                $parameters['conditions'] .= ' AND ';
-            }
-            $parameters['conditions'] .= "billsec > $minBilSec ";
-        }
-
-        if (stripos($typeCall, 'incoming') === 0) {
-            if ($parameters['conditions'] !== '') {
-                $parameters['conditions'] .= ' AND ';
-            }
-            $parameters['conditions'] .= "typeCall=:typeCall:";
-            $parameters['bind']['typeCall'] = CallHistory::CALL_TYPE_INCOMING;
-        } elseif (stripos($typeCall, 'missed') === 0) {
-            if ($parameters['conditions'] !== '') {
-                $parameters['conditions'] .= ' AND ';
-            }
-            $parameters['conditions'] .= "typeCall=:typeCall:";
-            $parameters['bind']['typeCall'] = CallHistory::CALL_TYPE_MISSED;
-        } elseif (stripos($typeCall, 'outgoing') === 0) {
-            if ($parameters['conditions'] !== '') {
-                $parameters['conditions'] .= ' AND ';
-            }
-            $parameters['conditions'] .= "typeCall=:typeCall:";
-            $parameters['bind']['typeCall'] = CallHistory::CALL_TYPE_OUTGOING;
-        }
+//        if($minBilSec>0){
+//            if ($parameters['conditions'] !== '') {
+//                $parameters['conditions'] .= ' AND ';
+//            }
+//            $minBilSecComp= $searchPhrase['minBilSecComp']??'>';
+//            if(!in_array($minBilSecComp, ['>', '>=', '<', '<='], true)){
+//                $minBilSecComp = '>';
+//            }
+//            $parameters['conditions'] .= "billsec $minBilSecComp $minBilSec ";
+//        }
 
         $additionalFilter = $searchPhrase['additionalFilter'] ?? '';
         // Search phone numbers
@@ -868,6 +1075,164 @@ class GetReport
             $globalNumbers[$index] = ConnectorDB::getPhoneIndex($value);
         }
 
+        if( preg_match_all('/queue_([^\s]+)/', $additionalFilter, $matches)){
+            $queueIds = $matches[1]??[];
+            foreach ($queueIds as $index => $value) {
+                if($value === '-'){
+                    $queueIds[$index] = '';
+                }
+            }
+            $parameters['conditions'] .= ' AND queueId IN ({queueIds:array})';
+            $parameters['bind']['queueIds'] = $queueIds;
+        }
+
+        return [$start, $end, $globalNumbers, $additionalNumbers];
+    }
+
+    /**
+     * Prepares query parameters for filtering CDR records.
+     *
+     * @param string $searchPhrase The search phrase entered by the user.
+     * @param array  $parameters The CDR query parameters.
+     * @return array
+     */
+    private function prepareConditionsForSearchPhrases(string &$searchPhrase, array &$parameters, array $columns = []): array
+    {
+        $ids = [];
+        $searchPhrase = json_decode($searchPhrase, true);
+        $minBilSec    = intval($searchPhrase['minBilSec']??0);
+        $dateRangeSelector = $searchPhrase['dateRangeSelector'] ?? '';
+        $typeCall = $searchPhrase['typeCall'] ?? '';
+
+        $parameters['conditions'] = '';
+        $start = '';
+        $end = '';
+
+        // Search date ranges
+        if (preg_match_all("/\d{2}\/\d{2}\/\d{4}/", $dateRangeSelector, $matches)) {
+            if (count($matches[0]) === 1) {
+                $date = DateTime::createFromFormat('d/m/Y', $matches[0][0]);
+                $start = $date->format('Y-m-d');
+                $end = $date->modify('+1 day')->setTime(0, 0, 0)->modify('-1 second')->format('Y-m-d H:i:s');
+                $parameters['conditions'] .= 'start BETWEEN :dateFromPhrase1: AND :dateFromPhrase2:';
+                $parameters['bind']['dateFromPhrase1'] = $start;
+                $parameters['bind']['dateFromPhrase2'] = $end;
+                $searchPhrase = str_replace($matches[0][0], "", $searchPhrase);
+            } elseif (count($matches[0]) === 2) {
+                $parameters['conditions'] .= 'start BETWEEN :dateFromPhrase1: AND :dateFromPhrase2:';
+                $date = DateTime::createFromFormat('d/m/Y', $matches[0][0]);
+                $start = $date->format('Y-m-d');
+                $parameters['bind']['dateFromPhrase1'] = $start;
+                $date = DateTime::createFromFormat('d/m/Y', $matches[0][1]);
+                $end = $date->modify('+1 day')->setTime(0, 0, 0)->modify('-1 second')->format('Y-m-d H:i:s');
+
+                $parameters['bind']['dateFromPhrase2'] = $end;
+                $searchPhrase = str_replace(
+                    [$matches[0][0], $matches[0][1]],
+                    '',
+                    $searchPhrase
+                );
+            }
+        }
+
+
+        if($minBilSec>0){
+            if ($parameters['conditions'] !== '') {
+                $parameters['conditions'] .= ' AND ';
+            }
+            $minBilSecComp= $searchPhrase['minBilSecComp']??'>';
+            if(!in_array($minBilSecComp, ['>', '>=', '<', '<=', '='], true)){
+                $minBilSecComp = '>';
+            }
+            $parameters['conditions'] .= "billsec $minBilSecComp $minBilSec ";
+        }
+
+        if (stripos($typeCall, 'incoming') === 0) {
+            if ($parameters['conditions'] !== '') {
+                $parameters['conditions'] .= ' AND ';
+            }
+            $parameters['conditions'] .= "typeCall=:typeCall:";
+            $parameters['bind']['typeCall'] = CallHistory::CALL_TYPE_INCOMING;
+        } elseif (stripos($typeCall, 'missed') === 0) {
+            if ($parameters['conditions'] !== '') {
+                $parameters['conditions'] .= ' AND ';
+            }
+            $parameters['conditions'] .= "typeCall=:typeCall:";
+            $parameters['bind']['typeCall'] = CallHistory::CALL_TYPE_MISSED;
+        } elseif (stripos($typeCall, 'outgoing') === 0) {
+            if ($parameters['conditions'] !== '') {
+                $parameters['conditions'] .= ' AND ';
+            }
+            $parameters['conditions'] .= "typeCall=:typeCall:";
+            $parameters['bind']['typeCall'] = CallHistory::CALL_TYPE_OUTGOING;
+        }
+
+        $additionalFilter = $searchPhrase['additionalFilter'] ?? '';
+        // Search phone numbers
+        $searchPhrase = str_replace(['(', ')', '-', '+'], '', $searchPhrase);
+        $groupNumber = [];
+        if (class_exists('\Modules\ModuleUsersGroups\Models\UsersGroups')
+            && preg_match_all('/(?:\s|^)group_(\d+)\b/', $additionalFilter, $matches )) {
+            $filter = [
+                'group_id IN ({group_id:array})',
+                'bind' => [
+                    'group_id' => array_unique($matches[1])
+                ],
+                'columns' => 'user_id'
+            ];
+            $uIds = array_column(GroupMembers::find($filter)->toArray(), 'user_id');
+            if (!empty($uIds)) {
+                $filter = [
+                    'type=:type: AND userid IN ({userid:array})',
+                    'bind' => [
+                        'type' => Extensions::TYPE_SIP,
+                        'userid' => $uIds,
+                    ],
+                    'columns' => 'number,userid'
+
+                ];
+                $groupNumber = array_column(Extensions::find($filter)->toArray(), 'number');
+            }
+        }
+
+        $matches  = [];
+        if( preg_match_all('/queue_([^\s]+)/', $additionalFilter, $matches)){
+            $queueIds = $matches[1]??[];
+            foreach ($queueIds as $index => $value) {
+                if($value === '-'){
+                    $queueIds[$index] = '';
+                }
+            }
+            $filterQueue = [
+                'conditions' => 'date BETWEEN :dateFromPhrase1: AND :dateFromPhrase2: AND queueId IN ({queueIds:array})',
+                'columns' => 'linkedid',
+                'bind' => [
+                    'queueIds' => $queueIds,
+                    'dateFromPhrase1' => $parameters['bind']['dateFromPhrase1'],
+                    'dateFromPhrase2' => $parameters['bind']['dateFromPhrase2']
+                ]
+            ];
+            $ids = array_column(ConnectorDB::invoke('getCdrQueueIDs', [$filterQueue]), 'linkedid');
+        }
+
+        $additionalNumbers = [];
+        if (preg_match_all('/(?<=\s|^)\d+(?=\s|$)/', $additionalFilter, $matches)) {
+            $additionalNumbers = $matches[0];
+        }
+        $additionalNumbers = array_merge($additionalNumbers, $groupNumber);
+        foreach ($additionalNumbers as $index => $value) {
+            $additionalNumbers[$index] = ConnectorDB::getPhoneIndex($value);
+        }
+
+        $globalNumbers = [];
+        $globalSearch = $searchPhrase['globalSearch'] ?? '';
+        if (preg_match_all('/(?<=\s|^)\d+(?=\s|$)/', $globalSearch, $matches)) {
+            $globalNumbers = $matches[0];
+        }
+        foreach ($globalNumbers as $index => $value) {
+            $globalNumbers[$index] = ConnectorDB::getPhoneIndex($value);
+        }
+
         if (!empty($globalNumbers)) {
             if ($parameters['conditions'] !== '') {
                 $parameters['conditions'] .= ' AND ';
@@ -883,8 +1248,7 @@ class GetReport
             $parameters['conditions'] .= '(srcIndex IN ({additionslNumbers:array}) OR dstIndex IN ({additionslNumbers:array}))';
             $parameters['bind']['additionslNumbers'] = array_unique($additionalNumbers);
         }
-
-        return [$start, $end, $globalNumbers, $additionalNumbers];
+        return [$start, $end, $globalNumbers, $additionalNumbers, $ids];
     }
 
     /**

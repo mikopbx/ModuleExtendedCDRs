@@ -221,7 +221,8 @@ class SyncRecords extends WorkerBase
         $oldOffset = max(HistoryParser::getMinCdrId(), $oldOffset);
         $this->logger->writeInfo('New offset...'. $oldOffset);
 
-        $cdrData = HistoryParser::getHistoryData($this->cdrOffset);
+        $historyResult = HistoryParser::getHistoryData($this->cdrOffset);
+        $cdrData = $historyResult['data'];
 
 
         foreach ($cdrData as $cdr){

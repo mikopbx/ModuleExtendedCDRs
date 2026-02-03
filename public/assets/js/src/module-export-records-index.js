@@ -28,6 +28,7 @@ const ModuleExtendedCDRs = {
 	 */
 	$cdrTable: $('#CallDetails-table'),
 	$outgoingEmployeeCalls: $('#OutgoingEmployeeCalls-table'),
+	$cdrQueueTable: $('#CdrQueue-table'),
 
 	/**
 	 * The global search input element.
@@ -57,6 +58,9 @@ const ModuleExtendedCDRs = {
 	 * Flag to prevent initial data loading
 	 * @type {boolean}
 	 */
+	applyFilterTimer: null,
+	applyFilterRunning: false,
+
 	tablesInitialized: false,
 
 	tableInitDataOutgoingEmployeeCalls: {
@@ -85,10 +89,14 @@ const ModuleExtendedCDRs = {
 					data: data,
 					success: function(json) {
 						callback(json);
+					},
+					error: function(xhr, status, error) {
+						console.error('getOutgoingEmployeeCalls error:', status, error);
+						callback({ data: [], recordsTotal: 0, recordsFiltered: 0 });
 					}
 				});
 			},
-			paging: true,
+			paging: false,
 			sDom: 'rtip',
 			deferRender: true,
 			// pageLength: ModuleExtendedCDRs.calculatePageLength(),
@@ -107,12 +115,8 @@ const ModuleExtendedCDRs = {
 				$('td', row).eq(5).html(data.countCalls);
 			},
 			drawCallback(settings) {
-				let pagination = $(this).closest('.dataTables_wrapper').find('.dataTables_paginate');
-				if (settings._iDisplayLength >= settings.fnRecordsDisplay()) {
-					pagination.hide();
-				} else {
-					pagination.show();
-				}
+				ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
+				ModuleExtendedCDRs.applyFilterRunning = false;
 			},
 			language: SemanticLocalization.dataTableLocalisation,
 			ordering: false,
@@ -145,7 +149,13 @@ const ModuleExtendedCDRs = {
 					success: function(json) {
 						$('a.item[data-tab="all-calls"] b').html(': '+json.recordsFiltered)
 						$('a.item[data-tab="incoming-calls"] b').html(': '+json.recordsIncoming)
-						$('a.item[data-tab="missed-calls"] b').html(': '+json.recordsMissed)
+
+						let recordsMissed = json.recordsMissed;
+						if(json.recordsMissedPercent !== 0){
+							recordsMissed = json.recordsMissed + ' (' +json.recordsMissedPercent+ '%)';
+						}
+
+						$('a.item[data-tab="missed-calls"] b').html(': '+recordsMissed)
 						$('a.item[data-tab="outgoing-calls"] b').html(': '+json.recordsOutgoing)
 
 						let typeCall = $('#typeCall a.item.active').attr('data-tab');
@@ -157,6 +167,10 @@ const ModuleExtendedCDRs = {
 							json.recordsFiltered = json.recordsOutgoing;
 						}
 						callback(json);
+					},
+					error: function(xhr, status, error) {
+						console.error('getHistory error:', status, error);
+						callback({ data: [], recordsTotal: 0, recordsFiltered: 0 });
 					}
 				});
 			},
@@ -224,12 +238,89 @@ const ModuleExtendedCDRs = {
 						element.removeClass('warning').addClass('positive');
 					}
 				});
-				let pagination = $(this).closest('.dataTables_wrapper').find('.dataTables_paginate');
-				if (settings._iDisplayLength >= settings.fnRecordsDisplay()) {
-					pagination.hide();
-				} else {
-					pagination.show();
+				ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
+				ModuleExtendedCDRs.applyFilterRunning = false;
+			},
+			language: SemanticLocalization.dataTableLocalisation,
+			ordering: false,
+		}
+	},
+	tableInitDataCdrQueue: {
+		wasInit: false,
+		id: 'CdrQueue',
+		data: {
+			search: {
+				search: '',
+			},
+			serverSide: true,
+			processing: true,
+			info: false,
+			columnDefs: [
+				{ defaultContent: "",  targets: "_all"},
+			],
+			ajax: function(data, callback, settings) {
+				if (data.search.value === '' ||
+					!ModuleExtendedCDRs.tablesInitialized || $('#currentReportNameID').val() !== 'CdrQueue') {
+					// Skip initial load
+					callback({ data: [], recordsTotal: 0, recordsFiltered: 0 });
+					return;
 				}
+				$.ajax({
+					url: `${globalRootUrl}${idUrl}/getCdrQueue`,
+					type: 'POST',
+					data: data,
+					success: function(json) {
+						callback(json);
+					},
+					error: function(xhr, status, error) {
+						console.error('getCdrQueue error:', status, error);
+						callback({ data: [], recordsTotal: 0, recordsFiltered: 0 });
+					}
+				});
+			},
+			paging: false,
+			sDom: 'rtip',
+			deferRender: true,
+			// pageLength: ModuleExtendedCDRs.calculatePageLength(),
+
+		/**
+		 * Constructs the CDR Queue row.
+		 * @param {HTMLElement} row - The row element.
+		 * @param {Array} data - The row data.
+		 */
+		createdRow(row, data) {
+			$(row).attr('data-queue', data.queueId);
+			$(row).attr('data-date', data.date);
+			
+			// Format date for display and URL
+			let dateForUrl = '';
+			if (data.date) {
+				const dateParts = data.date.split('-');
+				if (dateParts.length === 3) {
+					dateForUrl = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+				}
+			}
+			
+			// Create detail button
+			let dateHtml = data.date;
+			if (dateForUrl && data.queueId) {
+				const detailUrl = `${globalRootUrl}module-extended-c-d-rs/index/?reportNameID=CallDetails&dateRangeSelector=${encodeURIComponent(dateForUrl + ' - ' + dateForUrl)}&queue=${encodeURIComponent(data.queueId)}`;
+				dateHtml = `${data.date} <i class="external alternate icon link" style="cursor: pointer; margin-left: 5px;" onclick="window.open('${detailUrl}', '_blank')" title="Open details"></i>`;
+			}
+			
+			$('td', row).eq(0).html(dateHtml);
+			$('td', row).eq(1).html(data.queueName || '-').addClass('center aligned');
+			$('td', row).eq(2).html(data.totalCalls).addClass('center aligned');
+			$('td', row).eq(3).html(data.answered).addClass('center aligned');
+			$('td', row).eq(4).html(data.missed).addClass('center aligned');
+			$('td', row).eq(5).html(data.answeredQueue).addClass('center aligned');
+			$('td', row).eq(6).html(data.avgWaitTime).addClass('center aligned');
+			$('td', row).eq(7).html(data.avgMissed + '%').addClass('center aligned');
+			$('td', row).eq(8).html(data.avgWaitTimeQueue).addClass('center aligned');
+		},
+			drawCallback(settings) {
+				ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
+				ModuleExtendedCDRs.applyFilterRunning = false;
 			},
 			language: SemanticLocalization.dataTableLocalisation,
 			ordering: false,
@@ -303,9 +394,63 @@ const ModuleExtendedCDRs = {
 		}
 	},
 	/**
+	 * Process URL parameters for filtering
+	 */
+	processUrlParameters() {
+		const urlParams = new URLSearchParams(window.location.search);
+		const reportNameID = urlParams.get('reportNameID');
+		const dateRangeSelector = urlParams.get('dateRangeSelector');
+		const queue = urlParams.get('queue');
+		
+		// Set report type if specified
+		if (reportNameID) {
+			$('#currentReportNameID').val(reportNameID);
+		}
+		
+		// Set date range if specified
+		if (dateRangeSelector) {
+			const dates = dateRangeSelector.split(' - ');
+			if (dates.length === 2) {
+				const startDate = moment(dates[0], 'DD/MM/YYYY');
+				const endDate = moment(dates[1], 'DD/MM/YYYY');
+				
+				if (startDate.isValid() && endDate.isValid()) {
+					ModuleExtendedCDRs.$dateRangeSelector.attr('data-start', startDate.format('YYYY/MM/DD'));
+					ModuleExtendedCDRs.$dateRangeSelector.attr('data-end', endDate.endOf('day').format('YYYY/MM/DD'));
+					ModuleExtendedCDRs.$dateRangeSelector.val(`${startDate.format('DD/MM/YYYY')} - ${endDate.format('DD/MM/YYYY')}`);
+				}
+			}
+		}
+		
+		// Set queue filter if specified
+		if (queue) {
+			// Temporarily disable onChange to avoid multiple applyFilter calls
+			$('#additionalFilter').dropdown('setting', 'onChange', function() {});
+			
+			// Add queue to filter
+			const currentFilter = $('#additionalFilter').dropdown('get value');
+			const filterArray = currentFilter ? currentFilter.split(',') : [];
+			const queueValue = 'queue_' + queue;
+			
+			if (!filterArray.includes(queueValue)) {
+				filterArray.push(queueValue);
+			}
+			
+			$('#additionalFilter').dropdown('set selected', filterArray);
+			
+			// Re-enable onChange
+			$('#additionalFilter').dropdown('setting', 'onChange', ModuleExtendedCDRs.applyFilter);
+		}
+	},
+	
+	/**
 	 * On page load we init some Semantic UI library
 	 */
 	initialize() {
+		if (window.location.search) {
+			const newUrl = window.location.pathname;
+			window.history.replaceState(null, '', newUrl);
+		}
 		//////
 		// Удаляем отступы контейнера.
 		$('#main-content-container').removeClass('container');
@@ -332,6 +477,9 @@ const ModuleExtendedCDRs = {
 		//////
 		ModuleExtendedCDRs.changeReportVariant();
 		ModuleExtendedCDRs.initializeDateRangeSelector();
+		
+		// Process URL parameters
+		ModuleExtendedCDRs.processUrlParameters();
 
 		// инициализируем чекбоксы и выподающие менюшки
 		window[className].$checkBoxes.checkbox();
@@ -548,6 +696,57 @@ const ModuleExtendedCDRs = {
 			}
 		});
 
+		// Handle minBillSec field changes
+		$('#currentMinBillSec').on('change', function() {
+			const value = $(this).val();
+			const reportNameID = $('#currentReportNameID').val();
+			const currentVariantId = $('#currentVariantId').val();
+			
+			// Update data attribute
+			if (currentVariantId === '') {
+				$(`h4#${reportNameID}`).attr('data-min-bill-sec', value);
+			} else {
+				$(`a[data-variant-id="${currentVariantId}"][data-report-id="${reportNameID}"]`).attr('data-min-bill-sec', value);
+			}
+			
+			ModuleExtendedCDRs.applyFilter();
+		});
+
+		// Handle Enter key in minBillSec field
+		$('#currentMinBillSec').on('keyup', function(e) {
+			if (e.keyCode === 13) {
+				$(this).trigger('change');
+			}
+		});
+
+		// Initialize minBillSecComp dropdown
+		$('#currentMinBillSecComp').dropdown();
+		
+		// Handle minBillSecComp dropdown changes via click on menu items
+		$(document).on('click', '#currentMinBillSecComp .menu .item', function(e) {
+			const value = $(this).attr('data-value');
+			const text = $(this).html();
+			const reportNameID = $('#currentReportNameID').val();
+			const currentVariantId = $('#currentVariantId').val();
+			
+			// Update button text and data attribute
+			$('#currentMinBillSecComp').attr('data-value', value);
+			// Update button text content - remove menu and update text
+			const $button = $('#currentMinBillSecComp');
+			const $menu = $button.find('.menu');
+			$button.contents().not($menu).remove();
+			$button.prepend(text + ' ');
+			$button.append($menu);
+			
+			if (currentVariantId === '') {
+				$(`h4#${reportNameID}`).attr('data-min-bill-sec-comp', value);
+			} else {
+				$(`a[data-variant-id="${currentVariantId}"][data-report-id="${reportNameID}"]`).attr('data-min-bill-sec-comp', value);
+			}
+			
+			ModuleExtendedCDRs.applyFilter();
+		});
+
 		ModuleExtendedCDRs.$formObj.keydown(function(event){
 			if(event.keyCode === 13) {
 				event.preventDefault();
@@ -557,7 +756,8 @@ const ModuleExtendedCDRs = {
 		ModuleExtendedCDRs.updateSettings();
 		ModuleExtendedCDRs.applyFilter();
 
-		window[className].$dropDowns.dropdown({onChange: ModuleExtendedCDRs.applyFilter});
+		// Initialize dropdowns except #additionalFilter (it has its own handler)
+		window[className].$dropDowns.not('#additionalFilter').dropdown({onChange: ModuleExtendedCDRs.applyFilter});
 		window[className].updateSyncState();
 		setInterval(window[className].updateSyncState, 5000);
 	},
@@ -570,12 +770,16 @@ const ModuleExtendedCDRs = {
 		$('[id$="-table-div"]').hide();
 		$(`#${reportNameID}-table-div`).show();
 
-		if(reportNameID === 'CallDetails' && ModuleExtendedCDRs.dataTable.page !== undefined){
-			ModuleExtendedCDRs.dataTable.page.len(ModuleExtendedCDRs.calculatePageLength()).draw();
-		}
-
 		$('#currentReportNameID').val(reportNameID);
 		$('#currentVariantId').val(currentVariantId);
+
+		if(reportNameID === 'CdrQueue'){
+			$('#typeCall').closest('.ui.column').hide();
+			$('#minBillSecContainer').hide();
+		}else{
+			$('#typeCall').closest('.ui.column').show();
+			$('#minBillSecContainer').show();
+		}
 
 		let variantName = '';
 		if(currentVariantId !==''){
@@ -601,7 +805,32 @@ const ModuleExtendedCDRs = {
 		}else{
 			settings = JSON.parse(decodeURIComponent($(`a[data-variant-id="${currentVariantId}"][data-report-id="${reportNameID}"]`).attr('data-search-text')));
 		}
-		if(settings.dateRangeSelector !== undefined && settings.dateRangeSelector !== ''){
+		
+		// Update minBillSec field
+		let minBillSec = 0;
+		let minBillSecComp = '>';
+		if(currentVariantId === ''){
+			minBillSec = $(`h4#${reportNameID}`).attr('data-min-bill-sec') || 0;
+			minBillSecComp = $(`h4#${reportNameID}`).attr('data-min-bill-sec-comp') || '>';
+		}else{
+			minBillSec = $(`a[data-variant-id="${currentVariantId}"][data-report-id="${reportNameID}"]`).attr('data-min-bill-sec') || 0;
+			minBillSecComp = $(`a[data-variant-id="${currentVariantId}"][data-report-id="${reportNameID}"]`).attr('data-min-bill-sec-comp') || '>';
+		}
+		$('#currentMinBillSec').val(minBillSec);
+		$('#currentMinBillSecComp').dropdown('set selected', minBillSecComp);
+		$('#currentMinBillSecComp').attr('data-value', minBillSecComp);
+		// Update button text content
+		const $button = $('#currentMinBillSecComp');
+		const $menu = $button.find('.menu');
+		$button.contents().not($menu).remove();
+		$button.prepend(minBillSecComp + ' ');
+		$button.append($menu);
+
+		let setDate = $('#pDateRangeSelector').val() === "";
+		if(setDate){
+			$('#pDateRangeSelector').val('');
+		}
+		if(setDate && settings.dateRangeSelector !== undefined && settings.dateRangeSelector !== ''){
 			let periods = ModuleExtendedCDRs.getStandardPeriods();
 			let defPeriod = [moment(),moment()];
 			if(periods[settings.dateRangeSelector] !== undefined){
@@ -611,18 +840,23 @@ const ModuleExtendedCDRs = {
 			ModuleExtendedCDRs.$dateRangeSelector.attr('data-end', moment(defPeriod[1].format('YYYYMMDD')).endOf('day').format('YYYY/MM/DD'));
 			ModuleExtendedCDRs.$dateRangeSelector.val(`${defPeriod[0].format('DD/MM/YYYY')} - ${defPeriod[1].format('DD/MM/YYYY') }`);
 		}
-		if(settings.globalSearch !== undefined) {
-			ModuleExtendedCDRs.$globalSearch.val(settings.globalSearch)
-		}
-
 		// Temporarily disable onChange to avoid multiple applyFilter calls
 		$('#additionalFilter').dropdown('setting', 'onChange', function() {});
 		$('#additionalFilter').dropdown('clear');
-		if(settings.additionalFilter !== undefined){
+
+		if($('#pAdditionalFilterString').val() !== '-'){
+			$('#additionalFilter').dropdown('set selected', $('#pAdditionalFilterString').val().split(' '));
+			settings.typeCall = undefined;
+			settings.globalSearch = undefined;
+		}else if(settings.additionalFilter !== undefined){
 			$('#additionalFilter').dropdown('set selected', settings.additionalFilter.split(' '));
 		}
 		// Re-enable onChange
 		$('#additionalFilter').dropdown('setting', 'onChange', ModuleExtendedCDRs.applyFilter);
+
+		if(settings.globalSearch !== undefined) {
+			ModuleExtendedCDRs.$globalSearch.val(settings.globalSearch)
+		}
 
 		if(settings.typeCall !== undefined){
 			$('#typeCall.menu a.item').tab('change tab', settings.typeCall)
@@ -670,10 +904,19 @@ const ModuleExtendedCDRs = {
 			let srcAudio = '';
 			let srcDownloadAudio = '';
 			if (!(record.recordingfile === undefined || record.recordingfile === null || record.recordingfile.length === 0)) {
-				let recordFileName = encodeURIComponent(record.prettyFilename);
+				// Use real file extension from the recording file path for download name.
 				const recordFileUri = encodeURIComponent(record.recordingfile);
+				const fileNameFromPath = (record.recordingfile.split(/[\\/]/).pop() || '').split('?')[0].split('#')[0];
+				const extMatch = fileNameFromPath.match(/\.([a-zA-Z0-9]+)$/);
+				const fileExt = (extMatch && extMatch[1]) ? extMatch[1].toLowerCase() : 'mp3';
+
+				let downloadFileName = record.prettyFilename || 'record';
+				if (!downloadFileName.toLowerCase().endsWith(`.${fileExt}`)) {
+					downloadFileName += `.${fileExt}`;
+				}
+				const recordFileName = encodeURIComponent(downloadFileName);
 				srcAudio = `/pbxcore/api/cdr/v2/playback?view=${recordFileUri}`;
-				srcDownloadAudio = `/pbxcore/api/cdr/v2/playback?view=${recordFileUri}&download=1&filename=${recordFileName}.mp3`;
+				srcDownloadAudio = `/pbxcore/api/cdr/v2/playback?view=${recordFileUri}&download=1&filename=${recordFileName}`;
 			}
 
 			htmlPlayer +=`
@@ -853,9 +1096,14 @@ const ModuleExtendedCDRs = {
 		const period = ModuleExtendedCDRs.$dateRangeSelector.attr('data-def-value');
 		let defPeriod = [moment(),moment()];
 		if(period !== '' && period !== undefined){
-			let periods = ModuleExtendedCDRs.getStandardPeriods();
-			if(periods[period] !== undefined){
-				defPeriod = periods[period];
+			if($('#pDateRangeSelector').val() === period){
+				const [startStr, endStr] = period.split(' - ');
+				defPeriod = [moment(startStr, 'DD/MM/YYYY'),  moment(endStr, 'DD/MM/YYYY')];
+			}else{
+				let periods = ModuleExtendedCDRs.getStandardPeriods();
+				if(periods[period] !== undefined){
+					defPeriod = periods[period];
+				}
 			}
 		}
 
@@ -905,9 +1153,31 @@ const ModuleExtendedCDRs = {
 	},
 
 	/**
-	 * Applies the filter to the data table.
+	 * Applies the filter to the data table (with debounce to prevent double calls).
 	 */
-	applyFilter() {
+	applyFilter()
+	{
+		// Debounce: cancel previous timer and set new one
+		if (ModuleExtendedCDRs.applyFilterTimer) {
+			clearTimeout(ModuleExtendedCDRs.applyFilterTimer);
+		}
+		ModuleExtendedCDRs.applyFilterTimer = setTimeout(() => {
+			ModuleExtendedCDRs.applyFilterInternal();
+		}, 100);
+	},
+
+	/**
+	 * Internal filter application (called after debounce).
+	 */
+	applyFilterInternal()
+	{
+		// Prevent concurrent execution
+		if (ModuleExtendedCDRs.applyFilterRunning) {
+			return;
+		}
+		ModuleExtendedCDRs.applyFilterRunning = true;
+		// Flag will be reset in drawCallback after table is rendered
+
 		const text  = ModuleExtendedCDRs.getSearchText();
 		listenedIDs = [];
 		
@@ -919,10 +1189,6 @@ const ModuleExtendedCDRs = {
 				ModuleExtendedCDRs.$cdrTable.dataTable(ModuleExtendedCDRs.tableInitDataCallDetails.data);
 				ModuleExtendedCDRs.tableInitDataCallDetails.wasInit = true;
 
-				ModuleExtendedCDRs.dataTable = ModuleExtendedCDRs.$cdrTable.DataTable();
-				ModuleExtendedCDRs.dataTable.on('draw', () => {
-					ModuleExtendedCDRs.$globalSearch.closest('div').removeClass('loading');
-				});
 				ModuleExtendedCDRs.$cdrTable.on('click', 'tr.negative', (e) => {
 					let ids = $(e.target).attr('data-ids');
 					if (ids !== undefined && ids !== '') {
@@ -937,7 +1203,7 @@ const ModuleExtendedCDRs = {
 						return;
 					}
 					const tr = $(e.target).closest('tr');
-					const row = ModuleExtendedCDRs.dataTable.row(tr);
+					const row = ModuleExtendedCDRs.$cdrTable.DataTable().row(tr);
 					if(row.length === 0){
 						return;
 					}
@@ -969,13 +1235,25 @@ const ModuleExtendedCDRs = {
 				});
 
 			}
-			ModuleExtendedCDRs.dataTable.search(text).draw();
+			let table = ModuleExtendedCDRs.$cdrTable.DataTable();
+			table.page.len(ModuleExtendedCDRs.calculatePageLength());
+			table.search(text).draw();
 		}else if(reportName === ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.id){
 			if(ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.wasInit === false) {
 				ModuleExtendedCDRs.$outgoingEmployeeCalls.dataTable(ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.data);
 				ModuleExtendedCDRs.tableInitDataOutgoingEmployeeCalls.wasInit = true;
 			}
-			ModuleExtendedCDRs.$outgoingEmployeeCalls.DataTable().search(text).draw();
+			let table = ModuleExtendedCDRs.$outgoingEmployeeCalls.DataTable();
+			table.page.len(ModuleExtendedCDRs.calculatePageLength());
+			table.search(text).draw();
+		}else if(reportName === ModuleExtendedCDRs.tableInitDataCdrQueue.id){
+			if(ModuleExtendedCDRs.tableInitDataCdrQueue.wasInit === false) {
+				ModuleExtendedCDRs.$cdrQueueTable.dataTable(ModuleExtendedCDRs.tableInitDataCdrQueue.data);
+				ModuleExtendedCDRs.tableInitDataCdrQueue.wasInit = true;
+			}
+			let table = ModuleExtendedCDRs.$cdrQueueTable.DataTable();
+			table.page.len(ModuleExtendedCDRs.calculatePageLength());
+			table.search(text).draw();
 		}
 		ModuleExtendedCDRs.$globalSearch.closest('div').addClass('loading');
 	},
@@ -995,13 +1273,12 @@ const ModuleExtendedCDRs = {
 
 		let reportNameID = $('#currentReportNameID').val();
 		let currentVariantId = $('#currentVariantId').val();
-		let minBilSec = $(`h4#${reportNameID}`).attr('data-min-bill-sec');
-		if(currentVariantId !== ''){
-			minBilSec = $(`a[data-report-id="${reportNameID}"][data-variant-id="${currentVariantId}"]`).attr('data-min-bill-sec');
-		}
+		let minBilSec = $('#currentMinBillSec').val() || 0;
+		let minBilSecComp = $('#currentMinBillSecComp').dropdown('get value') || $('#currentMinBillSecComp').attr('data-value') || '>';
 		const filter = {
 			dateRangeSelector: dateRangeSelector,
 			minBilSec: minBilSec,
+			minBilSecComp: minBilSecComp,
 			globalSearch: ModuleExtendedCDRs.$globalSearch.val(),
 			typeCall: $('#typeCall a.item.active').attr('data-tab'),
 			additionalFilter: $('#additionalFilter').dropdown('get value').replace(/,/g,' '),
@@ -1028,17 +1305,21 @@ const ModuleExtendedCDRs = {
 		let currentVariantId = $('#currentVariantId').val();
 		let reportId = $('#currentReportNameID').val();
 		let variantName = '';
+		let minBillSec = $('#currentMinBillSec').val() || 0;
+		let minBillSecComp = $('#currentMinBillSecComp').dropdown('get value') || $('#currentMinBillSecComp').attr('data-value') || '>';
+		
 		let data = {
 			'search[value]': search,
 			'reportNameID': reportId,
 			'variantId': 	currentVariantId,
-			'variantName': 	variantName
+			'variantName': 	variantName,
+			'minBillSec': 	minBillSec,
+			'minBillSecComp': minBillSecComp
 		};
 		if(currentVariantId !== ''){
 			let parent = $(`a[data-variant-id="${currentVariantId}"][data-report-id="${reportId}"]`);
 			data.variantName = parent.find('div.title').text().trim();
 
-			data.minBillSec = parent.attr('data-min-bill-sec').trim();
 			data.sendingScheduledReport = parent.attr('data-sending-scheduled-report').trim();
 			data.dateMonth = parent.attr('data-date-month').trim();
 			data.day = parent.attr('data-day').trim();
@@ -1057,8 +1338,12 @@ const ModuleExtendedCDRs = {
 			success: function(response) {
 				if(currentVariantId === ''){
 					$(`#${$('#currentReportNameID').val()}`).attr('data-search-text', encodeURIComponent(search));
+					$(`#${$('#currentReportNameID').val()}`).attr('data-min-bill-sec', minBillSec);
+					$(`#${$('#currentReportNameID').val()}`).attr('data-min-bill-sec-comp', minBillSecComp);
 				}else{
 					$(`a[data-variant-id="${currentVariantId}"][data-report-id="${reportId}"]`).attr('data-search-text', encodeURIComponent(search));
+					$(`a[data-variant-id="${currentVariantId}"][data-report-id="${reportId}"]`).attr('data-min-bill-sec', minBillSec);
+					$(`a[data-variant-id="${currentVariantId}"][data-report-id="${reportId}"]`).attr('data-min-bill-sec-comp', minBillSecComp);
 				}
 			},
 			error: function(xhr, status, error) {

@@ -1,6 +1,8 @@
 <div id="menu-reports"  style="display: none;" class="ui fluid popup bottom left transition hidden">
   <input id="currentReportNameID" type="hidden" name="filters" value="{{currentReportNameID}}">
   <input id="currentVariantId" type="hidden" name="filters" value="{{currentVariantId}}">
+  <input id="pDateRangeSelector" type="hidden" name="filters" value="{{pDateRangeSelector}}">
+  <input id="pAdditionalFilterString" type="hidden" name="filters" value="{{pAdditionalFilterString}}">
 
   <div class="ui four column relaxed equal height divided grid">
        {% for variantId,variantsData in mainReports %}
@@ -122,9 +124,9 @@
                     </a>
                  </div>
              </div>
-             <div class="ui two wide column" style="height: 40px;">
+             <div class="ui column" style="height: 40px; display: flex; justify-content: flex-end; flex: 1;">
                  <div class="ui action input">
-                    <input style="height: 40px;" type="search" id="globalsearch" placeholder="{{ t._('repModuleExtendedCDRs_FindCallsPlaceholder') }}" aria-controls="KeysTable">
+                    <input style="height: 40px; width: 200px; min-width: 150px;" type="search" id="globalsearch" placeholder="{{ t._('repModuleExtendedCDRs_FindCallsPlaceholder') }}" aria-controls="KeysTable">
                     <button style="height: 40px;" id="createExcelButton" class="ui icon basic button"> <i class="green file excel outline icon"></i></button>
                     <button style="height: 40px;" id="createPdfButton" class="ui icon basic button"> <i class="red file pdf outline icon"></i></button>
                     <button style="height: 40px;" id="downloadRecords" class="ui icon basic button"> <i class="download icon"></i></button>
@@ -134,7 +136,7 @@
                  </div>
              </div>
          </div>
-         <div class="ui row" style="padding-top:0; padding-left:9px">
+          <div class="ui row" style="padding-top: 10px; padding-left:9px; display: flex; justify-content: space-between; align-items: center;">
              <div id='additionalFilter' class="ui multiple dropdown">
                <input type="hidden" name="filters" value="{{additionalFilterString}}">
                <i class="filter icon"></i>
@@ -152,11 +154,20 @@
                  <div class="scrolling menu">
                     {% for group in groups %}
                     <div class="item" data-value="group_{{ group['id'] }}">
-                    <i class="users icon"></i>
+                    <i class="sitemap icon"></i>
                     Отдел: {{ group['name'] }}
                     </div>
                     {% endfor %}
                     <h4 class="ui horizontal divider header"></h4>
+
+                    {% for queue in queues %}
+                    <div class="item" data-value="queue_{{ queue['id'] }}">
+                    <i class="users icon"></i>
+                    Очередь: {{ queue['name'] }}
+                    </div>
+                    {% endfor %}
+                    <h4 class="ui horizontal divider header"></h4>
+
                     {% for user in users %}
                     <div class="item" data-value="{{ user['number'] }}">
                     <i class="user icon"></i>
@@ -167,6 +178,25 @@
 
                </div>
 
+             </div>
+             <div id="minBillSecContainer" style="margin-right: 18px; display: flex; align-items: center; white-space: nowrap;">
+               <label style="margin-right: 10px; line-height: 32px; font-weight: 600;">{{ t._('repModuleExtendedCDRs_Form_minBillSec') }}:</label>
+               <div id="currentMinBillSecComp" class="ui basic compact button dropdown" data-value=">" style="height: 32px; min-width: 40px; padding: 8px 10px; line-height: 16px;">
+                  &gt;
+                  <div class="menu">
+                    <div class="item" data-value=">">&gt;</div>
+                    <div class="item" data-value=">=">&gt;=</div>
+                    <div class="item" data-value="<">&lt;</div>
+                    <div class="item" data-value="<=">&lt;=</div>
+                    <div class="item" data-value="=">=</div>
+                  </div>
+                </div>
+                <div class="ui mini right labeled input" style="margin-left: 5px; width: 110px;">
+                  <input type="number" id="currentMinBillSec" placeholder="0" min="0" max="1000" maxlength="6" style="text-align: right; height: 32px; padding: 5px 8px; width: 60px;">
+                  <div class="ui basic label" style="height: 32px; line-height: 20px; padding: 5px 10px; font-size: 12px;">
+                    {{ t._('repModuleExtendedCDRs_Form_minBillSec_s') }}
+                  </div>
+                </div>
              </div>
          </div>
      </div>
@@ -186,6 +216,29 @@
              <tbody>
              <tr>
                  <td colspan="5" class="dataTables_empty">{{ t._('dt_TableIsEmpty') }}</td>
+             </tr>
+             </tbody>
+         </table>
+     </div>
+
+     <div id="CdrQueue-table-div">
+         <table id="CdrQueue-table" data-report-name="CdrQueue" class="ui small very compact single line unstackable celled striped table ">
+             <thead>
+             <tr>
+                 <th class="one wide">{{ t._('repModuleExtendedCDRs_CdrQueue_Date') }}</th>
+                 <th class="three wide center aligned">{{ t._('repModuleExtendedCDRs_CdrQueue_Queue') }}</th>
+                 <th class="one wide center aligned">{{ t._('repModuleExtendedCDRs_CdrQueue_TotalCalls') }}</th>
+                 <th class="one wide center aligned">{{ t._('repModuleExtendedCDRs_CdrQueue_Answered') }}</th>
+                 <th class="one wide center aligned">{{ t._('repModuleExtendedCDRs_CdrQueue_Missed') }}</th>
+                 <th class="one wide center aligned">{{ t._('repModuleExtendedCDRs_CdrQueue_AnsweredQueue') }}</th>
+                 <th class="one wide center aligned">{{ t._('repModuleExtendedCDRs_CdrQueue_AvgWaitTime') }}</th>
+                 <th class="one wide center aligned">{{ t._('repModuleExtendedCDRs_CdrQueue_AvgMissed') }}</th>
+                 <th class="one wide center aligned">{{ t._('repModuleExtendedCDRs_CdrQueue_AvgWaitTimeQueue') }}</th>
+             </tr>
+             </thead>
+             <tbody>
+             <tr>
+                 <td colspan="9" class="dataTables_empty">{{ t._('dt_TableIsEmpty') }}</td>
              </tr>
              </tbody>
          </table>

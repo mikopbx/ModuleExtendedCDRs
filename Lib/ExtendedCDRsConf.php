@@ -14,13 +14,41 @@ use MikoPBX\Core\System\Util;
 use MikoPBX\Core\Workers\Cron\WorkerSafeScriptsCore;
 use MikoPBX\Modules\Config\ConfigClass;
 use MikoPBX\PBXCoreREST\Lib\PBXApiResult;
-use Modules\ModuleAmoCrm\Models\ModuleAmoCrm;
-use Modules\ModuleExtendedCDRs\Lib\RestAPI\Controllers\ApiController;
 use Modules\ModuleExtendedCDRs\bin\ConnectorDB;
+use Modules\ModuleExtendedCDRs\Lib\RestAPI\Controllers\ApiController;
 use Modules\ModuleExtendedCDRs\Models\ReportSettings;
 
 class ExtendedCDRsConf extends ConfigClass
 {
+    /**
+     * Called before module disable.
+     *
+     * Skips the standard makeBeforeDisableTest() check which loads ALL records
+     * from module tables into memory. With 2+ million records in CallHistory
+     * (1.3GB database), this causes timeout/OOM during module installation.
+     *
+     * Our tables (CallHistory, CallQueuesHistory, etc.) have no foreign key
+     * relations with MikoPBX Core models, so the check is unnecessary.
+     *
+     * @return bool Always returns true to allow module disable.
+     */
+    public function onBeforeModuleDisable(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Called before module enable.
+     *
+     * Skips the standard makeBeforeEnableTest() check which loads ALL records
+     * from module tables into memory. Same issue as onBeforeModuleDisable().
+     *
+     * @return bool Always returns true to allow module enable.
+     */
+    public function onBeforeModuleEnable(): bool
+    {
+        return true;
+    }
 
     /**
      * Receive information about mikopbx main database changes
@@ -43,7 +71,7 @@ class ExtendedCDRsConf extends ConfigClass
     {
         return [
             [
-                'type'   => WorkerSafeScriptsCore::CHECK_BY_BEANSTALK,
+                'type'   => WorkerSafeScriptsCore::CHECK_BY_PID_NOT_ALERT,
                 'worker' => ConnectorDB::class,
             ],
         ];
@@ -86,7 +114,7 @@ class ExtendedCDRsConf extends ConfigClass
     {
         return [
             [ApiController::class, 'downloads',                     '/pbxcore/api/modules/ModuleExtendedCDRs/downloads', 'get', '/', false],
-            [ApiController::class, 'exportHistory',                 '/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory', 'get', '/', false],
+            [ApiController::class, 'exportHistory',                 '/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory', 'get', '/', true],
             [ApiController::class, 'exportHistoryDetail',           '/pbxcore/api/modules/ModuleExtendedCDRs/exportHistoryDetail', 'get', '/', false],
             [ApiController::class, 'recordsAction',                 '/pbxcore/api/modules/ModuleExtendedCDRs/records', 'get', '/', false],
             [ApiController::class, 'exportOutgoingEmployeeCalls',   '/pbxcore/api/modules/ModuleExtendedCDRs/exportOutgoingEmployeeCalls', 'get', '/', false],
@@ -101,6 +129,7 @@ class ExtendedCDRsConf extends ConfigClass
         $busyboxPath= Util::which('busybox');
         $tasks[]    = "*/1 * * * * $busyboxPath find /storage/usbdisk*/mikopbx/tmp/ModuleExtendedCDRs/ -mmin +5 -type f -delete> /dev/null 2>&1".PHP_EOL;
         $phpPath    = Util::which('php');
+        $tasks[]    = "*/1 * * * * $phpPath -f {$this->moduleDir}/bin/safe.php > /dev/null 2>&1".PHP_EOL;
 
         $reportsData = ReportSettings::find('sendingScheduledReport=1');
         foreach ($reportsData as $settings) {

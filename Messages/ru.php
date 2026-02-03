@@ -36,7 +36,8 @@ return [
     'repModuleExtendedCDRs_cdr_CALL_TYPE_OUTGOING' => 'исходящий',
     'repModuleExtendedCDRs_cdr_CALL_TYPE_INCOMING' => 'входящий',
     'repModuleExtendedCDRs_cdr_CALL_TYPE_MISSED'   => 'пропущен',
-    'repModuleExtendedCDRs_syncState'              => 'Прогресс загрузки истории звонков: {value} из {total} записей',
+    'repModuleExtendedCDRs_WithOutQueues'   => 'Без очередей',
+    'repModuleExtendedCDRs_syncState'       => 'Прогресс загрузки истории звонков: {value} из {total} записей',
 
     'repModuleExtendedCDRs_cdr_cal_Today' => 'Сегодня',
     'repModuleExtendedCDRs_cdr_cal_Yesterday' => 'Вчера',
@@ -44,6 +45,16 @@ return [
     'repModuleExtendedCDRs_cdr_cal_Last30Days' => 'Последние 30 дней',
     'repModuleExtendedCDRs_cdr_cal_ThisMonth' => 'Текущий месяц',
     'repModuleExtendedCDRs_cdr_cal_LastMonth' => 'Прошлый месяц',
+
+    'repModuleExtendedCDRs_CdrQueue_Date'       => 'Дата',
+    'repModuleExtendedCDRs_CdrQueue_Queue'      => 'Очередь',
+    'repModuleExtendedCDRs_CdrQueue_TotalCalls' => 'Всего',
+    'repModuleExtendedCDRs_CdrQueue_Answered'          => 'Отвечены',
+    'repModuleExtendedCDRs_CdrQueue_Missed'            => 'Пропущены',
+    'repModuleExtendedCDRs_CdrQueue_AnsweredQueue'     => 'Отвечены в очереди',
+    'repModuleExtendedCDRs_CdrQueue_AvgWaitTime'   => 'Ср. Ожидание',
+    'repModuleExtendedCDRs_CdrQueue_AvgMissed'   => '% Пропущенных',
+    'repModuleExtendedCDRs_CdrQueue_AvgWaitTimeQueue'   => 'Ср. Ожидание очереди',
 
     'repModuleExtendedCDRs_outgoingEmployeeCalls_callerId'     => 'Сотрудник',
     'repModuleExtendedCDRs_outgoingEmployeeCalls_number'       => 'Внутренний номер',
@@ -53,11 +64,12 @@ return [
     'repModuleExtendedCDRs_outgoingEmployeeCalls_countCalls'   => 'Количество',
     'repModuleExtendedCDRs_CallDetails'   => 'Журнал звонков',
     'repModuleExtendedCDRs_OutgoingEmployeeCalls'   => 'Исходящие сотрудников',
+    'repModuleExtendedCDRs_CdrQueue'   => 'Входящие на очередь',
 
 
     'repModuleExtendedCDRs_Form_titleReport'   => 'Наименование',
     'repModuleExtendedCDRs_Form_titleReportError'   => 'Наименование не может быть пустым!',
-    'repModuleExtendedCDRs_Form_minBillSec'    => 'Минимальная длительность',
+    'repModuleExtendedCDRs_Form_minBillSec'    => 'Min. длительность разговора',
     'repModuleExtendedCDRs_Form_minBillSecError'    => 'Значение минимальной длительности должно быть от 0 до 1000',
     'repModuleExtendedCDRs_Form_minBillSec_s'  => 'с.',
     'repModuleExtendedCDRs_Form_SendingScheduledReport'  => 'Отправка отчета по расписанию',
