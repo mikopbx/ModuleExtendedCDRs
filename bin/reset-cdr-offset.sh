@@ -11,7 +11,7 @@ CDR_DB="/storage/usbdisk1/mikopbx/astlogs/asterisk/cdr.db"
 MODULE_DB="/storage/usbdisk1/mikopbx/custom_modules/ModuleExtendedCDRs/db/module.db"
 
 # Находим минимальный id на указанную дату
-MIN_ID=$(sqlite3 "$CDR_DB" "SELECT MIN(id) FROM cdr_general WHERE start >= '${DATE} 00:00:00';")
+MIN_ID=$(sqlite3 -noheader -csv "$CDR_DB" "SELECT MIN(id) FROM cdr_general WHERE start >= '${DATE}';")
 
 if [ -z "$MIN_ID" ]; then
     echo "Нет записей за $DATE в cdr_general"
@@ -19,7 +19,7 @@ if [ -z "$MIN_ID" ]; then
 fi
 
 NEW_OFFSET=$((MIN_ID - 1))
-OLD_OFFSET=$(sqlite3 "$MODULE_DB" "SELECT cdrOffset FROM m_ModuleExtendedCDRs LIMIT 1;")
+OLD_OFFSET=$(sqlite3 -noheader -csv "$MODULE_DB" "SELECT cdrOffset FROM m_ModuleExtendedCDRs LIMIT 1;")
 
 echo "Дата:   $DATE"
 echo "Offset: $OLD_OFFSET -> $NEW_OFFSET (min id=$MIN_ID)"
@@ -35,7 +35,16 @@ if [ -n "$PID" ]; then
     sleep 1
 fi
 
-# Запускаем safe.php — он поднимет ConnectorDB
+# Запускаем safe.php в фоне с таймаутом — он поднимет ConnectorDB
 echo "Starting safe.php..."
-/usr/bin/php -f "$SCRIPT_DIR/safe.php"
+timeout 30 /usr/bin/php -f "$SCRIPT_DIR/safe.php" &
+sleep 3
+
+# Проверяем что ConnectorDB поднялся
+NEW_PID=$(busybox ps -o pid,args | grep 'ModuleExtendedCDRs.bin.ConnectorDB' | grep -v grep | awk '{print $1}')
+if [ -n "$NEW_PID" ]; then
+    echo "ConnectorDB запущен, PID=$NEW_PID"
+else
+    echo "ConnectorDB ещё не запущен, safe.php работает в фоне"
+fi
 echo "Done"
