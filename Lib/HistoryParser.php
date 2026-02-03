@@ -105,7 +105,7 @@ class HistoryParser
      * @param int $offset
      * @return void
      */
-    public static function getHistoryData(int &$offset = 1):array
+    public static function getHistoryData(int $offset = 1):array
     {
         $filter = [
             "type = :extType:",
@@ -250,8 +250,8 @@ class HistoryParser
                 unset($firstQueue);
                 $resultRows[$cdr['linkedid']]['rows'][] = $cdr;
             }
-            $offset = min($offset + self::LIMIT_CDR, $newOffset);
-            $offset = max($offset, $minNewOffset);
+            $calculatedOffset = min($offset + self::LIMIT_CDR, $newOffset);
+            $calculatedOffset = max($calculatedOffset, $minNewOffset);
         }
 
         foreach ($resultRows as $index => $cdr){
@@ -267,7 +267,7 @@ class HistoryParser
             }
         }
 
-        return $resultRows;
+        return ['data' => $resultRows, 'newOffset' => $calculatedOffset ?? $offset];
     }
 
     /**

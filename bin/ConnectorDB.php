@@ -296,9 +296,11 @@ class ConnectorDB extends WorkerBase
         $oldOffset = $this->cdrOffset;
         $this->logger->writeInfo('...Start sync with offset...'. $oldOffset);
 
-        $cdrData = HistoryParser::getHistoryData($this->cdrOffset);
+        $historyResult = HistoryParser::getHistoryData($this->cdrOffset);
+        $cdrData = $historyResult['data'];
+        $parsedOffset = $historyResult['newOffset'];
         $totalRows = array_sum(array_map(fn($cdr) => count($cdr['rows'] ?? []), $cdrData));
-        $this->logger->writeInfo("New max offset $this->cdrOffset. linkedIds:" . count($cdrData) . ", totalRows:$totalRows");
+        $this->logger->writeInfo("Parsed offset $parsedOffset. linkedIds:" . count($cdrData) . ", totalRows:$totalRows");
 
         $arrKeys = (new CallHistory())->toArray();
         unset($arrKeys['id']);
@@ -467,7 +469,10 @@ class ConnectorDB extends WorkerBase
         $this->updateRecallTransferStates($rowsToSave);
         $recallTransferTime = microtime(true) - $start;
 
-        // Обновляем offset: ищем максимальный последовательный id начиная от текущего offset
+        // Применяем offset от getHistoryData после успешного сохранения
+        $this->cdrOffset = $parsedOffset;
+
+        // Уточняем offset: ищем максимальный последовательный id начиная от oldOffset
         if (!empty($allRowIds)) {
             $allRowIds = array_unique($allRowIds);
             sort($allRowIds);
@@ -476,18 +481,20 @@ class ConnectorDB extends WorkerBase
             // Создаём set для быстрой проверки O(1)
             $idSet = array_flip($allRowIds);
 
-            // Ищем максимальный последовательный id начиная от cdrOffset+1
-            $sequentialMaxId = $this->cdrOffset;
-            $nextExpected = $this->cdrOffset + 1;
+            // Ищем максимальный последовательный id начиная от oldOffset+1
+            $sequentialMaxId = $oldOffset;
+            $nextExpected = $oldOffset + 1;
 
             while (isset($idSet[$nextExpected])) {
                 $sequentialMaxId = $nextExpected;
                 $nextExpected++;
             }
 
-            if ($sequentialMaxId > $this->cdrOffset) {
-                $this->logger->writeInfo("Adjusting offset from {$this->cdrOffset} to $sequentialMaxId (sequential from offset)");
-                $this->cdrOffset = $sequentialMaxId;
+            if ($sequentialMaxId > $oldOffset) {
+                // Берём максимум между sequential и parsed offset
+                $newOffset = max($sequentialMaxId, $this->cdrOffset);
+                $this->logger->writeInfo("Adjusting offset from {$this->cdrOffset} to $newOffset (sequential from $oldOffset to $sequentialMaxId)");
+                $this->cdrOffset = $newOffset;
             } else {
                 // Нет последовательных id от текущего offset — разрыв
                 $minId = min($allRowIds);
@@ -746,6 +753,7 @@ class ConnectorDB extends WorkerBase
         }
 
         // Batch INSERT для новых записей
+        $insertedCount = 0;
         if (!empty($newRecords)) {
             if (!$this->di->has(CdrDbProvider::SERVICE_NAME)) {
                 $this->di->register(new CdrDbProvider());
@@ -768,7 +776,12 @@ class ConnectorDB extends WorkerBase
                 }
 
                 $sql = "INSERT INTO cdr_general ($columnsStr) VALUES " . implode(', ', $allPlaceholders);
-                $db->execute($sql, $allValues);
+                try {
+                    $db->execute($sql, $allValues);
+                    $insertedCount += count($chunk);
+                } catch (Throwable $e) {
+                    $this->logger->writeError("Batch INSERT failed (chunk of " . count($chunk) . "): " . $e->getMessage());
+                }
             }
         }
 
@@ -776,12 +789,16 @@ class ConnectorDB extends WorkerBase
         $actualUpdates = 0;
         foreach ($existingRecords as $record) {
             if ($record->hasChanged()) {
-                $record->save();
-                $actualUpdates++;
+                try {
+                    $record->save();
+                    $actualUpdates++;
+                } catch (Throwable $e) {
+                    $this->logger->writeError("UPDATE failed for UNIQUEID={$record->UNIQUEID}: " . $e->getMessage());
+                }
             }
         }
 
-        return [count($newRecords), $actualUpdates];
+        return [$insertedCount, $actualUpdates];
     }
 
     public function getCdr(array $filter = []): array

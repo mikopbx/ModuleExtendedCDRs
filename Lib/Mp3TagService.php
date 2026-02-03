@@ -21,7 +21,6 @@ namespace Modules\ModuleExtendedCDRs\Lib;
 
 use MikoPBX\Core\System\Util;
 use Modules\ModuleExtendedCDRs\Models\CallHistory;
-use getid3_writetags;
 
 class Mp3TagService
 {
@@ -69,16 +68,41 @@ class Mp3TagService
 
         $this->initPaths();
 
-        $tagWriter = new getid3_writetags();
-        $tagWriter->filename          = $data->recordingfile;
+        $formattedDate  = date('Y-m-d-H_i', strtotime($data->start));
+        $uid            = str_replace('mikopbx-', '', $data->linkedid);
+        $prettyFilename = "$uid-$formattedDate-$data->src_num-$data->dst_num";
+
+        $ext = strtolower(pathinfo($data->recordingfile, PATHINFO_EXTENSION));
+        if ($ext === 'mp3') {
+            $this->writeId3Tags($data->recordingfile, $prettyFilename, $data->start);
+        }
+
+        $this->createPrettyLink($data->recordingfile, $prettyFilename, $ext);
+    }
+
+    /**
+     * Записывает ID3-теги в MP3-файл.
+     * @param string $filename
+     * @param string $prettyFilename
+     * @param string $start
+     * @return void
+     */
+    private function writeId3Tags(string $filename, string $prettyFilename, string $start): void
+    {
+        // getid3_writetags требует предварительной загрузки основного класса getID3
+        if (!class_exists('getID3', false)) {
+            $getid3Path = dirname(__DIR__) . '/vendor/james-heinrich/getid3/getid3/getid3.php';
+            if (file_exists($getid3Path)) {
+                require_once $getid3Path;
+            }
+        }
+
+        $tagWriter = new \getid3_writetags();
+        $tagWriter->filename          = $filename;
         $tagWriter->tagformats        = ['id3v2.3'];
         $tagWriter->overwrite_tags    = true;
         $tagWriter->tag_encoding      = 'UTF-8';
         $tagWriter->remove_other_tags = false;
-
-        $formattedDate  = date('Y-m-d-H_i', strtotime($data->start));
-        $uid            = str_replace('mikopbx-', '', $data->linkedid);
-        $prettyFilename = "$uid-$formattedDate-$data->src_num-$data->dst_num";
 
         $tagWriter->tag_data = [
             'title'   => [$prettyFilename],
@@ -90,27 +114,26 @@ class Mp3TagService
                     'mime' => 'image/jpeg'
                 ]
             ],
-            'comment' => [md5($prettyFilename . '_' . trim(shell_exec("$this->soxiPath " . escapeshellarg($data->recordingfile)) ?? ''))],
-            'year'    => [date('Y', strtotime($data->start))],
+            'comment' => [md5($prettyFilename . '_' . trim(shell_exec("$this->soxiPath " . escapeshellarg($filename)) ?? ''))],
+            'year'    => [date('Y', strtotime($start))],
         ];
         $tagWriter->WriteTags();
         unset($tagWriter);
-
-        $this->createPrettyLink($data->recordingfile, $prettyFilename);
     }
 
     /**
      * Создаёт symlink с человекочитаемым именем в pretty-monitor.
      * @param string $recordingFile
      * @param string $prettyFilename
+     * @param string $ext
      * @return void
      */
-    private function createPrettyLink(string $recordingFile, string $prettyFilename): void
+    private function createPrettyLink(string $recordingFile, string $prettyFilename, string $ext): void
     {
         $dirLink = str_replace('/monitor/', '/pretty-monitor/', dirname($recordingFile, 2));
         $escapedDir = escapeshellarg($dirLink);
         $escapedSrc = escapeshellarg($recordingFile);
-        $escapedDst = escapeshellarg("$dirLink/$prettyFilename.mp3");
+        $escapedDst = escapeshellarg("$dirLink/$prettyFilename.$ext");
         shell_exec("$this->mkdirPath -p $escapedDir; $this->lnPath -s $escapedSrc $escapedDst > /dev/null 2> /dev/null");
     }
 }
