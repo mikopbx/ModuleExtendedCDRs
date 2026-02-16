@@ -874,6 +874,12 @@ const ModuleExtendedCDRs = {
 			url: `${globalRootUrl}${idUrl}/getState`,
 			method: 'GET',
 			success: function(response) {
+				// Проверяем существование stateData и его свойств
+				if (!response.stateData || typeof response.stateData.lastId === 'undefined' || typeof response.stateData.nowId === 'undefined') {
+					divProgress.hide();
+					return;
+				}
+
 				if(response.stateData.lastId - response.stateData.nowId > 0){
 					divProgress.show();
 				}else{
