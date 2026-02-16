@@ -217,6 +217,7 @@ class GetReport
 
         $recordsFilteredReq = ConnectorDB::invoke('getCountCdr', [$start, $end, $numbers, $additionalNumbers, $additionalFilter, $minBilSec, $ids]);
         $view->recordsFiltered = $recordsFilteredReq['cCalls'] ?? 0;
+        $view->recordsTotal = $recordsFilteredReq['cCalls'] ?? 0;
         $view->recordsInner = $recordsFilteredReq['cINNER'] ?? 0;
         $view->recordsOutgoing = $recordsFilteredReq['cOUTGOING'] ?? 0;
         $view->recordsIncoming = $recordsFilteredReq['cINCOMING'] ?? 0;
@@ -734,6 +735,7 @@ class GetReport
         unset($resultsCdrData);
 
         $resultView->recordsFiltered = count($staffNumbers);
+        $resultView->recordsTotal = count($staffNumbers);
 
         if ($offset !== null) {
             $staffNumbers = array_slice($staffNumbers, $offset);
