@@ -43,7 +43,7 @@ return [
     'repModuleExtendedCDRs_syncState' => 'Progresso do download do histórico de chamadas: {valor} de {total} registros',
     'repModuleExtendedCDRs_outgoingEmployeeCalls_countCalls' => 'Quantidade',
     'repModuleExtendedCDRs_CallDetails' => 'Registro de chamadas',
-    'repModuleExtendedCDRs_OutgoingEmployeeCalls' => 'Funcionários cessantes',
+    'repModuleExtendedCDRs_OutgoingEmployeeCalls' => 'Chamadas de saída de ramais',
     'repModuleExtendedCDRs_Form_titleReportError' => 'O nome não pode estar vazio!',
     'repModuleExtendedCDRs_Form_minBillSecError' => 'O valor mínimo de duração deve estar entre 0 e 1000.',
     'repModuleExtendedCDRs_Form_minBillSec_s' => 'Com.',
