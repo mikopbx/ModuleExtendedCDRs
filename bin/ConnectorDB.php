@@ -35,6 +35,7 @@ use Modules\ModuleExtendedCDRs\Models\CallHistory;
 use Modules\ModuleExtendedCDRs\Models\CallQueuesHistory;
 use Modules\ModuleExtendedCDRs\Models\DailyCallStats;
 use Modules\ModuleExtendedCDRs\Models\ModuleExtendedCDRs;
+use Modules\ModuleExtendedCDRs\Models\OversizedLinkedIds;
 use Phalcon\Db\Enum;
 use DateTime;
 use Throwable;
@@ -51,6 +52,13 @@ class ConnectorDB extends WorkerBase
 
     private int $lastSyncTime = 0;
     private Mp3TagService $mp3TagService;
+
+    /** @var string[] Кэш списка "раздутых" linkedid, исключённых из синхронизации. */
+    private array $oversizedCache = [];
+    /** @var string[] linkedid, добавленные в память при неуспешной записи в БД (session-only). */
+    private array $oversizedPending = [];
+    private int $oversizedCacheTime = 0;
+    private int $oversizedPruneTime = 0;
 
     /**
      * Белый список методов, разрешённых для вызова через onEvents/invoke.
@@ -92,6 +100,7 @@ class ConnectorDB extends WorkerBase
         $this->mp3TagService = new Mp3TagService(dirname(__DIR__));
         $this->logger->writeInfo('Starting...');
         $this->ensureDailyStatsTableExists();
+        $this->ensureOversizedTableExists();
         $this->updateSettings();
         $beanstalk      = new BeanstalkClient(self::class);
         $beanstalk->subscribe(self::class, [$this, 'onEvents']);
@@ -99,6 +108,7 @@ class ConnectorDB extends WorkerBase
         while ($this->needRestart === false) {
             try {
                 $this->syncCdrData();
+                $this->pruneOversizedLinkedIds();
             }catch (Throwable $exception){
                 $this->logger->writeError("Throwable:".$exception->getMessage(). ' Line: '.$exception->getLine());
             }
@@ -296,7 +306,7 @@ class ConnectorDB extends WorkerBase
         $oldOffset = $this->cdrOffset;
         $this->logger->writeInfo('...Start sync with offset...'. $oldOffset);
 
-        $historyResult = HistoryParser::getHistoryData($this->cdrOffset);
+        $historyResult = HistoryParser::getHistoryData($this->cdrOffset, $this->loadOversizedLinkedIds());
         $cdrData = $historyResult['data'];
         $parsedOffset = $historyResult['newOffset'];
         $totalRows = array_sum(array_map(fn($cdr) => count($cdr['rows'] ?? []), $cdrData));
@@ -312,6 +322,7 @@ class ConnectorDB extends WorkerBase
         $incomingLinkedIds = [];
         $normalLinkedIds = [];
         $heavyLinkedIds = [];
+        $newOversizedLinkedIds = []; // linkedid, достигшие потолка 5000 строк (зависшие каналы)
         $normalUniqueIds = [];
         $allRowIds = []; // Все id для расчёта offset
 
@@ -320,6 +331,11 @@ class ConnectorDB extends WorkerBase
                 $incomingLinkedIds[] = $linkedId;
             }
             $rowCount = count($cdr['rows'] ?? []);
+            if ($rowCount >= HistoryParser::MAX_LINKEDID_ROWS) {
+                // Раздутый linkedid: сохраним его первые 5000 строк этим циклом,
+                // занесём в служебную таблицу и исключим из последующих выборок.
+                $newOversizedLinkedIds[] = $linkedId;
+            }
             if ($rowCount > 100) {
                 $heavyLinkedIds[] = $linkedId;
             } else {
@@ -340,6 +356,11 @@ class ConnectorDB extends WorkerBase
         $heavyLinkedIdsMap = array_flip($heavyLinkedIds);
         if (!empty($heavyLinkedIds)) {
             $this->logger->writeInfo("Heavy linkedIds (>100 rows): " . count($heavyLinkedIds));
+        }
+
+        // Фиксируем "раздутые" linkedid, чтобы исключить их из следующих выборок.
+        if (!empty($newOversizedLinkedIds)) {
+            $this->persistOversizedLinkedIds($newOversizedLinkedIds, $cdrData);
         }
 
         // Batch загрузка CallQueuesHistory (1 запрос вместо N)
@@ -468,6 +489,17 @@ class ConnectorDB extends WorkerBase
         $start = microtime(true);
         $this->updateRecallTransferStates($rowsToSave);
         $recallTransferTime = microtime(true) - $start;
+
+        // Если в этом цикле обнаружены новые "раздутые" linkedid — удерживаем offset.
+        // Потолок в 5000 строк был съеден зависшим звонком, поэтому обычные linkedid
+        // могли быть вытеснены из выборки. На следующем цикле запрос уже исключит
+        // oversized и продвинется без потери обычных звонков.
+        if (!empty($newOversizedLinkedIds)) {
+            $this->cdrOffset = $oldOffset;
+            $this->logger->writeInfo("Holding offset at $oldOffset: detected " . count($newOversizedLinkedIds) . " new oversized linkedId(s)");
+            $this->logger->writeInfo("End sync with offset {$this->cdrOffset} (+0)");
+            return;
+        }
 
         // Применяем offset от getHistoryData после успешного сохранения
         $this->cdrOffset = $parsedOffset;
@@ -944,6 +976,132 @@ class ConnectorDB extends WorkerBase
         )";
         $db->execute($sql);
         $this->logger->writeInfo('Ensured daily_call_stats table exists');
+    }
+
+    /**
+     * Создаёт служебную таблицу oversized_linkedids если она не существует.
+     * @return void
+     */
+    private function ensureOversizedTableExists(): void
+    {
+        OversizedLinkedIds::ensureTableExists();
+        $this->logger->writeInfo('Ensured oversized_linkedids table exists');
+    }
+
+    /**
+     * Возвращает список "раздутых" linkedid (кэш обновляется не чаще раза в минуту).
+     * @return string[]
+     */
+    private function loadOversizedLinkedIds(): array
+    {
+        if (time() - $this->oversizedCacheTime > 60) {
+            try {
+                $rows = OversizedLinkedIds::find(['columns' => 'linkedid']);
+                $dbList = array_column($rows->toArray(), 'linkedid');
+                // Кэш = записи из БД ∪ session-only (не потерянные при неуспешном save()).
+                $this->oversizedCache = array_values(array_unique(array_merge($dbList, $this->oversizedPending)));
+                // Стамп времени только при успешной загрузке — иначе повторим на след. цикле.
+                $this->oversizedCacheTime = time();
+            } catch (Throwable $e) {
+                $this->logger->writeError("loadOversizedLinkedIds: " . $e->getMessage());
+            }
+        }
+        return $this->oversizedCache;
+    }
+
+    /**
+     * Фиксирует новые "раздутые" linkedid в служебной таблице и в кэше.
+     * @param string[] $linkedIds
+     * @param array    $cdrData Данные текущей выборки (для rowCount/maxId).
+     * @return void
+     */
+    private function persistOversizedLinkedIds(array $linkedIds, array $cdrData): void
+    {
+        foreach ($linkedIds as $linkedId) {
+            if (in_array($linkedId, $this->oversizedCache, true)) {
+                continue;
+            }
+            $rows = $cdrData[$linkedId]['rows'] ?? [];
+            $rowCount = count($rows);
+            $maxId = 0;
+            foreach ($rows as $row) {
+                $maxId = max($maxId, (int)($row['id'] ?? 0));
+            }
+
+            $record = new OversizedLinkedIds();
+            $record->linkedid   = $linkedId;
+            $record->rowCount   = $rowCount;
+            $record->maxId      = $maxId;
+            $record->detectedAt = date('Y-m-d H:i:s');
+            $saved = $record->save();
+
+            // В любом случае исключаем linkedid в пределах текущей сессии воркера,
+            // иначе сбой save() (блокировка БД, UNIQUE-коллизия) приведёт к бесконечному
+            // повторному детекту и вечному удержанию offset.
+            if (!in_array($linkedId, $this->oversizedCache, true)) {
+                $this->oversizedCache[] = $linkedId;
+            }
+            if ($saved) {
+                // Успешно записан — убираем из session-only набора, если был там.
+                $this->oversizedPending = array_values(array_diff($this->oversizedPending, [$linkedId]));
+                $this->logger->writeInfo("Oversized linkedId excluded from sync: $linkedId (rows=$rowCount, maxId=$maxId)");
+            } else {
+                // Запись не удалась — держим в session-only наборе, чтобы кэш не потерял
+                // его при обновлении из БД (иначе трэшинг offset). Повторная запись —
+                // после перезапуска воркера через повторный детект.
+                if (!in_array($linkedId, $this->oversizedPending, true)) {
+                    $this->oversizedPending[] = $linkedId;
+                }
+                $this->logger->writeError("Failed to persist oversized linkedId (excluded in-memory only): $linkedId (" . implode('; ', $record->getMessages()) . ")");
+            }
+        }
+    }
+
+    /**
+     * Периодически (не чаще раза в час) удаляет из списка исключений те linkedid,
+     * у которых больше нет CDR-строк с id > offset — т.е. завершённые звонки,
+     * оставшиеся позади текущей позиции синхронизации. Это ограничивает размер
+     * списка NOT IN активными "зависшими" звонками и не даёт ему расти бесконечно.
+     * @return void
+     */
+    private function pruneOversizedLinkedIds(): void
+    {
+        if (time() - $this->oversizedPruneTime < 3600) {
+            return;
+        }
+        $this->oversizedPruneTime = time();
+
+        $stored = array_column(OversizedLinkedIds::find(['columns' => 'linkedid'])->toArray(), 'linkedid');
+        if (empty($stored)) {
+            return;
+        }
+
+        // Активные — те, у кого ещё есть строки за текущим offset.
+        // null означает сбой запроса к ядру (Beanstalk timeout) — в этом случае НЕ удаляем
+        // ничего, чтобы не разкарантинить активные зависшие звонки и не вызвать повторный стопор.
+        // Пустой массив [] означает, что запрос выполнился и активных действительно нет —
+        // тогда все устаревшие записи можно удалить.
+        $active = HistoryParser::getActiveLinkedIds($stored, $this->cdrOffset);
+        if ($active === null) {
+            return;
+        }
+        $toDelete = array_diff($stored, $active);
+        if (empty($toDelete)) {
+            return;
+        }
+
+        $records = OversizedLinkedIds::find([
+            'linkedid IN ({ids:array})',
+            'bind' => ['ids' => array_values($toDelete)],
+        ]);
+        foreach ($records as $record) {
+            $record->delete();
+        }
+
+        // Кэш = активные из БД ∪ session-only записи (последние в БД отсутствуют).
+        $this->oversizedCache = array_values(array_unique(array_merge($active, $this->oversizedPending)));
+        $this->oversizedCacheTime = time();
+        $this->logger->writeInfo("Pruned oversized linkedIds: removed " . count($toDelete) . ", kept " . count($active));
     }
 
     /**

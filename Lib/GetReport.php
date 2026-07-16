@@ -217,6 +217,7 @@ class GetReport
 
         $recordsFilteredReq = ConnectorDB::invoke('getCountCdr', [$start, $end, $numbers, $additionalNumbers, $additionalFilter, $minBilSec, $ids]);
         $view->recordsFiltered = $recordsFilteredReq['cCalls'] ?? 0;
+        $view->recordsTotal = $recordsFilteredReq['cCalls'] ?? 0;
         $view->recordsInner = $recordsFilteredReq['cINNER'] ?? 0;
         $view->recordsOutgoing = $recordsFilteredReq['cOUTGOING'] ?? 0;
         $view->recordsIncoming = $recordsFilteredReq['cINCOMING'] ?? 0;
@@ -302,8 +303,24 @@ class GetReport
 
         $providers = Sip::find("type='friend'");
         $providerName = [];
+        $providerNameByLogin = [];
         foreach ($providers as $provider) {
             $providerName[$provider->uniqid] = $provider->description;
+            // Несколько учёток одного провайдера приходят на одну линию и различаются только по DID.
+            // Строим карту "логин провайдера (username) => название" для приоритетного сопоставления по DID.
+            $login = (string)$provider->username;
+            if ($login === '') {
+                continue;
+            }
+            if (array_key_exists($login, $providerNameByLogin)) {
+                // Один и тот же логин у нескольких учёток — сопоставление по DID неоднозначно,
+                // отключаем его для этого логина (null), чтобы не показать чужого провайдера.
+                if ($providerNameByLogin[$login] !== $provider->description) {
+                    $providerNameByLogin[$login] = null;
+                }
+            } else {
+                $providerNameByLogin[$login] = $provider->description;
+            }
         }
         unset($providers);
 
@@ -335,6 +352,9 @@ class GetReport
             CallHistory::CALL_TYPE_MISSED => Util::translate('repModuleExtendedCDRs_cdr_CALL_TYPE_MISSED', false),
         ];
 
+        // Запоминаем linkedid, у которых имя линии уже определено по DID, чтобы поздние плечи его не затирали.
+        $lineFixedByDid = [];
+
         foreach ($selectedRecords as $arrRecord) {
             $record = (object)$arrRecord;
             if (!array_key_exists($record->linkedid, $arrCdr)) {
@@ -351,10 +371,27 @@ class GetReport
             $linkedRecord->typeCallDesc = $typeCallNames[$record->typeCall];
             $linkedRecord->waitTime = intval($record->waitTime);
 
-            $newLine = $providerName[$record->line] ?? $record->line;
-            if(!empty($newLine)){
-                $linkedRecord->line = $providerName[$record->line] ?? $record->line;
-                $linkedRecord->lineId = $record->line;
+            // Приоритет: если DID входящего звонка совпадает с логином (username) учётки провайдера —
+            // показываем именно её. Так различаются несколько учёток одного провайдера на одной линии
+            // (ограничение Asterisk: плечи приходят на один peer и отличаются только по DID).
+            $didName = '';
+            if ($record->typeCall === CallHistory::CALL_TYPE_INCOMING
+                && !empty($record->did)
+                && !empty($providerNameByLogin[$record->did])) {
+                $didName = $providerNameByLogin[$record->did];
+            }
+            if ($didName !== '') {
+                $linkedRecord->line = $didName;
+                if (!empty($record->line)) {
+                    $linkedRecord->lineId = $record->line;
+                }
+                $lineFixedByDid[$record->linkedid] = true;
+            } elseif (empty($lineFixedByDid[$record->linkedid])) {
+                $newLine = $providerName[$record->line] ?? $record->line;
+                if(!empty($newLine)){
+                    $linkedRecord->line = $newLine;
+                    $linkedRecord->lineId = $record->line;
+                }
             }
             $linkedRecord->disposition = $linkedRecord->disposition !== 'ANSWERED' ? $disposition : 'ANSWERED';
             $linkedRecord->start = $linkedRecord->start === '' ? $record->start : $linkedRecord->start;
@@ -734,6 +771,7 @@ class GetReport
         unset($resultsCdrData);
 
         $resultView->recordsFiltered = count($staffNumbers);
+        $resultView->recordsTotal = count($staffNumbers);
 
         if ($offset !== null) {
             $staffNumbers = array_slice($staffNumbers, $offset);

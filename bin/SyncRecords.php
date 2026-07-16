@@ -31,6 +31,8 @@ use Exception;
 use Modules\ModuleExtendedCDRs\Models\ExportResults;
 use Modules\ModuleExtendedCDRs\Models\ExportRules;
 use Modules\ModuleExtendedCDRs\Models\ModuleExtendedCDRs;
+use Modules\ModuleExtendedCDRs\Models\OversizedLinkedIds;
+use Throwable;
 use GuzzleHttp\Client;
 use GuzzleHttp\HandlerStack;
 
@@ -47,6 +49,10 @@ class SyncRecords extends WorkerBase
     private array $rulesData = [];
     private array $rulesHeaders = [];
 
+    /** @var string[] Кэш "раздутых" linkedid (заполняется воркером ConnectorDB). */
+    private array $oversizedCache = [];
+    private int $oversizedCacheTime = 0;
+
     /**
      * Старт работы листнера.
      *
@@ -57,6 +63,7 @@ class SyncRecords extends WorkerBase
         $this->logger   = new Logger('ConnectorDB', 'ModuleExtendedCDRs');
         $this->logger->writeInfo('Starting...');
 
+        OversizedLinkedIds::ensureTableExists();
         $this->updateSettings();
         $beanstalk      = new BeanstalkClient(self::class);
         $beanstalk->subscribe(self::class, [$this, 'onEvents']);
@@ -221,7 +228,7 @@ class SyncRecords extends WorkerBase
         $oldOffset = max(HistoryParser::getMinCdrId(), $oldOffset);
         $this->logger->writeInfo('New offset...'. $oldOffset);
 
-        $historyResult = HistoryParser::getHistoryData($this->cdrOffset);
+        $historyResult = HistoryParser::getHistoryData($this->cdrOffset, $this->loadOversizedLinkedIds());
         $cdrData = $historyResult['data'];
 
 
@@ -256,6 +263,26 @@ class SyncRecords extends WorkerBase
         if($oldOffset !== $this->cdrOffset){
             $this->updateSettings($this->cdrOffset);
         }
+    }
+
+    /**
+     * Возвращает список "раздутых" linkedid для исключения из выборки
+     * (таблицу oversized_linkedids наполняет воркер ConnectorDB).
+     * Кэш обновляется не чаще раза в минуту.
+     * @return string[]
+     */
+    private function loadOversizedLinkedIds(): array
+    {
+        if (time() - $this->oversizedCacheTime > 60) {
+            try {
+                $rows = OversizedLinkedIds::find(['columns' => 'linkedid']);
+                $this->oversizedCache = array_column($rows->toArray(), 'linkedid');
+            } catch (Throwable $e) {
+                $this->logger->writeError("loadOversizedLinkedIds: " . $e->getMessage());
+            }
+            $this->oversizedCacheTime = time();
+        }
+        return $this->oversizedCache;
     }
 
     /**

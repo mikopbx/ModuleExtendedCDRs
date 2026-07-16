@@ -32,6 +32,15 @@ use Modules\ModuleExtendedCDRs\Models\CallHistory;
 class HistoryParser
 {
     public const LIMIT_CDR = 100;
+
+    /**
+     * Потолок числа строк на один linkedid.
+     * ВАЖНО: должен совпадать с MikoPBX\...\WorkerCallEvents\SelectCDR::MAX_QUERY_LIMIT (5000).
+     * Если ядро изменит лимит выборки — синхронизировать это значение.
+     * linkedid, достигший этого числа строк, считается "раздутым" (зависший канал)
+     * и исключается из синхронизации, см. Models\OversizedLinkedIds.
+     */
+    public const MAX_LINKEDID_ROWS = 5000;
     public const CDR_SYNC_PROGRESS_KEY = "cdrSyncProgress";
 
     /**
@@ -39,8 +48,9 @@ class HistoryParser
      * @param array $filter  An array of filter parameters.
      * @return array An array of CDR data.
      */
-    public static function getCdr(array $filter = []): array
+    public static function getCdr(array $filter = [], ?bool &$requestOk = null): array
     {
+        $requestOk = false;
         if (empty($filter)) {
             $filter = [
                 'work_completed<>1 AND endtime<>""',
@@ -61,6 +71,7 @@ class HistoryParser
         try {
             [$result, $message] = $client->sendRequest(json_encode($filter), 30);
             if ($result!==false){
+                $requestOk = true;
                 $filename = json_decode($message, true, 512, JSON_THROW_ON_ERROR);
             }
         } catch (\Throwable $e) {
@@ -105,7 +116,7 @@ class HistoryParser
      * @param int $offset
      * @return void
      */
-    public static function getHistoryData(int $offset = 1):array
+    public static function getHistoryData(int $offset = 1, array $excludeLinkedIds = []):array
     {
         $filter = [
             "type = :extType:",
@@ -136,6 +147,13 @@ class HistoryParser
             'limit'   => self::LIMIT_CDR,
             'add_pack_query' => $add_query,
         ];
+
+        // Исключаем "раздутые" linkedid (зависшие каналы >= MAX_LINKEDID_ROWS строк),
+        // иначе они съедают потолок выборки ядра (5000 строк) и блокируют offset.
+        if (!empty($excludeLinkedIds)) {
+            $filter[0] .= ' AND linkedid NOT IN ({exclude:array})';
+            $filter['bind']['exclude'] = array_values($excludeLinkedIds);
+        }
 
         $cdrData = self::getCdr($filter);
         $resultRows = [];
@@ -268,6 +286,42 @@ class HistoryParser
         }
 
         return ['data' => $resultRows, 'newOffset' => $calculatedOffset ?? $offset];
+    }
+
+    /**
+     * Из переданного списка linkedid возвращает те, у которых ещё есть CDR-строки
+     * с id больше offset (т.е. звонок всё ещё активен/не пройден синхронизацией).
+     * Используется для очистки списка "раздутых" linkedid: завершённые звонки,
+     * оставшиеся позади offset, можно удалить из исключений.
+     *
+     * @param string[] $linkedIds
+     * @param int      $offset
+     * @return string[]|null Список активных linkedid, либо null если запрос к ядру не выполнился.
+     */
+    public static function getActiveLinkedIds(array $linkedIds, int $offset):?array
+    {
+        if (empty($linkedIds)) {
+            return [];
+        }
+        $filter = [
+            'id>:id: AND linkedid IN ({linkedid:array})',
+            'bind'    => [
+                'id'       => $offset,
+                'linkedid' => array_values($linkedIds),
+            ],
+            'order'   => 'linkedid',
+            'group'   => 'linkedid',
+            'columns' => 'linkedid',
+            'limit'   => count($linkedIds),
+        ];
+        $requestOk = false;
+        $rows = self::getCdr($filter, $requestOk);
+        if (!$requestOk) {
+            // Запрос к ядру не выполнился — сигнализируем вызывающему, чтобы он
+            // не принял пустой результат за "нет активных" и не удалил исключения.
+            return null;
+        }
+        return array_values(array_filter(array_column($rows, 'linkedid')));
     }
 
     /**
