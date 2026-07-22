@@ -116,7 +116,11 @@ class HistoryParser
      * @param int $offset
      * @return void
      */
-    public static function getHistoryData(int $offset = 1, array $excludeLinkedIds = []):array
+    public static function getHistoryData(
+        int $offset = 1,
+        array $excludeLinkedIds = [],
+        int $linkedIdLimit = self::LIMIT_CDR
+    ):array
     {
         $filter = [
             "type = :extType:",
@@ -144,7 +148,7 @@ class HistoryParser
             'order'   => 'id ASC',
             'group'   => 'linkedid',
             'columns' => 'linkedid',
-            'limit'   => self::LIMIT_CDR,
+            'limit'   => $linkedIdLimit,
             'add_pack_query' => $add_query,
         ];
 
@@ -155,7 +159,17 @@ class HistoryParser
             $filter['bind']['exclude'] = array_values($excludeLinkedIds);
         }
 
-        $cdrData = self::getCdr($filter);
+        $requestOk = false;
+        $cdrData = self::getCdr($filter, $requestOk);
+        if (!$requestOk) {
+            return HistoryBatchResult::make(
+                $offset,
+                [],
+                false,
+                $linkedIdLimit,
+                'source_request_failed'
+            );
+        }
         $resultRows = [];
         if(count($cdrData)>0){
             $queues = self::getQueues();
@@ -268,7 +282,7 @@ class HistoryParser
                 unset($firstQueue);
                 $resultRows[$cdr['linkedid']]['rows'][] = $cdr;
             }
-            $calculatedOffset = min($offset + self::LIMIT_CDR, $newOffset);
+            $calculatedOffset = min($offset + $linkedIdLimit, $newOffset);
             $calculatedOffset = max($calculatedOffset, $minNewOffset);
         }
 
@@ -285,7 +299,14 @@ class HistoryParser
             }
         }
 
-        return ['data' => $resultRows, 'newOffset' => $calculatedOffset ?? $offset];
+        return HistoryBatchResult::make(
+            $offset,
+            $resultRows,
+            true,
+            $linkedIdLimit,
+            '',
+            $calculatedOffset ?? $offset
+        );
     }
 
     /**
