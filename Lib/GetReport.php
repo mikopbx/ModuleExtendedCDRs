@@ -302,26 +302,15 @@ class GetReport
         ];
 
         $providers = Sip::find("type='friend'");
-        $providerName = [];
-        $providerNameByLogin = [];
+        $providerRows = [];
         foreach ($providers as $provider) {
-            $providerName[$provider->uniqid] = $provider->description;
-            // Несколько учёток одного провайдера приходят на одну линию и различаются только по DID.
-            // Строим карту "логин провайдера (username) => название" для приоритетного сопоставления по DID.
-            $login = (string)$provider->username;
-            if ($login === '') {
-                continue;
-            }
-            if (array_key_exists($login, $providerNameByLogin)) {
-                // Один и тот же логин у нескольких учёток — сопоставление по DID неоднозначно,
-                // отключаем его для этого логина (null), чтобы не показать чужого провайдера.
-                if ($providerNameByLogin[$login] !== $provider->description) {
-                    $providerNameByLogin[$login] = null;
-                }
-            } else {
-                $providerNameByLogin[$login] = $provider->description;
-            }
+            $providerRows[] = [
+                'uniqid' => $provider->uniqid,
+                'username' => $provider->username,
+                'description' => $provider->description,
+            ];
         }
+        $trunkResolver = new TrunkResolver($providerRows);
         unset($providers);
 
         $statsCall = [
@@ -374,23 +363,18 @@ class GetReport
             // Приоритет: если DID входящего звонка совпадает с логином (username) учётки провайдера —
             // показываем именно её. Так различаются несколько учёток одного провайдера на одной линии
             // (ограничение Asterisk: плечи приходят на один peer и отличаются только по DID).
-            $didName = '';
-            if ($record->typeCall === CallHistory::CALL_TYPE_INCOMING
-                && !empty($record->did)
-                && !empty($providerNameByLogin[$record->did])) {
-                $didName = $providerNameByLogin[$record->did];
-            }
-            if ($didName !== '') {
-                $linkedRecord->line = $didName;
-                if (!empty($record->line)) {
-                    $linkedRecord->lineId = $record->line;
-                }
+            $resolution = $trunkResolver->resolve(
+                ['line' => $record->line, 'did' => $record->did],
+                $record->typeCall
+            );
+            if ($resolution['status'] === 'resolved' && $resolution['source'] === 'did_username') {
+                $linkedRecord->line = $resolution['name'];
+                $linkedRecord->lineId = $resolution['id'];
                 $lineFixedByDid[$record->linkedid] = true;
             } elseif (empty($lineFixedByDid[$record->linkedid])) {
-                $newLine = $providerName[$record->line] ?? $record->line;
-                if(!empty($newLine)){
-                    $linkedRecord->line = $newLine;
-                    $linkedRecord->lineId = $record->line;
+                if ($resolution['name'] !== '') {
+                    $linkedRecord->line = $resolution['name'];
+                    $linkedRecord->lineId = $resolution['id'];
                 }
             }
             $linkedRecord->disposition = $linkedRecord->disposition !== 'ANSWERED' ? $disposition : 'ANSWERED';
