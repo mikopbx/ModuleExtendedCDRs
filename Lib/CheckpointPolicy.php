@@ -14,19 +14,8 @@ final class CheckpointPolicy
             return $oldOffset;
         }
 
-        $parsedOffset = max($oldOffset, (int)$batch['parsedOffset']);
-        $ids = array_values(array_unique(array_map('intval', $batch['rowIds'] ?? [])));
-        sort($ids);
-        if (empty($ids) || $ids[0] > $oldOffset + 1) {
-            return $parsedOffset;
-        }
-
-        $set = array_flip($ids);
-        $contiguous = $oldOffset;
-        while (isset($set[$contiguous + 1])) {
-            $contiguous++;
-        }
-
-        return min($parsedOffset, $contiguous);
+        // SelectCDR intentionally filters and groups source rows, so gaps in raw IDs
+        // are normal. The parser checkpoint is the authoritative safe boundary.
+        return max($oldOffset, (int)$batch['parsedOffset']);
     }
 }

@@ -547,15 +547,6 @@ class ConnectorDB extends WorkerBase
         "Timing");
         if($oldOffset !== $this->cdrOffset){
             $this->logger->writeInfo("Update progress, offset $oldOffset to new value $this->cdrOffset ");
-            $lastCdrData = $sourceState['data'];
-            if(!empty($lastCdrData)){
-                $tmpCdrData = [
-                    'lastId'    => intval($lastCdrData['id']),
-                    'lastDate'  => $lastCdrData['start'],
-                    'nowId'     => $this->cdrOffset
-                ];
-                CacheManager::setCacheData(HistoryParser::CDR_SYNC_PROGRESS_KEY, $tmpCdrData);
-            }
             $this->updateSettings($this->cdrOffset);
         }
         $policy = SyncPolicy::decide(
