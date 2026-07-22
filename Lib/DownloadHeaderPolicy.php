@@ -8,7 +8,10 @@ final class DownloadHeaderPolicy
 {
     public static function attachment(string $filename): string
     {
-        $clean = str_replace(["\r", "\n", '"', "\0"], '', basename($filename));
+        $normalized = str_replace('\\', '/', $filename);
+        $separator = strrpos($normalized, '/');
+        $basename = $separator === false ? $normalized : substr($normalized, $separator + 1);
+        $clean = str_replace(["\r", "\n", '"', "\0"], '', $basename);
         if ($clean === '') {
             $clean = 'download';
         }
