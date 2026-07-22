@@ -29,6 +29,7 @@ use Modules\ModuleExtendedCDRs\Lib\Logger;
 use Modules\ModuleExtendedCDRs\Lib\Mp3TagService;
 use Modules\ModuleExtendedCDRs\Lib\CdrQueryBuilder;
 use Modules\ModuleExtendedCDRs\Lib\CheckpointPolicy;
+use Modules\ModuleExtendedCDRs\Lib\BatchPersistenceResult;
 use Modules\ModuleExtendedCDRs\Lib\SyncPolicy;
 use Exception;
 use Modules\ModuleExtendedCDRs\Lib\MikoPBXVersion;
@@ -512,7 +513,9 @@ class ConnectorDB extends WorkerBase
 
         // Batch save через raw SQL
         $start = microtime(true);
-        [$insertCount, $updateCount] = $this->batchSaveCallHistory($rowsToSave, $arrKeys);
+        $persistenceResult = $this->batchSaveCallHistory($rowsToSave, $arrKeys);
+        $insertCount = $persistenceResult['inserted'];
+        $updateCount = $persistenceResult['updated'];
         $CallHistorySaveTime = microtime(true) - $start;
         $this->logger->writeInfo("BatchSave: insert=$insertCount, update=$updateCount");
 
@@ -789,12 +792,12 @@ class ConnectorDB extends WorkerBase
      * Batch save CallHistory records
      * @param array $records
      * @param array $columns
-     * @return array [insertCount, updateCount]
+     * @return array{ok:bool,inserted:int,updated:int,errorCategory:string,message:string}
      */
     private function batchSaveCallHistory(array $records, array $columns): array
     {
         if (empty($records)) {
-            return [0, 0];
+            return BatchPersistenceResult::success(0, 0);
         }
 
         $newRecords = [];
@@ -832,12 +835,10 @@ class ConnectorDB extends WorkerBase
                 }
 
                 $sql = "INSERT INTO cdr_general ($columnsStr) VALUES " . implode(', ', $allPlaceholders);
-                try {
-                    $db->execute($sql, $allValues);
-                    $insertedCount += count($chunk);
-                } catch (Throwable $e) {
-                    $this->logger->writeError("Batch INSERT failed (chunk of " . count($chunk) . "): " . $e->getMessage());
+                if ($db->execute($sql, $allValues) !== true) {
+                    throw new \RuntimeException('insert_failed: database adapter rejected batch insert');
                 }
+                $insertedCount += count($chunk);
             }
         }
 
@@ -845,16 +846,16 @@ class ConnectorDB extends WorkerBase
         $actualUpdates = 0;
         foreach ($existingRecords as $record) {
             if ($record->hasChanged()) {
-                try {
-                    $record->save();
-                    $actualUpdates++;
-                } catch (Throwable $e) {
-                    $this->logger->writeError("UPDATE failed for UNIQUEID={$record->UNIQUEID}: " . $e->getMessage());
+                if ($record->save() === false) {
+                    throw new \RuntimeException(
+                        'update_failed: ' . implode('; ', $record->getMessages())
+                    );
                 }
+                $actualUpdates++;
             }
         }
 
-        return [$insertedCount, $actualUpdates];
+        return BatchPersistenceResult::success($insertedCount, $actualUpdates);
     }
 
     public function getCdr(array $filter = []): array
