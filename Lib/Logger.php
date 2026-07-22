@@ -90,7 +90,10 @@ class Logger
     private function init():void
     {
         $adapter       = new Stream($this->logFile);
-        $lineFormatter = new LineFormatter("[%date%][%type%] %message%", "Y-m-d H:i:s");
+        $lineFormatter = new LineFormatter(
+            LogFormatPolicy::template(MikoPBXVersion::isPhalcon5Version()),
+            "Y-m-d H:i:s"
+        );
         $adapter->setFormatter($lineFormatter);
         $loggerClass = MikoPBXVersion::getLoggerClass();
         $this->logger  = new $loggerClass(
@@ -141,16 +144,6 @@ class Logger
      */
     private function getDecodedString($data):string
     {
-        try {
-            $printedData = json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        }catch (\Exception $e){
-            $printedData = print_r($data, true);
-        }
-        if(is_bool($printedData)){
-            $result = '';
-        }else{
-            $result = urldecode($printedData);
-        }
-        return $result;
+        return LogFormatPolicy::encode($data);
     }
 }

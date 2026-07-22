@@ -71,8 +71,9 @@ class HistoryParser
         try {
             [$result, $message] = $client->sendRequest(json_encode($filter), 30);
             if ($result!==false){
-                $requestOk = true;
                 $filename = json_decode($message, true, 512, JSON_THROW_ON_ERROR);
+                // SelectCDR may return a successful empty response without creating a file.
+                $requestOk = empty($filename);
             }
         } catch (\Throwable $e) {
             $filename = '';
@@ -81,6 +82,7 @@ class HistoryParser
         if (is_string($filename) && file_exists($filename)) {
             try {
                 $result_data = json_decode(file_get_contents($filename), true, 512, JSON_THROW_ON_ERROR);
+                $requestOk = is_array($result_data);
             } catch (\Throwable $e) {
                 SystemMessages::sysLogMsg('HistoryParser:SELECT_CDR_TUBE', 'Error parse response.');
             }
@@ -92,6 +94,9 @@ class HistoryParser
                 shell_exec("$findPath -L $downloadCacheDir -samefile  $filename -delete");
             }
             unlink($filename);
+        } elseif (!empty($filename)) {
+            // A non-empty response promised a result file, but it is unavailable.
+            $requestOk = false;
         }
 
         return $result_data;
@@ -116,7 +121,11 @@ class HistoryParser
      * @param int $offset
      * @return void
      */
-    public static function getHistoryData(int $offset = 1, array $excludeLinkedIds = []):array
+    public static function getHistoryData(
+        int $offset = 1,
+        array $excludeLinkedIds = [],
+        int $linkedIdLimit = self::LIMIT_CDR
+    ):array
     {
         $filter = [
             "type = :extType:",
@@ -144,7 +153,7 @@ class HistoryParser
             'order'   => 'id ASC',
             'group'   => 'linkedid',
             'columns' => 'linkedid',
-            'limit'   => self::LIMIT_CDR,
+            'limit'   => $linkedIdLimit,
             'add_pack_query' => $add_query,
         ];
 
@@ -155,7 +164,17 @@ class HistoryParser
             $filter['bind']['exclude'] = array_values($excludeLinkedIds);
         }
 
-        $cdrData = self::getCdr($filter);
+        $requestOk = false;
+        $cdrData = self::getCdr($filter, $requestOk);
+        if (!$requestOk) {
+            return HistoryBatchResult::make(
+                $offset,
+                [],
+                false,
+                $linkedIdLimit,
+                'source_request_failed'
+            );
+        }
         $resultRows = [];
         if(count($cdrData)>0){
             $queues = self::getQueues();
@@ -268,7 +287,7 @@ class HistoryParser
                 unset($firstQueue);
                 $resultRows[$cdr['linkedid']]['rows'][] = $cdr;
             }
-            $calculatedOffset = min($offset + self::LIMIT_CDR, $newOffset);
+            $calculatedOffset = min($offset + $linkedIdLimit, $newOffset);
             $calculatedOffset = max($calculatedOffset, $minNewOffset);
         }
 
@@ -285,7 +304,14 @@ class HistoryParser
             }
         }
 
-        return ['data' => $resultRows, 'newOffset' => $calculatedOffset ?? $offset];
+        return HistoryBatchResult::make(
+            $offset,
+            $resultRows,
+            true,
+            $linkedIdLimit,
+            '',
+            $calculatedOffset ?? $offset
+        );
     }
 
     /**
@@ -330,13 +356,25 @@ class HistoryParser
      */
     public static function getLastCdrData():array
     {
+        $state = self::getLastCdrState();
+        return $state['data'];
+    }
+
+    /**
+     * Returns the last source CDR and an explicit request status.
+     *
+     * @return array{ok:bool,data:array}
+     */
+    public static function getLastCdrState(): array
+    {
         $filter = [
             'columns' => 'id,start',
             'order' => 'id DESC',
             'limit' => 1,
         ];
-        $res = \Modules\ModuleExtendedCDRs\Lib\HistoryParser::getCdr($filter);
-        return $res[0]??[];
+        $requestOk = false;
+        $res = self::getCdr($filter, $requestOk);
+        return ['ok' => $requestOk, 'data' => $res[0] ?? []];
     }
 
     /**
