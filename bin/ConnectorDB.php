@@ -28,6 +28,8 @@ use Modules\ModuleExtendedCDRs\Lib\HistoryParser;
 use Modules\ModuleExtendedCDRs\Lib\Logger;
 use Modules\ModuleExtendedCDRs\Lib\Mp3TagService;
 use Modules\ModuleExtendedCDRs\Lib\CdrQueryBuilder;
+use Modules\ModuleExtendedCDRs\Lib\CheckpointPolicy;
+use Modules\ModuleExtendedCDRs\Lib\SyncPolicy;
 use Exception;
 use Modules\ModuleExtendedCDRs\Lib\MikoPBXVersion;
 use Modules\ModuleExtendedCDRs\Lib\Providers\CdrDbProvider;
@@ -51,6 +53,8 @@ class ConnectorDB extends WorkerBase
     public string $referenceDate = '';
 
     private int $lastSyncTime = 0;
+    private int $nextSyncDelay = SyncPolicy::NORMAL_DELAY_SECONDS;
+    private bool $catchUpMode = false;
     private Mp3TagService $mp3TagService;
 
     /** @var string[] Кэш списка "раздутых" linkedid, исключённых из синхронизации. */
@@ -107,12 +111,13 @@ class ConnectorDB extends WorkerBase
         $beanstalk->subscribe($this->makePingTubeName(self::class), [$this, 'pingCallBack']);
         while ($this->needRestart === false) {
             try {
-                $this->syncCdrData();
+                $this->syncCdrData(true);
                 $this->pruneOversizedLinkedIds();
             }catch (Throwable $exception){
                 $this->logger->writeError("Throwable:".$exception->getMessage(). ' Line: '.$exception->getLine());
+                $this->nextSyncDelay = SyncPolicy::ERROR_DELAY_SECONDS;
             }
-            $beanstalk->wait(10);
+            $beanstalk->wait(max(1, $this->nextSyncDelay));
             $this->logger->rotate();
         }
     }
@@ -306,7 +311,28 @@ class ConnectorDB extends WorkerBase
         $oldOffset = $this->cdrOffset;
         $this->logger->writeInfo('...Start sync with offset...'. $oldOffset);
 
-        $historyResult = HistoryParser::getHistoryData($this->cdrOffset, $this->loadOversizedLinkedIds());
+        $sourceState = HistoryParser::getLastCdrState();
+        $sourceLastId = (int)($sourceState['data']['id'] ?? $oldOffset);
+        $policy = SyncPolicy::decide($oldOffset, $sourceLastId, $sourceState['ok'], false, $this->catchUpMode);
+        $this->nextSyncDelay = $policy['delay'];
+        $this->catchUpMode = $policy['mode'] === SyncPolicy::MODE_CATCH_UP;
+        if (!$sourceState['ok']) {
+            $this->publishSyncState($oldOffset, $sourceLastId, $policy, 'source_last_id_failed');
+            $this->logger->writeError('batch_failed: source_last_id_failed');
+            return;
+        }
+
+        $historyResult = HistoryParser::getHistoryData(
+            $this->cdrOffset,
+            $this->loadOversizedLinkedIds(),
+            $policy['batchLinkedIds']
+        );
+        if (!$historyResult['ok']) {
+            $this->nextSyncDelay = SyncPolicy::ERROR_DELAY_SECONDS;
+            $this->publishSyncState($oldOffset, $sourceLastId, $policy, $historyResult['error']);
+            $this->logger->writeError('batch_failed: ' . $historyResult['error']);
+            return;
+        }
         $cdrData = $historyResult['data'];
         $parsedOffset = $historyResult['newOffset'];
         $totalRows = array_sum(array_map(fn($cdr) => count($cdr['rows'] ?? []), $cdrData));
@@ -501,39 +527,14 @@ class ConnectorDB extends WorkerBase
             return;
         }
 
-        // Применяем offset от getHistoryData после успешного сохранения
-        $this->cdrOffset = $parsedOffset;
-
-        // Уточняем offset: ищем максимальный последовательный id начиная от oldOffset
-        if (!empty($allRowIds)) {
-            $allRowIds = array_unique($allRowIds);
-            sort($allRowIds);
-            $allRowIds = array_values($allRowIds);
-
-            // Создаём set для быстрой проверки O(1)
-            $idSet = array_flip($allRowIds);
-
-            // Ищем максимальный последовательный id начиная от oldOffset+1
-            $sequentialMaxId = $oldOffset;
-            $nextExpected = $oldOffset + 1;
-
-            while (isset($idSet[$nextExpected])) {
-                $sequentialMaxId = $nextExpected;
-                $nextExpected++;
-            }
-
-            if ($sequentialMaxId > $oldOffset) {
-                // Берём максимум между sequential и parsed offset
-                $newOffset = max($sequentialMaxId, $this->cdrOffset);
-                $this->logger->writeInfo("Adjusting offset from {$this->cdrOffset} to $newOffset (sequential from $oldOffset to $sequentialMaxId)");
-                $this->cdrOffset = $newOffset;
-            } else {
-                // Нет последовательных id от текущего offset — разрыв
-                $minId = min($allRowIds);
-                $maxId = max($allRowIds);
-                $this->logger->writeInfo("Gap detected: offset={$this->cdrOffset}, minId=$minId, maxId=$maxId, count=" . count($allRowIds));
-            }
-        }
+        $this->cdrOffset = CheckpointPolicy::nextOffset([
+            'oldOffset' => $oldOffset,
+            'parsedOffset' => $parsedOffset,
+            'requestOk' => true,
+            'saveOk' => true,
+            'newQuarantine' => false,
+            'rowIds' => $allRowIds,
+        ]);
 
         $this->logger->writeInfo([
             'CallHistoryFindTime' => round($CallHistoryFindTime, 4),
@@ -546,7 +547,7 @@ class ConnectorDB extends WorkerBase
         "Timing");
         if($oldOffset !== $this->cdrOffset){
             $this->logger->writeInfo("Update progress, offset $oldOffset to new value $this->cdrOffset ");
-            $lastCdrData = HistoryParser::getLastCdrData();
+            $lastCdrData = $sourceState['data'];
             if(!empty($lastCdrData)){
                 $tmpCdrData = [
                     'lastId'    => intval($lastCdrData['id']),
@@ -557,8 +558,32 @@ class ConnectorDB extends WorkerBase
             }
             $this->updateSettings($this->cdrOffset);
         }
+        $policy = SyncPolicy::decide(
+            $this->cdrOffset,
+            $sourceLastId,
+            true,
+            $historyResult['limitReached'],
+            $this->catchUpMode
+        );
+        $this->nextSyncDelay = $policy['delay'];
+        $this->catchUpMode = $policy['mode'] === SyncPolicy::MODE_CATCH_UP;
+        $this->publishSyncState($this->cdrOffset, $sourceLastId, $policy, '');
         $offsetDelta = $this->cdrOffset - $oldOffset;
         $this->logger->writeInfo("End sync with offset {$this->cdrOffset} (+$offsetDelta)");
+    }
+
+    private function publishSyncState(int $offset, int $sourceLastId, array $policy, string $error): void
+    {
+        CacheManager::setCacheData(HistoryParser::CDR_SYNC_PROGRESS_KEY, [
+            'lastId' => $sourceLastId,
+            'nowId' => $offset,
+            'offset' => $offset,
+            'sourceLastId' => $sourceLastId,
+            'lag' => max(0, $sourceLastId - $offset),
+            'mode' => $policy['mode'],
+            'lastSuccessAt' => $error === '' ? date('c') : '',
+            'lastError' => $error,
+        ]);
     }
 
     /**
@@ -996,7 +1021,10 @@ class ConnectorDB extends WorkerBase
     {
         if (time() - $this->oversizedCacheTime > 60) {
             try {
-                $rows = OversizedLinkedIds::find(['columns' => 'linkedid']);
+                $rows = OversizedLinkedIds::find([
+                    "status IS NULL OR status <> 'resolved'",
+                    'columns' => 'linkedid'
+                ]);
                 $dbList = array_column($rows->toArray(), 'linkedid');
                 // Кэш = записи из БД ∪ session-only (не потерянные при неуспешном save()).
                 $this->oversizedCache = array_values(array_unique(array_merge($dbList, $this->oversizedPending)));
@@ -1023,9 +1051,12 @@ class ConnectorDB extends WorkerBase
             }
             $rows = $cdrData[$linkedId]['rows'] ?? [];
             $rowCount = count($rows);
+            $minId = 0;
             $maxId = 0;
             foreach ($rows as $row) {
-                $maxId = max($maxId, (int)($row['id'] ?? 0));
+                $rowId = (int)($row['id'] ?? 0);
+                $maxId = max($maxId, $rowId);
+                $minId = $minId === 0 ? $rowId : min($minId, $rowId);
             }
 
             $record = new OversizedLinkedIds();
@@ -1033,6 +1064,14 @@ class ConnectorDB extends WorkerBase
             $record->rowCount   = $rowCount;
             $record->maxId      = $maxId;
             $record->detectedAt = date('Y-m-d H:i:s');
+            $record->minId = $minId;
+            $record->maxRangeId = $maxId;
+            $record->reason = 'row_limit';
+            $record->attempts = 0;
+            $record->firstFailureAt = $record->detectedAt;
+            $record->lastFailureAt = $record->detectedAt;
+            $record->nextRetryAt = date('Y-m-d H:i:s', time() + 60);
+            $record->status = 'pending';
             $saved = $record->save();
 
             // В любом случае исключаем linkedid в пределах текущей сессии воркера,

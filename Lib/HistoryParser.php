@@ -71,7 +71,6 @@ class HistoryParser
         try {
             [$result, $message] = $client->sendRequest(json_encode($filter), 30);
             if ($result!==false){
-                $requestOk = true;
                 $filename = json_decode($message, true, 512, JSON_THROW_ON_ERROR);
             }
         } catch (\Throwable $e) {
@@ -81,6 +80,7 @@ class HistoryParser
         if (is_string($filename) && file_exists($filename)) {
             try {
                 $result_data = json_decode(file_get_contents($filename), true, 512, JSON_THROW_ON_ERROR);
+                $requestOk = is_array($result_data);
             } catch (\Throwable $e) {
                 SystemMessages::sysLogMsg('HistoryParser:SELECT_CDR_TUBE', 'Error parse response.');
             }
@@ -351,13 +351,25 @@ class HistoryParser
      */
     public static function getLastCdrData():array
     {
+        $state = self::getLastCdrState();
+        return $state['data'];
+    }
+
+    /**
+     * Returns the last source CDR and an explicit request status.
+     *
+     * @return array{ok:bool,data:array}
+     */
+    public static function getLastCdrState(): array
+    {
         $filter = [
             'columns' => 'id,start',
             'order' => 'id DESC',
             'limit' => 1,
         ];
-        $res = \Modules\ModuleExtendedCDRs\Lib\HistoryParser::getCdr($filter);
-        return $res[0]??[];
+        $requestOk = false;
+        $res = self::getCdr($filter, $requestOk);
+        return ['ok' => $requestOk, 'data' => $res[0] ?? []];
     }
 
     /**

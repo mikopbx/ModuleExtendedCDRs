@@ -61,6 +61,23 @@ class OversizedLinkedIds extends ModelsBase
      */
     public ?string $detectedAt = '';
 
+    /** @Column(type="integer", nullable=true) */
+    public ?int $minId = 0;
+    /** @Column(type="integer", nullable=true) */
+    public ?int $maxRangeId = 0;
+    /** @Column(type="string", nullable=true) */
+    public ?string $reason = 'row_limit';
+    /** @Column(type="integer", nullable=true) */
+    public ?int $attempts = 0;
+    /** @Column(type="string", nullable=true) */
+    public ?string $firstFailureAt = '';
+    /** @Column(type="string", nullable=true) */
+    public ?string $lastFailureAt = '';
+    /** @Column(type="string", nullable=true) */
+    public ?string $nextRetryAt = '';
+    /** @Column(type="string", nullable=true) */
+    public ?string $status = 'pending';
+
     /**
      * Создаёт служебную таблицу oversized_linkedids, если её ещё нет.
      * Единый источник схемы: вызывается воркерами ConnectorDB и SyncRecords при старте.
@@ -81,8 +98,33 @@ class OversizedLinkedIds extends ModelsBase
             linkedid TEXT NOT NULL UNIQUE,
             rowCount INTEGER DEFAULT 0,
             maxId INTEGER DEFAULT 0,
-            detectedAt TEXT DEFAULT ''
+            detectedAt TEXT DEFAULT '',
+            minId INTEGER DEFAULT 0,
+            maxRangeId INTEGER DEFAULT 0,
+            reason TEXT DEFAULT 'row_limit',
+            attempts INTEGER DEFAULT 0,
+            firstFailureAt TEXT DEFAULT '',
+            lastFailureAt TEXT DEFAULT '',
+            nextRetryAt TEXT DEFAULT '',
+            status TEXT DEFAULT 'pending'
         )");
+        $columns = $db->fetchAll('PRAGMA table_info(oversized_linkedids)');
+        $existing = array_column($columns, 'name');
+        $additions = [
+            'minId' => 'INTEGER DEFAULT 0',
+            'maxRangeId' => 'INTEGER DEFAULT 0',
+            'reason' => "TEXT DEFAULT 'row_limit'",
+            'attempts' => 'INTEGER DEFAULT 0',
+            'firstFailureAt' => "TEXT DEFAULT ''",
+            'lastFailureAt' => "TEXT DEFAULT ''",
+            'nextRetryAt' => "TEXT DEFAULT ''",
+            'status' => "TEXT DEFAULT 'pending'",
+        ];
+        foreach ($additions as $name => $definition) {
+            if (!in_array($name, $existing, true)) {
+                $db->execute("ALTER TABLE oversized_linkedids ADD COLUMN $name $definition");
+            }
+        }
     }
 
     /**
