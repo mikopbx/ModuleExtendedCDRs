@@ -30,6 +30,8 @@ use Modules\ModuleExtendedCDRs\Lib\Mp3TagService;
 use Modules\ModuleExtendedCDRs\Lib\CdrQueryBuilder;
 use Modules\ModuleExtendedCDRs\Lib\CheckpointPolicy;
 use Modules\ModuleExtendedCDRs\Lib\BatchPersistenceResult;
+use Modules\ModuleExtendedCDRs\Lib\AtomicBatch;
+use Modules\ModuleExtendedCDRs\Lib\QuarantineActivation;
 use Modules\ModuleExtendedCDRs\Lib\SyncPolicy;
 use Exception;
 use Modules\ModuleExtendedCDRs\Lib\MikoPBXVersion;
@@ -143,12 +145,16 @@ class ConnectorDB extends WorkerBase
         if($newCdrOffset > 0){
             $minOffset = HistoryParser::getMinCdrId();
             $settings->cdrOffset = max($newCdrOffset,$minOffset);
-            $settings->save();
+            if ($settings->save() === false) {
+                throw new \RuntimeException('offset_persist_failed: ' . implode('; ', $settings->getMessages()));
+            }
         }
         if(empty($settings->referenceDate) || (($settings->cdrOffset === null || $settings->cdrOffset === '') && $settings->referenceDate !== '0') ){
             $settings->cdrOffset = 1;
             $settings->referenceDate = date("Y-m-d H:i:s.0", strtotime("-1 days"));
-            $settings->save();
+            if ($settings->save() === false) {
+                throw new \RuntimeException('settings_initialize_failed: ' . implode('; ', $settings->getMessages()));
+            }
         }
         $this->cdrOffset     = (int)$settings->cdrOffset;
         $this->referenceDate = $settings->referenceDate;
@@ -390,11 +396,6 @@ class ConnectorDB extends WorkerBase
             $this->logger->writeInfo("Heavy linkedIds (>100 rows): " . count($heavyLinkedIds));
         }
 
-        // Фиксируем "раздутые" linkedid, чтобы исключить их из следующих выборок.
-        if (!empty($newOversizedLinkedIds)) {
-            $this->persistOversizedLinkedIds($newOversizedLinkedIds, $cdrData);
-        }
-
         // Batch загрузка CallQueuesHistory (1 запрос вместо N)
         $start = microtime(true);
         $existingQueues = [];
@@ -428,6 +429,7 @@ class ConnectorDB extends WorkerBase
         $Mp3TagsTime = 0;
         $SetCallTypeTime = 0;
         $rowsToSave = [];
+        $queuesToSave = [];
 
         // Основной цикл — поиск O(1) по массиву
         foreach ($cdrData as $linkedId => $cdr) {
@@ -472,9 +474,7 @@ class ConnectorDB extends WorkerBase
                     ? ($cdr['q_answer'] - $cdr['q_start'])
                     : ($cdr['q_endtime'] - $cdr['q_start']);
 
-                $start = microtime(true);
-                $cdrQueue->save();
-                $CallQueuesHistorySaveTime += microtime(true) - $start;
+                $queuesToSave[] = $cdrQueue;
             }
 
             // Выбираем источник данных: для тяжёлых — отдельный кеш
@@ -511,18 +511,69 @@ class ConnectorDB extends WorkerBase
             }
         }
 
-        // Batch save через raw SQL
-        $start = microtime(true);
-        $persistenceResult = $this->batchSaveCallHistory($rowsToSave, $arrKeys);
+        if (!$this->di->has(CdrDbProvider::SERVICE_NAME)) {
+            $this->di->register(new CdrDbProvider());
+        }
+        $db = $this->di->getShared(CdrDbProvider::SERVICE_NAME);
+        $transactionResult = AtomicBatch::run($db, function () use (
+            $queuesToSave,
+            $rowsToSave,
+            $arrKeys,
+            $newOversizedLinkedIds,
+            $cdrData,
+            &$CallQueuesHistorySaveTime,
+            &$CallHistorySaveTime,
+            &$recallTransferTime
+        ): array {
+            $start = microtime(true);
+            foreach ($queuesToSave as $queueRecord) {
+                if ($queueRecord->save() === false) {
+                    throw new \RuntimeException(
+                        'queue_save_failed: ' . implode('; ', $queueRecord->getMessages())
+                    );
+                }
+            }
+            $CallQueuesHistorySaveTime = microtime(true) - $start;
+
+            $start = microtime(true);
+            $persistence = $this->batchSaveCallHistory($rowsToSave, $arrKeys);
+            $CallHistorySaveTime = microtime(true) - $start;
+
+            $start = microtime(true);
+            $this->updateRecallTransferStates($rowsToSave);
+            $recallTransferTime = microtime(true) - $start;
+
+            $committedQuarantine = $this->persistOversizedLinkedIds($newOversizedLinkedIds, $cdrData);
+            return [
+                'persistence' => $persistence,
+                'quarantine' => $committedQuarantine,
+            ];
+        });
+
+        if (!$transactionResult['ok']) {
+            $this->cdrOffset = $oldOffset;
+            $this->nextSyncDelay = SyncPolicy::ERROR_DELAY_SECONDS;
+            $error = 'batch_write_failed: ' . $transactionResult['error'];
+            $failurePolicy = SyncPolicy::decide($oldOffset, $sourceLastId, false, false, $this->catchUpMode);
+            $this->publishSyncState($oldOffset, $sourceLastId, $failurePolicy, $error);
+            $this->logger->writeError($error);
+            return;
+        }
+
+        $persistenceResult = $transactionResult['value']['persistence'];
         $insertCount = $persistenceResult['inserted'];
         $updateCount = $persistenceResult['updated'];
-        $CallHistorySaveTime = microtime(true) - $start;
+        $committedQuarantine = $transactionResult['value']['quarantine'];
         $this->logger->writeInfo("BatchSave: insert=$insertCount, update=$updateCount");
 
-        // Определяем recall/transfer состояния после сохранения
-        $start = microtime(true);
-        $this->updateRecallTransferStates($rowsToSave);
-        $recallTransferTime = microtime(true) - $start;
+        if (!empty($committedQuarantine)) {
+            $this->oversizedCache = QuarantineActivation::afterCommit(
+                $this->oversizedCache,
+                $committedQuarantine
+            );
+            $this->oversizedPending = array_values(array_diff($this->oversizedPending, $committedQuarantine));
+            $this->logger->writeInfo('Oversized linkedIds committed and excluded: ' . count($committedQuarantine));
+        }
 
         // Если в этом цикле обнаружены новые "раздутые" linkedid — удерживаем offset.
         // Потолок в 5000 строк был съеден зависшим звонком, поэтому обычные linkedid
@@ -531,11 +582,12 @@ class ConnectorDB extends WorkerBase
         if (!empty($newOversizedLinkedIds)) {
             $this->cdrOffset = $oldOffset;
             $this->logger->writeInfo("Holding offset at $oldOffset: detected " . count($newOversizedLinkedIds) . " new oversized linkedId(s)");
+            $this->publishSyncState($oldOffset, $sourceLastId, $policy, '');
             $this->logger->writeInfo("End sync with offset {$this->cdrOffset} (+0)");
             return;
         }
 
-        $this->cdrOffset = CheckpointPolicy::nextOffset([
+        $nextOffset = CheckpointPolicy::nextOffset([
             'oldOffset' => $oldOffset,
             'parsedOffset' => $parsedOffset,
             'requestOk' => true,
@@ -553,9 +605,20 @@ class ConnectorDB extends WorkerBase
             'SetCallTypeTime' => round($SetCallTypeTime, 4),
             'RecallTransferTime' => round($recallTransferTime, 4)],
         "Timing");
-        if($oldOffset !== $this->cdrOffset){
-            $this->logger->writeInfo("Update progress, offset $oldOffset to new value $this->cdrOffset ");
-            $this->updateSettings($this->cdrOffset);
+        if($oldOffset !== $nextOffset){
+            $this->logger->writeInfo("Update progress, offset $oldOffset to new value $nextOffset ");
+            try {
+                $this->updateSettings($nextOffset);
+            } catch (Throwable $e) {
+                $this->cdrOffset = $oldOffset;
+                $this->nextSyncDelay = SyncPolicy::ERROR_DELAY_SECONDS;
+                $failurePolicy = SyncPolicy::decide($oldOffset, $sourceLastId, false, false, $this->catchUpMode);
+                $this->publishSyncState($oldOffset, $sourceLastId, $failurePolicy, 'offset_persist_failed');
+                $this->logger->writeError('offset_persist_failed: ' . $e->getMessage());
+                return;
+            }
+        } else {
+            $this->cdrOffset = $oldOffset;
         }
         $policy = SyncPolicy::decide(
             $this->cdrOffset,
@@ -783,7 +846,16 @@ class ConnectorDB extends WorkerBase
 
             // Сохраняем только если stateCall изменился
             if ($dbData->stateCall !== CallHistory::CALL_STATE_OK) {
-                $dbData->save();
+                $saved = $db->execute(
+                    'UPDATE cdr_general SET stateCall = :stateCall WHERE UNIQUEID = :uniqueId',
+                    [
+                        'stateCall' => $dbData->stateCall,
+                        'uniqueId' => $dbData->UNIQUEID,
+                    ]
+                );
+                if ($saved !== true) {
+                    throw new \RuntimeException('state_save_failed: database adapter rejected update');
+                }
             }
         }
     }
@@ -1041,10 +1113,11 @@ class ConnectorDB extends WorkerBase
      * Фиксирует новые "раздутые" linkedid в служебной таблице и в кэше.
      * @param string[] $linkedIds
      * @param array    $cdrData Данные текущей выборки (для rowCount/maxId).
-     * @return void
+     * @return string[] IDs whose quarantine records were written in the current transaction.
      */
-    private function persistOversizedLinkedIds(array $linkedIds, array $cdrData): void
+    private function persistOversizedLinkedIds(array $linkedIds, array $cdrData): array
     {
+        $persisted = [];
         foreach ($linkedIds as $linkedId) {
             if (in_array($linkedId, $this->oversizedCache, true)) {
                 continue;
@@ -1072,28 +1145,14 @@ class ConnectorDB extends WorkerBase
             $record->lastFailureAt = $record->detectedAt;
             $record->nextRetryAt = date('Y-m-d H:i:s', time() + 60);
             $record->status = 'pending';
-            $saved = $record->save();
-
-            // В любом случае исключаем linkedid в пределах текущей сессии воркера,
-            // иначе сбой save() (блокировка БД, UNIQUE-коллизия) приведёт к бесконечному
-            // повторному детекту и вечному удержанию offset.
-            if (!in_array($linkedId, $this->oversizedCache, true)) {
-                $this->oversizedCache[] = $linkedId;
+            if ($record->save() === false) {
+                throw new \RuntimeException(
+                    'quarantine_save_failed: ' . implode('; ', $record->getMessages())
+                );
             }
-            if ($saved) {
-                // Успешно записан — убираем из session-only набора, если был там.
-                $this->oversizedPending = array_values(array_diff($this->oversizedPending, [$linkedId]));
-                $this->logger->writeInfo("Oversized linkedId excluded from sync: $linkedId (rows=$rowCount, maxId=$maxId)");
-            } else {
-                // Запись не удалась — держим в session-only наборе, чтобы кэш не потерял
-                // его при обновлении из БД (иначе трэшинг offset). Повторная запись —
-                // после перезапуска воркера через повторный детект.
-                if (!in_array($linkedId, $this->oversizedPending, true)) {
-                    $this->oversizedPending[] = $linkedId;
-                }
-                $this->logger->writeError("Failed to persist oversized linkedId (excluded in-memory only): $linkedId (" . implode('; ', $record->getMessages()) . ")");
-            }
+            $persisted[] = $linkedId;
         }
+        return $persisted;
     }
 
     /**
@@ -1105,42 +1164,8 @@ class ConnectorDB extends WorkerBase
      */
     private function pruneOversizedLinkedIds(): void
     {
-        if (time() - $this->oversizedPruneTime < 3600) {
-            return;
-        }
-        $this->oversizedPruneTime = time();
-
-        $stored = array_column(OversizedLinkedIds::find(['columns' => 'linkedid'])->toArray(), 'linkedid');
-        if (empty($stored)) {
-            return;
-        }
-
-        // Активные — те, у кого ещё есть строки за текущим offset.
-        // null означает сбой запроса к ядру (Beanstalk timeout) — в этом случае НЕ удаляем
-        // ничего, чтобы не разкарантинить активные зависшие звонки и не вызвать повторный стопор.
-        // Пустой массив [] означает, что запрос выполнился и активных действительно нет —
-        // тогда все устаревшие записи можно удалить.
-        $active = HistoryParser::getActiveLinkedIds($stored, $this->cdrOffset);
-        if ($active === null) {
-            return;
-        }
-        $toDelete = array_diff($stored, $active);
-        if (empty($toDelete)) {
-            return;
-        }
-
-        $records = OversizedLinkedIds::find([
-            'linkedid IN ({ids:array})',
-            'bind' => ['ids' => array_values($toDelete)],
-        ]);
-        foreach ($records as $record) {
-            $record->delete();
-        }
-
-        // Кэш = активные из БД ∪ session-only записи (последние в БД отсутствуют).
-        $this->oversizedCache = array_values(array_unique(array_merge($active, $this->oversizedPending)));
-        $this->oversizedCacheTime = time();
-        $this->logger->writeInfo("Pruned oversized linkedIds: removed " . count($toDelete) . ", kept " . count($active));
+        // Audit records are intentionally retained until a reconciler can mark
+        // an oversized call resolved with a durable, inspectable outcome.
     }
 
     /**
