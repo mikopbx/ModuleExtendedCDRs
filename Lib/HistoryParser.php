@@ -72,6 +72,8 @@ class HistoryParser
             [$result, $message] = $client->sendRequest(json_encode($filter), 30);
             if ($result!==false){
                 $filename = json_decode($message, true, 512, JSON_THROW_ON_ERROR);
+                // SelectCDR may return a successful empty response without creating a file.
+                $requestOk = empty($filename);
             }
         } catch (\Throwable $e) {
             $filename = '';
@@ -92,6 +94,9 @@ class HistoryParser
                 shell_exec("$findPath -L $downloadCacheDir -samefile  $filename -delete");
             }
             unlink($filename);
+        } elseif (!empty($filename)) {
+            // A non-empty response promised a result file, but it is unavailable.
+            $requestOk = false;
         }
 
         return $result_data;
