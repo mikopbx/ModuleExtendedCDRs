@@ -114,7 +114,12 @@ class ConnectorDB extends WorkerBase
                 $this->syncCdrData(true);
                 $this->pruneOversizedLinkedIds();
             }catch (Throwable $exception){
-                $this->logger->writeError("Throwable:".$exception->getMessage(). ' Line: '.$exception->getLine());
+                $this->logger->writeError(
+                    "Throwable:" . $exception->getMessage()
+                    . ' File:' . $exception->getFile()
+                    . ' Line:' . $exception->getLine()
+                    . ' Trace:' . $exception->getTraceAsString()
+                );
                 $this->nextSyncDelay = SyncPolicy::ERROR_DELAY_SECONDS;
             }
             $beanstalk->wait(max(1, $this->nextSyncDelay));
@@ -322,19 +327,19 @@ class ConnectorDB extends WorkerBase
             return;
         }
 
-        $historyResult = HistoryParser::getHistoryData(
+        $batchResult = HistoryParser::getHistoryData(
             $this->cdrOffset,
             $this->loadOversizedLinkedIds(),
             $policy['batchLinkedIds']
         );
-        if (!$historyResult['ok']) {
+        if (!$batchResult['ok']) {
             $this->nextSyncDelay = SyncPolicy::ERROR_DELAY_SECONDS;
-            $this->publishSyncState($oldOffset, $sourceLastId, $policy, $historyResult['error']);
-            $this->logger->writeError('batch_failed: ' . $historyResult['error']);
+            $this->publishSyncState($oldOffset, $sourceLastId, $policy, $batchResult['error']);
+            $this->logger->writeError('batch_failed: ' . $batchResult['error']);
             return;
         }
-        $cdrData = $historyResult['data'];
-        $parsedOffset = $historyResult['newOffset'];
+        $cdrData = $batchResult['data'];
+        $parsedOffset = $batchResult['newOffset'];
         $totalRows = array_sum(array_map(fn($cdr) => count($cdr['rows'] ?? []), $cdrData));
         $this->logger->writeInfo("Parsed offset $parsedOffset. linkedIds:" . count($cdrData) . ", totalRows:$totalRows");
 
@@ -408,11 +413,11 @@ class ConnectorDB extends WorkerBase
         $start = microtime(true);
         $existingHistory = [];
         if (!empty($normalLinkedIds)) {
-            $historyResult = CallHistory::find([
+            $historyRecords = CallHistory::find([
                'linkedid IN ({ids:array})',
                'bind' => ['ids' => $normalLinkedIds]
             ]);
-            foreach ($historyResult as $h) {
+            foreach ($historyRecords as $h) {
                 $existingHistory[$h->UNIQUEID] = $h;
             }
         }
@@ -553,7 +558,7 @@ class ConnectorDB extends WorkerBase
             $this->cdrOffset,
             $sourceLastId,
             true,
-            $historyResult['limitReached'],
+            $batchResult['limitReached'],
             $this->catchUpMode
         );
         $this->nextSyncDelay = $policy['delay'];
