@@ -667,7 +667,7 @@ const ModuleExtendedCDRs = {
 		$('#downloadRecords').on('click', function (e) {
 			const encodedSearch = encodeURIComponent(ModuleExtendedCDRs.getSearchText());
 			const url = `${window.location.origin}/pbxcore/api/modules/${className}/downloads?search=${encodedSearch}`;
-			window.open(url, '_blank');
+			ModuleExtendedCDRs.authenticatedDownload(url, 'recordings.tar');
 		});
 		$('#saveSearchSettings').on('click', function (e) {
 			ModuleExtendedCDRs.saveSearchSettings();
@@ -1370,7 +1370,61 @@ const ModuleExtendedCDRs = {
 
 		const encodedSearch = encodeURIComponent(ModuleExtendedCDRs.getSearchText());
 		const url = `${window.location.origin}/pbxcore/api/modules/${className}/exportHistory?reportNameID=${reportNameID}&type=${type}&search=${encodedSearch}&title=`+encodeURIComponent(title);
-		window.open(url, '_blank');
+		ModuleExtendedCDRs.authenticatedDownload(url, `report.${type}`);
+	},
+
+	/**
+	 * Downloads a protected PBXCore response with the current access token.
+	 * Session credentials remain enabled for MikoPBX versions predating JWT authentication.
+	 *
+	 * @param {string} url
+	 * @param {string} fallbackFilename
+	 * @returns {Promise<void>}
+	 */
+	authenticatedDownload(url, fallbackFilename = 'download') {
+		const headers = {};
+		if (typeof TokenManager !== 'undefined' && TokenManager.accessToken) {
+			headers.Authorization = `Bearer ${TokenManager.accessToken}`;
+		}
+
+		return fetch(url, {
+			method: 'GET',
+			headers: headers,
+			credentials: 'same-origin',
+		}).then(response => {
+			if (!response.ok) {
+				throw new Error(`Download failed with HTTP ${response.status}`);
+			}
+
+			let filename = fallbackFilename;
+			const disposition = response.headers.get('Content-Disposition');
+			if (disposition) {
+				const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+				const quotedName = disposition.match(/filename="?([^";]+)"?/i);
+				if (encodedName) {
+					try {
+						filename = decodeURIComponent(encodedName[1]);
+					} catch (error) {
+						console.warn('Unable to decode download filename', error);
+					}
+				} else if (quotedName) {
+					filename = quotedName[1];
+				}
+			}
+
+			return response.blob().then(blob => ({blob, filename}));
+		}).then(({blob, filename}) => {
+			const blobUrl = URL.createObjectURL(blob);
+			const link = document.createElement('a');
+			link.href = blobUrl;
+			link.download = filename;
+			document.body.appendChild(link);
+			link.click();
+			link.remove();
+			URL.revokeObjectURL(blobUrl);
+		}).catch(error => {
+			console.error('Authenticated download failed', error);
+		});
 	},
 
 	getMaxWidth(data, key) {
@@ -1397,7 +1451,8 @@ const ModuleExtendedCDRs = {
 			typeRec = 'out';
 		}
 		let numbers = ModuleExtendedCDRs.$globalSearch.val();
-		window.open('/pbxcore/api/modules/'+className+'/downloads?start='+startTime+'&end='+endTime+"&numbers="+encodeURIComponent(numbers)+"&type="+typeRec, '_blank');
+		const url = '/pbxcore/api/modules/'+className+'/downloads?start='+startTime+'&end='+endTime+"&numbers="+encodeURIComponent(numbers)+"&type="+typeRec;
+		ModuleExtendedCDRs.authenticatedDownload(url, 'recordings.tar');
 	},
 
 	startDownloadHistory(){
@@ -1547,4 +1602,3 @@ const ModuleExtendedCDRs = {
 $(document).ready(() => {
 	window[className].initialize();
 });
-
