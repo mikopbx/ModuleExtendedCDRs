@@ -32,6 +32,7 @@ use Modules\ModuleExtendedCDRs\Lib\CheckpointPolicy;
 use Modules\ModuleExtendedCDRs\Lib\BatchPersistenceResult;
 use Modules\ModuleExtendedCDRs\Lib\AtomicBatch;
 use Modules\ModuleExtendedCDRs\Lib\QuarantineActivation;
+use Modules\ModuleExtendedCDRs\Lib\BatchLogContext;
 use Modules\ModuleExtendedCDRs\Lib\SyncPolicy;
 use Exception;
 use Modules\ModuleExtendedCDRs\Lib\MikoPBXVersion;
@@ -321,6 +322,7 @@ class ConnectorDB extends WorkerBase
         }
         $this->lastSyncTime = time();
         $oldOffset = $this->cdrOffset;
+        $batchStarted = microtime(true);
         $this->logger->writeInfo('...Start sync with offset...'. $oldOffset);
 
         $sourceState = HistoryParser::getLastCdrState();
@@ -331,6 +333,7 @@ class ConnectorDB extends WorkerBase
         if (!$sourceState['ok']) {
             $this->publishSyncState($oldOffset, $sourceLastId, $policy, 'source_last_id_failed');
             $this->logger->writeError('batch_failed: source_last_id_failed');
+            $this->writeBatchOutcome($oldOffset, $oldOffset, $sourceLastId, [], $policy, $batchStarted, 'source_failed', 'source_last_id_failed');
             return;
         }
 
@@ -343,6 +346,7 @@ class ConnectorDB extends WorkerBase
             $this->nextSyncDelay = SyncPolicy::ERROR_DELAY_SECONDS;
             $this->publishSyncState($oldOffset, $sourceLastId, $policy, $batchResult['error']);
             $this->logger->writeError('batch_failed: ' . $batchResult['error']);
+            $this->writeBatchOutcome($oldOffset, $oldOffset, $sourceLastId, $batchResult, $policy, $batchStarted, 'source_failed', $batchResult['error']);
             return;
         }
         $cdrData = $batchResult['data'];
@@ -557,6 +561,8 @@ class ConnectorDB extends WorkerBase
             $failurePolicy = SyncPolicy::decide($oldOffset, $sourceLastId, false, false, $this->catchUpMode);
             $this->publishSyncState($oldOffset, $sourceLastId, $failurePolicy, $error);
             $this->logger->writeError($error);
+            $category = explode(':', $transactionResult['error'], 2)[0];
+            $this->writeBatchOutcome($oldOffset, $oldOffset, $sourceLastId, $batchResult, $failurePolicy, $batchStarted, 'rolled_back', $category);
             return;
         }
 
@@ -583,6 +589,7 @@ class ConnectorDB extends WorkerBase
             $this->cdrOffset = $oldOffset;
             $this->logger->writeInfo("Holding offset at $oldOffset: detected " . count($newOversizedLinkedIds) . " new oversized linkedId(s)");
             $this->publishSyncState($oldOffset, $sourceLastId, $policy, '');
+            $this->writeBatchOutcome($oldOffset, $oldOffset, $sourceLastId, $batchResult, $policy, $batchStarted, 'quarantined', '');
             $this->logger->writeInfo("End sync with offset {$this->cdrOffset} (+0)");
             return;
         }
@@ -615,6 +622,7 @@ class ConnectorDB extends WorkerBase
                 $failurePolicy = SyncPolicy::decide($oldOffset, $sourceLastId, false, false, $this->catchUpMode);
                 $this->publishSyncState($oldOffset, $sourceLastId, $failurePolicy, 'offset_persist_failed');
                 $this->logger->writeError('offset_persist_failed: ' . $e->getMessage());
+                $this->writeBatchOutcome($oldOffset, $nextOffset, $sourceLastId, $batchResult, $failurePolicy, $batchStarted, 'offset_persist_failed', 'offset_persist_failed', $insertCount, $updateCount);
                 return;
             }
         } else {
@@ -630,6 +638,7 @@ class ConnectorDB extends WorkerBase
         $this->nextSyncDelay = $policy['delay'];
         $this->catchUpMode = $policy['mode'] === SyncPolicy::MODE_CATCH_UP;
         $this->publishSyncState($this->cdrOffset, $sourceLastId, $policy, '');
+        $this->writeBatchOutcome($oldOffset, $this->cdrOffset, $sourceLastId, $batchResult, $policy, $batchStarted, 'committed', '', $insertCount, $updateCount);
         $offsetDelta = $this->cdrOffset - $oldOffset;
         $this->logger->writeInfo("End sync with offset {$this->cdrOffset} (+$offsetDelta)");
     }
@@ -649,6 +658,35 @@ class ConnectorDB extends WorkerBase
             'lastSuccessAt' => $error === '' ? date('c') : ($previous['lastSuccessAt'] ?? ''),
             'lastError' => $error,
         ]);
+    }
+
+    private function writeBatchOutcome(
+        int $oldOffset,
+        int $proposedOffset,
+        int $sourceLastId,
+        array $batch,
+        array $policy,
+        float $startedAt,
+        string $outcome,
+        string $errorCategory,
+        int $inserted = 0,
+        int $updated = 0
+    ): void {
+        $this->logger->writeInfo(BatchLogContext::make([
+            'oldOffset' => $oldOffset,
+            'proposedOffset' => $proposedOffset,
+            'sourceLastId' => $sourceLastId,
+            'minId' => $batch['minId'] ?? 0,
+            'maxId' => $batch['maxId'] ?? 0,
+            'linkedIdCount' => $batch['linkedIdCount'] ?? 0,
+            'rowCount' => $batch['rowCount'] ?? 0,
+            'inserted' => $inserted,
+            'updated' => $updated,
+            'mode' => $policy['mode'] ?? SyncPolicy::MODE_ERROR,
+            'elapsedMs' => (int)round((microtime(true) - $startedAt) * 1000),
+            'outcome' => $outcome,
+            'errorCategory' => $errorCategory,
+        ]));
     }
 
     /**
