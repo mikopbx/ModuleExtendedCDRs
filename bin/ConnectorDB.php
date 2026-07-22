@@ -574,6 +574,8 @@ class ConnectorDB extends WorkerBase
 
     private function publishSyncState(int $offset, int $sourceLastId, array $policy, string $error): void
     {
+        $previous = CacheManager::getCacheData(HistoryParser::CDR_SYNC_PROGRESS_KEY);
+        $previous = is_array($previous) ? $previous : [];
         CacheManager::setCacheData(HistoryParser::CDR_SYNC_PROGRESS_KEY, [
             'lastId' => $sourceLastId,
             'nowId' => $offset,
@@ -581,7 +583,8 @@ class ConnectorDB extends WorkerBase
             'sourceLastId' => $sourceLastId,
             'lag' => max(0, $sourceLastId - $offset),
             'mode' => $policy['mode'],
-            'lastSuccessAt' => $error === '' ? date('c') : '',
+            'lastDate' => $previous['lastDate'] ?? '',
+            'lastSuccessAt' => $error === '' ? date('c') : ($previous['lastSuccessAt'] ?? ''),
             'lastError' => $error,
         ]);
     }
