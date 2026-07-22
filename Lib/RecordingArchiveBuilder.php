@@ -6,28 +6,32 @@ namespace Modules\ModuleExtendedCDRs\Lib;
 
 final class RecordingArchiveBuilder
 {
-    private const DEFAULT_MAX_RECORDS = 5000;
-    private const DEFAULT_MAX_BYTES = 5368709120;
+    private const DEFAULT_MAX_RECORDS = 2000;
+    private const DEFAULT_MAX_BYTES = 2147483648;
+    private const DEFAULT_MAX_CANDIDATES = 5000;
     private const MIN_FREE_BYTES = 67108864;
 
     private RecordingPathPolicy $policy;
     private string $tempRoot;
     private int $maxRecords;
     private int $maxBytes;
+    private int $maxCandidates;
 
     public function __construct(
         RecordingPathPolicy $policy,
         string $tempRoot,
         int $maxRecords = self::DEFAULT_MAX_RECORDS,
-        int $maxBytes = self::DEFAULT_MAX_BYTES
+        int $maxBytes = self::DEFAULT_MAX_BYTES,
+        int $maxCandidates = self::DEFAULT_MAX_CANDIDATES
     ) {
-        if ($maxRecords < 1 || $maxBytes < 1) {
+        if ($maxRecords < 1 || $maxBytes < 1 || $maxCandidates < 1) {
             throw new \InvalidArgumentException('Archive limits must be positive');
         }
         $this->policy = $policy;
         $this->tempRoot = rtrim($tempRoot, DIRECTORY_SEPARATOR);
         $this->maxRecords = $maxRecords;
         $this->maxBytes = $maxBytes;
+        $this->maxCandidates = $maxCandidates;
     }
 
     /**
@@ -40,11 +44,16 @@ final class RecordingArchiveBuilder
         $accepted = 0;
         $skipped = 0;
         $acceptedBytes = 0;
+        $inspected = 0;
         $usedNames = [];
 
         try {
             $archive = new \PharData($archivePath);
             foreach ($records as $record) {
+                $inspected++;
+                if ($inspected > $this->maxCandidates) {
+                    throw new \RuntimeException('archive_too_large');
+                }
                 if (!isset($record['path'], $record['name'])
                     || !is_string($record['path']) || !is_string($record['name'])) {
                     $skipped++;

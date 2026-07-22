@@ -43,5 +43,6 @@ assertResponsePolicySame(true, strpos($controller, 'finally') !== false, 'stream
 assertResponsePolicySame(true, strpos($controller, 'X-Content-Type-Options') !== false, 'nosniff response');
 assertResponsePolicySame(true, strpos($controller, "'archive_too_large'") !== false, 'archive quota is mapped');
 assertResponsePolicySame(true, strpos($controller, '$status = 413') !== false, 'archive quota returns 413');
+assertResponsePolicySame(true, strpos($controller, 'MAX_ARCHIVE_CANDIDATES') !== false, 'candidate collection is bounded');
 
 echo "RecordingResponsePolicyTest: OK\n";

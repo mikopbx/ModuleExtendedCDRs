@@ -21,6 +21,7 @@ use Modules\ModuleExtendedCDRs\Models\ReportSettings;
 
 class ApiController extends ModulesControllerBase
 {
+    private const MAX_ARCHIVE_CANDIDATES = 5000;
 
     /**
      * Export detailed history. This private route requires normal API authentication.
@@ -234,16 +235,30 @@ class ApiController extends ModulesControllerBase
         $view = $gr->history($searchPhrase);
 
         $records = [];
+        $candidateLimitReached = false;
         foreach ($view->data as $baseItem) {
             foreach (($baseItem['4'] ?? []) as $item) {
                 if (!is_array($item) || !isset($item['recordingfile'])) {
                     continue;
+                }
+                if (count($records) >= self::MAX_ARCHIVE_CANDIDATES) {
+                    $candidateLimitReached = true;
+                    break 2;
                 }
                 $records[] = [
                     'path' => (string) $item['recordingfile'],
                     'name' => (string) ($item['prettyFilename'] ?? 'recording'),
                 ];
             }
+        }
+
+        if ($candidateLimitReached) {
+            Util::sysLogMsg(
+                'ModuleExtendedCDRs',
+                'event=archive_rejected reason=archive_too_large endpoint=downloads'
+            );
+            $this->sendError(413);
+            return;
         }
 
         $archivePath = null;

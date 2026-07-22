@@ -101,6 +101,16 @@ try {
     }
 
     try {
+        (new RecordingArchiveBuilder($policy, $temp, 10, 1024, 1))->build([
+            ['path' => $monitor . '/missing-one.mp3', 'name' => 'missing one'],
+            ['path' => $monitor . '/missing-two.mp3', 'name' => 'missing two'],
+        ]);
+        throw new RuntimeException('candidate quota did not fail');
+    } catch (RuntimeException $exception) {
+        assertArchiveSame('archive_too_large', $exception->getMessage(), 'candidate quota reason');
+    }
+
+    try {
         $builder->build([
             ['path' => $monitor . '/missing.mp3', 'name' => 'missing'],
         ]);
