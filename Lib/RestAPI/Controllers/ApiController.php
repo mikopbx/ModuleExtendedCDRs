@@ -9,11 +9,14 @@
 
 namespace Modules\ModuleExtendedCDRs\Lib\RestAPI\Controllers;
 
-use MikoPBX\Core\System\Processes;
+use MikoPBX\Core\System\Directories;
 use MikoPBX\Core\System\Util;
 use MikoPBX\PBXCoreREST\Controllers\Modules\ModulesControllerBase;
 use Modules\ModuleExtendedCDRs\bin\ConnectorDB;
+use Modules\ModuleExtendedCDRs\Lib\DownloadHeaderPolicy;
 use Modules\ModuleExtendedCDRs\Lib\GetReport;
+use Modules\ModuleExtendedCDRs\Lib\RecordingArchiveBuilder;
+use Modules\ModuleExtendedCDRs\Lib\RecordingPathPolicy;
 use Modules\ModuleExtendedCDRs\Models\ReportSettings;
 
 class ApiController extends ModulesControllerBase
@@ -42,47 +45,57 @@ class ApiController extends ModulesControllerBase
     /**
      * Скачивание записи разговора.
      * /pbxcore/api/cdr/records MIKO AJAM
-     * curl -O 'http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/records?view=/storage/usbdisk1/mikopbx/astspool/monitor/2025/03/20/18/mikopbx-1742482882.0_cE7dn8.mp3'
-     * curl -o test.mp3 'http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/records?CallRecordID=mikopbx-1742368258.4_a9Gp8D'
+     * Prefer CallRecordID. The legacy view parameter remains supported only
+     * for paths validated inside the configured recordings directory.
      */
     public function recordsAction(): void
     {
-        $id       = (string)$this->request->get('CallRecordID');
-        $filename = (string)$this->request->get('view');
-
-        if(!file_exists($filename) && !empty($id)){
-            [$filename] = ConnectorDB::invoke('getRecordingPathByID', [$id]);
+        $id = (string) $this->request->get('CallRecordID');
+        $candidate = '';
+        if ($id !== '') {
+            $resolved = ConnectorDB::invoke('getRecordingPathByID', [$id]);
+            $candidate = is_array($resolved) ? (string) ($resolved[0] ?? '') : '';
+        } else {
+            $candidate = (string) $this->request->get('view');
         }
 
-        if(!file_exists($filename)){
+        try {
+            $policy = new RecordingPathPolicy(Directories::getDir(Directories::AST_MONITOR_DIR));
+            $result = $policy->validate($candidate);
+        } catch (\Throwable $exception) {
+            Util::sysLogMsg('ModuleExtendedCDRs', 'event=recording_rejected reason=policy_unavailable endpoint=records');
+            $this->sendError(500);
+            return;
+        }
+
+        if (!$result->isAllowed() || $result->path() === null) {
+            Util::sysLogMsg(
+                'ModuleExtendedCDRs',
+                'event=recording_rejected reason=' . $result->reason() . ' endpoint=records'
+            );
+            $this->sendError($result->status());
+            return;
+        }
+
+        $fp = fopen($result->path(), 'rb');
+        if ($fp === false) {
             $this->sendError(404);
             return;
         }
-        $size = filesize($filename);
-        $fp = fopen($filename, 'rb');
-        if ($fp) {
-            // Detect and validate file extension (allowed: wav, webm, mp3) to set correct headers.
-            $ext = strtolower((string)pathinfo($filename, PATHINFO_EXTENSION));
-            $allowedMimeTypes = [
-                'mp3'  => 'audio/mpeg',
-                'wav'  => 'audio/wav',
-                'webm' => 'audio/webm',
-            ];
-            if (!array_key_exists($ext, $allowedMimeTypes)) {
-                fclose($fp);
-                $this->sendError(415);
-                return;
-            }
 
-            $this->response->setHeader('Content-Description', $ext . ' file');
-            $this->response->setHeader('Content-Disposition', 'attachment; filename=' . basename($filename));
-            $this->response->setHeader('Content-type', $allowedMimeTypes[$ext]);
+        try {
+            $size = filesize($result->path());
+            $this->response->setHeader('Content-Disposition', DownloadHeaderPolicy::attachment((string) $result->downloadName()));
+            $this->response->setHeader('Content-Type', (string) $result->mimeType());
             $this->response->setHeader('Content-Transfer-Encoding', 'binary');
-            $this->response->setContentLength($size);
+            $this->response->setHeader('X-Content-Type-Options', 'nosniff');
+            if ($size !== false) {
+                $this->response->setContentLength($size);
+            }
             $this->response->sendHeaders();
             fpassthru($fp);
-        } else {
-            $this->sendError(404);
+        } finally {
+            fclose($fp);
         }
     }
 
@@ -181,7 +194,6 @@ class ApiController extends ModulesControllerBase
 
     /**
      * curl 'http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory?reportNameID=OutgoingEmployeeCalls&type=json&search=%7B%22dateRangeSelector%22%3A%2221%2F10%2F2024%20-%2021%2F10%2F2024%22%2C%22minBilSec%22%3A%220%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22outgoing-calls%22%2C%22additionalFilter%22%3A%22%22%7D'
-     * curl -H 'Cookie: PHPSESSID=5ada41f50486a5792cb3520f0922b7e9' 'https://boffart.miko.ru/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory?type=json&search=%7B%22dateRangeSelector%22%3A%2201%2F10%2F2024+-+31%2F10%2F2024%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22all-calls%22%2C%22additionalFilter%22%3A%22%22%7D'
      * @return void
      */
     public function exportHistory()
@@ -218,7 +230,7 @@ class ApiController extends ModulesControllerBase
 
     /**
      * Скачивание tar архива.
-     * https://boffart.miko.ru/pbxcore/api/modules/ModuleExtendedCDRs/downloads?search=%7B%22dateRangeSelector%22%3A%2212%2F09%2F2024%2B-%2B11%2F10%2F2024%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22%22%2C%22additionalFilter%22%3A%22%22%7D
+     * Returns a tar archive containing validated call recordings.
      * @return void
      */
     public function downloads():void
@@ -227,29 +239,65 @@ class ApiController extends ModulesControllerBase
         $gr = new GetReport();
         $view = $gr->history($searchPhrase);
 
-        $pathLN = Util::which('ln');
-        $tmpDir = '/storage/usbdisk1/mikopbx/tmp/ExportCdr/flist-export-'.microtime(true);
-        shell_exec("mkdir -p $tmpDir");
+        $records = [];
         foreach ($view->data as $baseItem) {
-            foreach ($baseItem['4'] as $item){
-                if(!file_exists($item['recordingfile'])){
+            foreach (($baseItem['4'] ?? []) as $item) {
+                if (!is_array($item) || !isset($item['recordingfile'])) {
                     continue;
                 }
-                shell_exec("$pathLN -s {$item['recordingfile']} $tmpDir/{$item['prettyFilename']}.mp3");
+                $records[] = [
+                    'path' => (string) $item['recordingfile'],
+                    'name' => (string) ($item['prettyFilename'] ?? 'recording'),
+                ];
             }
         }
-        $this->response->setHeader('Content-Description', 'tar file');
-        $this->response->setHeader('Content-type', 'application/x-tar');
-        $this->response->setHeader('Content-Disposition', "attachment; filename=download-".time().".tar");
-        $this->response->setHeader('Content-Transfer-Encoding', 'binary');
-        $pathBusybox = Util::which('busybox');
-        $this->response->sendRaw();
-        passthru("cd $tmpDir; $pathBusybox tar -chf - . 2> /tmp/ar.err" );
-        shell_exec($pathBusybox.' rm -rf '.$tmpDir);
+
+        $archivePath = null;
+        try {
+            $di = $this->getDI();
+            $config = $di->getShared('config');
+            $tempRoot = $config->path('core.tempDir') . '/ModuleExtendedCDRs/archives';
+            $policy = new RecordingPathPolicy(Directories::getDir(Directories::AST_MONITOR_DIR));
+            $archive = (new RecordingArchiveBuilder($policy, $tempRoot))->build($records);
+            $archivePath = $archive->path();
+
+            Util::sysLogMsg(
+                'ModuleExtendedCDRs',
+                'event=archive_built accepted=' . $archive->acceptedCount() . ' skipped=' . $archive->skippedCount()
+            );
+
+            $fp = fopen($archivePath, 'rb');
+            if ($fp === false) {
+                throw new \RuntimeException('archive_build_failed');
+            }
+            try {
+                $size = filesize($archivePath);
+                $this->response->setHeader('Content-Type', 'application/x-tar');
+                $this->response->setHeader('Content-Disposition', DownloadHeaderPolicy::attachment('download-' . time() . '.tar'));
+                $this->response->setHeader('Content-Transfer-Encoding', 'binary');
+                $this->response->setHeader('X-Content-Type-Options', 'nosniff');
+                if ($size !== false) {
+                    $this->response->setContentLength($size);
+                }
+                $this->response->sendHeaders();
+                fpassthru($fp);
+            } finally {
+                fclose($fp);
+            }
+        } catch (\RuntimeException $exception) {
+            $reason = $exception->getMessage() === 'archive_has_no_valid_entries'
+                ? 'archive_has_no_valid_entries'
+                : 'archive_build_failed';
+            Util::sysLogMsg('ModuleExtendedCDRs', 'event=archive_rejected reason=' . $reason . ' endpoint=downloads');
+            $this->sendError($reason === 'archive_has_no_valid_entries' ? 404 : 500);
+        } finally {
+            if (is_string($archivePath) && is_file($archivePath)) {
+                unlink($archivePath);
+            }
+        }
     }
 
     /**
-     * curl -H 'Cookie: PHPSESSID=5ada41f50486a5792cb3520f0922b7e9' 'https://boffart.miko.ru/pbxcore/api/modules/ModuleExtendedCDRs/exportOutgoingEmployeeCalls?type=json&search=%7B%22dateRangeSelector%22%3A%2201%2F10%2F2024+-+31%2F10%2F2024%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22all-calls%22%2C%22additionalFilter%22%3A%22%22%7D'
      * curl 'http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/exportOutgoingEmployeeCalls?type=json&search=%7B%22dateRangeSelector%22%3A%2201%2F10%2F2024%20-%2031%2F10%2F2024%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22outgoing-calls%22%2C%22additionalFilter%22%3A%22204%20203%22%7D'
      * @return void
      */
