@@ -17,6 +17,7 @@ use Modules\ModuleExtendedCDRs\Lib\DownloadHeaderPolicy;
 use Modules\ModuleExtendedCDRs\Lib\GetReport;
 use Modules\ModuleExtendedCDRs\Lib\RecordingArchiveBuilder;
 use Modules\ModuleExtendedCDRs\Lib\RecordingPathPolicy;
+use Modules\ModuleExtendedCDRs\Lib\ReportSearchPolicy;
 use Modules\ModuleExtendedCDRs\Models\ReportSettings;
 
 class ApiController extends ModulesControllerBase
@@ -107,8 +108,8 @@ class ApiController extends ModulesControllerBase
         ini_set('pcre.backtrack_limit', '10000000');
         $type           = $this->request->get('type');
         $searchPhrase   = $this->request->get('search');
-        if(!is_string($searchPhrase)){
-            $this->response->sendRaw();
+        if (!is_string($searchPhrase) || !ReportSearchPolicy::isValid($searchPhrase)) {
+            $this->sendError(400);
             return;
         }
         $gr = new GetReport();
@@ -206,8 +207,8 @@ class ApiController extends ModulesControllerBase
         }
         $type           = $this->request->get('type');
         $searchPhrase   = $this->request->get('search');
-        if(!is_string($searchPhrase)){
-            $this->response->sendRaw();
+        if (!is_string($searchPhrase) || !ReportSearchPolicy::isValid($searchPhrase)) {
+            $this->sendError(400);
             return;
         }
         $gr = new GetReport();
@@ -231,6 +232,10 @@ class ApiController extends ModulesControllerBase
     public function downloads():void
     {
         $searchPhrase   = $this->request->get('search');
+        if (!is_string($searchPhrase) || !ReportSearchPolicy::isValid($searchPhrase)) {
+            $this->sendError(400);
+            return;
+        }
         $gr = new GetReport();
         $view = $gr->history($searchPhrase);
 
@@ -323,8 +328,8 @@ class ApiController extends ModulesControllerBase
         ini_set('pcre.backtrack_limit', '10000000');
         $type           = $this->request->get('type');
         $searchPhrase   = $this->request->get('search');
-        if(!is_string($searchPhrase)){
-            $this->response->sendRaw();
+        if (!is_string($searchPhrase) || !ReportSearchPolicy::isValid($searchPhrase)) {
+            $this->sendError(400);
             return;
         }
         $gr = new GetReport();
