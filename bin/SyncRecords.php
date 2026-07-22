@@ -275,7 +275,10 @@ class SyncRecords extends WorkerBase
     {
         if (time() - $this->oversizedCacheTime > 60) {
             try {
-                $rows = OversizedLinkedIds::find(['columns' => 'linkedid']);
+        $rows = OversizedLinkedIds::find([
+            "status IS NULL OR status <> 'resolved'",
+            'columns' => 'linkedid',
+        ]);
                 $this->oversizedCache = array_column($rows->toArray(), 'linkedid');
             } catch (Throwable $e) {
                 $this->logger->writeError("loadOversizedLinkedIds: " . $e->getMessage());

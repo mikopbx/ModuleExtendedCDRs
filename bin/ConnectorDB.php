@@ -32,6 +32,7 @@ use Modules\ModuleExtendedCDRs\Lib\CheckpointPolicy;
 use Modules\ModuleExtendedCDRs\Lib\BatchPersistenceResult;
 use Modules\ModuleExtendedCDRs\Lib\AtomicBatch;
 use Modules\ModuleExtendedCDRs\Lib\QuarantineActivation;
+use Modules\ModuleExtendedCDRs\Lib\QuarantinePolicy;
 use Modules\ModuleExtendedCDRs\Lib\BatchLogContext;
 use Modules\ModuleExtendedCDRs\Lib\SyncPolicy;
 use Exception;
@@ -556,13 +557,31 @@ class ConnectorDB extends WorkerBase
 
         if (!$transactionResult['ok']) {
             $this->cdrOffset = $oldOffset;
-            $this->nextSyncDelay = SyncPolicy::ERROR_DELAY_SECONDS;
+            $rollbackFailed = $transactionResult['rollbackOk'] === false;
+            $this->nextSyncDelay = $rollbackFailed ? 1 : SyncPolicy::ERROR_DELAY_SECONDS;
+            if ($rollbackFailed) {
+                // The shared adapter may still own a broken transaction. Exit this
+                // worker instance so the safe-script restarts it with a new connection.
+                $this->needRestart = true;
+            }
             $error = 'batch_write_failed: ' . $transactionResult['error'];
+            if ($rollbackFailed) {
+                $error .= '; rollback_failed: ' . $transactionResult['rollbackError'];
+            }
             $failurePolicy = SyncPolicy::decide($oldOffset, $sourceLastId, false, false, $this->catchUpMode);
             $this->publishSyncState($oldOffset, $sourceLastId, $failurePolicy, $error);
             $this->logger->writeError($error);
             $category = explode(':', $transactionResult['error'], 2)[0];
-            $this->writeBatchOutcome($oldOffset, $oldOffset, $sourceLastId, $batchResult, $failurePolicy, $batchStarted, 'rolled_back', $category);
+            $this->writeBatchOutcome(
+                $oldOffset,
+                $oldOffset,
+                $sourceLastId,
+                $batchResult,
+                $failurePolicy,
+                $batchStarted,
+                $rollbackFailed ? 'rollback_failed' : 'rolled_back',
+                $rollbackFailed ? 'transaction_rollback_failed' : $category
+            );
             return;
         }
 
@@ -589,7 +608,7 @@ class ConnectorDB extends WorkerBase
             $this->cdrOffset = $oldOffset;
             $this->logger->writeInfo("Holding offset at $oldOffset: detected " . count($newOversizedLinkedIds) . " new oversized linkedId(s)");
             $this->publishSyncState($oldOffset, $sourceLastId, $policy, '');
-            $this->writeBatchOutcome($oldOffset, $oldOffset, $sourceLastId, $batchResult, $policy, $batchStarted, 'quarantined', '');
+            $this->writeBatchOutcome($oldOffset, $oldOffset, $sourceLastId, $batchResult, $policy, $batchStarted, 'quarantined', '', $insertCount, $updateCount);
             $this->logger->writeInfo("End sync with offset {$this->cdrOffset} (+0)");
             return;
         }
@@ -1177,12 +1196,13 @@ class ConnectorDB extends WorkerBase
             $record->detectedAt = date('Y-m-d H:i:s');
             $record->minId = $minId;
             $record->maxRangeId = $maxId;
-            $record->reason = 'row_limit';
-            $record->attempts = 0;
-            $record->firstFailureAt = $record->detectedAt;
-            $record->lastFailureAt = $record->detectedAt;
-            $record->nextRetryAt = date('Y-m-d H:i:s', time() + 60);
-            $record->status = 'pending';
+            $quarantine = QuarantinePolicy::manual('row_limit', time());
+            $record->reason = $quarantine['reason'];
+            $record->attempts = $quarantine['attempts'];
+            $record->firstFailureAt = date('Y-m-d H:i:s', $quarantine['firstFailureAt']);
+            $record->lastFailureAt = date('Y-m-d H:i:s', $quarantine['lastFailureAt']);
+            $record->nextRetryAt = '';
+            $record->status = $quarantine['status'];
             if ($record->save() === false) {
                 throw new \RuntimeException(
                     'quarantine_save_failed: ' . implode('; ', $record->getMessages())

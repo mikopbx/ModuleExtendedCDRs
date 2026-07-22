@@ -33,4 +33,8 @@ $resolved = QuarantinePolicy::resolved($second, 2000);
 quarantineAssert('resolved', $resolved['status'], 'successful retry resolves');
 quarantineAssert(2000, $resolved['lastFailureAt'], 'resolution timestamp retained for audit');
 
+$manual = QuarantinePolicy::manual('row_limit', 3000);
+quarantineAssert('manual', $manual['status'], 'oversized call requires manual resolution');
+quarantineAssert(0, $manual['nextRetryAt'], 'manual quarantine has no fake retry deadline');
+
 echo "QuarantinePolicyTest: OK\n";

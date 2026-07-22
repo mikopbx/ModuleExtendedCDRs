@@ -11,6 +11,8 @@ final class FakeTransactionAdapter
     public array $calls = [];
     public bool $beginResult = true;
     public bool $commitResult = true;
+    public bool $rollbackResult = true;
+    public bool $throwOnRollback = false;
 
     public function begin(): bool
     {
@@ -27,7 +29,10 @@ final class FakeTransactionAdapter
     public function rollback(): bool
     {
         $this->calls[] = 'rollback';
-        return true;
+        if ($this->throwOnRollback) {
+            throw new RuntimeException('rollback exploded');
+        }
+        return $this->rollbackResult;
     }
 }
 
@@ -52,6 +57,7 @@ $failure = AtomicBatch::run($db, static function (): void {
 assertAtomicSame(false, $failure['ok'], 'failed batch');
 assertAtomicSame('write failed', $failure['error'], 'failure message');
 assertAtomicSame(['begin', 'rollback'], $db->calls, 'failed transaction rolls back');
+assertAtomicSame(true, $failure['rollbackOk'], 'successful rollback is reported');
 
 $db = new FakeTransactionAdapter();
 $db->beginResult = false;
@@ -64,5 +70,21 @@ $db->commitResult = false;
 $commitFailure = AtomicBatch::run($db, static fn() => 'saved');
 assertAtomicSame(false, $commitFailure['ok'], 'commit failure');
 assertAtomicSame(['begin', 'commit', 'rollback'], $db->calls, 'commit failure attempts rollback');
+
+$db = new FakeTransactionAdapter();
+$db->rollbackResult = false;
+$rollbackFailure = AtomicBatch::run($db, static function (): void {
+    throw new RuntimeException('write failed');
+});
+assertAtomicSame(false, $rollbackFailure['rollbackOk'], 'false rollback is reported');
+assertAtomicSame('transaction_rollback_failed', $rollbackFailure['rollbackError'], 'false rollback category');
+
+$db = new FakeTransactionAdapter();
+$db->throwOnRollback = true;
+$rollbackException = AtomicBatch::run($db, static function (): void {
+    throw new RuntimeException('write failed');
+});
+assertAtomicSame(false, $rollbackException['rollbackOk'], 'rollback exception is reported');
+assertAtomicSame('rollback exploded', $rollbackException['rollbackError'], 'rollback exception message');
 
 echo "AtomicBatchTest: OK\n";

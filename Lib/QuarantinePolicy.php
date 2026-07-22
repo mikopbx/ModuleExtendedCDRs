@@ -31,4 +31,17 @@ final class QuarantinePolicy
         $current['lastFailureAt'] = $now;
         return $current;
     }
+
+    /** @return array<string,mixed> */
+    public static function manual(string $reason, int $now): array
+    {
+        return [
+            'reason' => $reason,
+            'attempts' => 1,
+            'firstFailureAt' => $now,
+            'lastFailureAt' => $now,
+            'nextRetryAt' => 0,
+            'status' => 'manual',
+        ];
+    }
 }
