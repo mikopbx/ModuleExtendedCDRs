@@ -6,7 +6,7 @@ function _toPropertyKey(t) { var i = _toPrimitive(t, "string"); return "symbol" 
 function _toPrimitive(t, r) { if ("object" != _typeof(t) || !t) return t; var e = t[Symbol.toPrimitive]; if (void 0 !== e) { var i = e.call(t, r || "default"); if ("object" != _typeof(i)) return i; throw new TypeError("@@toPrimitive must return a primitive value."); } return ("string" === r ? String : Number)(t); }
 function _slicedToArray(r, e) { return _arrayWithHoles(r) || _iterableToArrayLimit(r, e) || _unsupportedIterableToArray(r, e) || _nonIterableRest(); }
 function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
-function _iterableToArrayLimit(r, l) { var t = null == r ? null : "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (null != t) { var e, n, i, u, a = [], f = !0, o = !1; try { if (i = (t = t.call(r)).next, 0 === l) { if (Object(t) !== t) return; f = !1; } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = !0); } catch (r) { o = !0, n = r; } finally { try { if (!f && null != t.return && (u = t.return(), Object(u) !== u)) return; } finally { if (o) throw n; } } return a; } }
+function _iterableToArrayLimit(r, l) { var t = null == r ? null : "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (null != t) { var e, n, i, u, a = [], f = !0, o = !1; try { if (i = (t = t.call(r)).next, 0 === l) { if (Object(t) !== t) return; f = !1; } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = !0); } catch (r) { o = !0, n = r; } finally { try { if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u)) return; } finally { if (o) throw n; } } return a; } }
 function _arrayWithHoles(r) { if (Array.isArray(r)) return r; }
 function _toConsumableArray(r) { return _arrayWithoutHoles(r) || _iterableToArray(r) || _unsupportedIterableToArray(r) || _nonIterableSpread(); }
 function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
@@ -562,7 +562,7 @@ var ModuleExtendedCDRs = {
       var parentTitle = $(this).parent().find('div.content').text().trim();
       var html = "<i class=\"small star outline yellow icon\" style=\"display: none;padding-top: 3px\"></i>\n<i class=\"small edit outline icon\" style=\"padding-top: 3px\"></i>\n<i class=\"small trash alternate outline outline red icon\" style=\"padding-top: 3px\"></i>\n<div class=\"content\">\n\t<div class=\"title\">".concat(parentTitle, " (").concat(timestamp, ")</div>\n\t<div class=\"ui mini input fluid hidden\" style=\"display: none;\">\n\t  <input type=\"text\" value=\"").concat(parentTitle, " (").concat(timestamp, ")\">\n\t</div>\n</div>");
       var newItem = $('<a>', {
-        class: 'item',
+        "class": 'item',
         html: html,
         'data-report-id': reportId,
         'data-is-main': '0',
@@ -637,7 +637,7 @@ var ModuleExtendedCDRs = {
     $('#downloadRecords').on('click', function (e) {
       var encodedSearch = encodeURIComponent(ModuleExtendedCDRs.getSearchText());
       var url = "".concat(window.location.origin, "/pbxcore/api/modules/").concat(className, "/downloads?search=").concat(encodedSearch);
-      window.open(url, '_blank');
+      ModuleExtendedCDRs.authenticatedDownload(url, 'recordings.tar');
     });
     $('#saveSearchSettings').on('click', function (e) {
       ModuleExtendedCDRs.saveSearchSettings();
@@ -1246,7 +1246,65 @@ var ModuleExtendedCDRs = {
     }
     var encodedSearch = encodeURIComponent(ModuleExtendedCDRs.getSearchText());
     var url = "".concat(window.location.origin, "/pbxcore/api/modules/").concat(className, "/exportHistory?reportNameID=").concat(reportNameID, "&type=").concat(type, "&search=").concat(encodedSearch, "&title=") + encodeURIComponent(title);
-    window.open(url, '_blank');
+    ModuleExtendedCDRs.authenticatedDownload(url, "report.".concat(type));
+  },
+  /**
+   * Downloads a protected PBXCore response with the current access token.
+   * Session credentials remain enabled for MikoPBX versions predating JWT authentication.
+   *
+   * @param {string} url
+   * @param {string} fallbackFilename
+   * @returns {Promise<void>}
+   */
+  authenticatedDownload: function authenticatedDownload(url) {
+    var fallbackFilename = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 'download';
+    var headers = {};
+    if (typeof TokenManager !== 'undefined' && TokenManager.accessToken) {
+      headers.Authorization = "Bearer ".concat(TokenManager.accessToken);
+    }
+    return fetch(url, {
+      method: 'GET',
+      headers: headers,
+      credentials: 'same-origin'
+    }).then(function (response) {
+      if (!response.ok) {
+        throw new Error("Download failed with HTTP ".concat(response.status));
+      }
+      var filename = fallbackFilename;
+      var disposition = response.headers.get('Content-Disposition');
+      if (disposition) {
+        var encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+        var quotedName = disposition.match(/filename="?([^";]+)"?/i);
+        if (encodedName) {
+          try {
+            filename = decodeURIComponent(encodedName[1]);
+          } catch (error) {
+            console.warn('Unable to decode download filename', error);
+          }
+        } else if (quotedName) {
+          filename = quotedName[1];
+        }
+      }
+      return response.blob().then(function (blob) {
+        return {
+          blob: blob,
+          filename: filename
+        };
+      });
+    }).then(function (_ref) {
+      var blob = _ref.blob,
+        filename = _ref.filename;
+      var blobUrl = URL.createObjectURL(blob);
+      var link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(blobUrl);
+    })["catch"](function (error) {
+      console.error('Authenticated download failed', error);
+    });
   },
   getMaxWidth: function getMaxWidth(data, key) {
     // Получаем максимальную длину содержимого в столбце
@@ -1271,7 +1329,8 @@ var ModuleExtendedCDRs = {
       typeRec = 'out';
     }
     var numbers = ModuleExtendedCDRs.$globalSearch.val();
-    window.open('/pbxcore/api/modules/' + className + '/downloads?start=' + startTime + '&end=' + endTime + "&numbers=" + encodeURIComponent(numbers) + "&type=" + typeRec, '_blank');
+    var url = '/pbxcore/api/modules/' + className + '/downloads?start=' + startTime + '&end=' + endTime + "&numbers=" + encodeURIComponent(numbers) + "&type=" + typeRec;
+    ModuleExtendedCDRs.authenticatedDownload(url, 'recordings.tar');
   },
   startDownloadHistory: function startDownloadHistory() {
     var startTime = ModuleExtendedCDRs.$dateRangeSelector.attr('data-start');
@@ -1398,4 +1457,5 @@ var ModuleExtendedCDRs = {
 $(document).ready(function () {
   window[className].initialize();
 });
+
 //# sourceMappingURL=module-export-records-index.js.map
