@@ -81,6 +81,26 @@ try {
     unlink($result->path());
 
     try {
+        (new RecordingArchiveBuilder($policy, $temp, 1, 1024))->build([
+            ['path' => $monitor . '/one.mp3', 'name' => 'one'],
+            ['path' => $monitor . '/two.mp3', 'name' => 'two'],
+        ]);
+        throw new RuntimeException('record quota did not fail');
+    } catch (RuntimeException $exception) {
+        assertArchiveSame('archive_too_large', $exception->getMessage(), 'record quota reason');
+    }
+
+    try {
+        (new RecordingArchiveBuilder($policy, $temp, 10, 5))->build([
+            ['path' => $monitor . '/one.mp3', 'name' => 'one'],
+            ['path' => $monitor . '/voice.wav', 'name' => 'voice'],
+        ]);
+        throw new RuntimeException('byte quota did not fail');
+    } catch (RuntimeException $exception) {
+        assertArchiveSame('archive_too_large', $exception->getMessage(), 'byte quota reason');
+    }
+
+    try {
         $builder->build([
             ['path' => $monitor . '/missing.mp3', 'name' => 'missing'],
         ]);

@@ -41,5 +41,7 @@ foreach (['shell_exec(', 'system('] as $forbidden) {
 
 assertResponsePolicySame(true, strpos($controller, 'finally') !== false, 'stream cleanup uses finally');
 assertResponsePolicySame(true, strpos($controller, 'X-Content-Type-Options') !== false, 'nosniff response');
+assertResponsePolicySame(true, strpos($controller, "'archive_too_large'") !== false, 'archive quota is mapped');
+assertResponsePolicySame(true, strpos($controller, '$status = 413') !== false, 'archive quota returns 413');
 
 echo "RecordingResponsePolicyTest: OK\n";

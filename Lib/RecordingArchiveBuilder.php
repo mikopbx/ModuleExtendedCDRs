@@ -6,13 +6,28 @@ namespace Modules\ModuleExtendedCDRs\Lib;
 
 final class RecordingArchiveBuilder
 {
+    private const DEFAULT_MAX_RECORDS = 5000;
+    private const DEFAULT_MAX_BYTES = 5368709120;
+    private const MIN_FREE_BYTES = 67108864;
+
     private RecordingPathPolicy $policy;
     private string $tempRoot;
+    private int $maxRecords;
+    private int $maxBytes;
 
-    public function __construct(RecordingPathPolicy $policy, string $tempRoot)
-    {
+    public function __construct(
+        RecordingPathPolicy $policy,
+        string $tempRoot,
+        int $maxRecords = self::DEFAULT_MAX_RECORDS,
+        int $maxBytes = self::DEFAULT_MAX_BYTES
+    ) {
+        if ($maxRecords < 1 || $maxBytes < 1) {
+            throw new \InvalidArgumentException('Archive limits must be positive');
+        }
         $this->policy = $policy;
         $this->tempRoot = rtrim($tempRoot, DIRECTORY_SEPARATOR);
+        $this->maxRecords = $maxRecords;
+        $this->maxBytes = $maxBytes;
     }
 
     /**
@@ -24,6 +39,7 @@ final class RecordingArchiveBuilder
         $archivePath = $this->tempRoot . DIRECTORY_SEPARATOR . bin2hex(random_bytes(16)) . '.tar';
         $accepted = 0;
         $skipped = 0;
+        $acceptedBytes = 0;
         $usedNames = [];
 
         try {
@@ -41,10 +57,24 @@ final class RecordingArchiveBuilder
                     continue;
                 }
 
+                $fileSize = filesize($allowed->path());
+                if ($fileSize === false) {
+                    $skipped++;
+                    continue;
+                }
+                if ($accepted >= $this->maxRecords || $acceptedBytes + $fileSize > $this->maxBytes) {
+                    throw new \RuntimeException('archive_too_large');
+                }
+                $freeBytes = disk_free_space($this->tempRoot);
+                if ($freeBytes !== false && $fileSize + self::MIN_FREE_BYTES > $freeBytes) {
+                    throw new \RuntimeException('archive_too_large');
+                }
+
                 $extension = strtolower((string) pathinfo((string) $allowed->downloadName(), PATHINFO_EXTENSION));
                 $entryName = $this->uniqueEntryName($record['name'], $extension, $usedNames);
                 $archive->addFile($allowed->path(), $entryName);
                 $accepted++;
+                $acceptedBytes += $fileSize;
             }
 
             unset($archive);
@@ -56,7 +86,7 @@ final class RecordingArchiveBuilder
             return new RecordingArchiveResult($archivePath, $accepted, $skipped);
         } catch (\RuntimeException $exception) {
             @unlink($archivePath);
-            if ($exception->getMessage() === 'archive_has_no_valid_entries') {
+            if (in_array($exception->getMessage(), ['archive_has_no_valid_entries', 'archive_too_large'], true)) {
                 throw $exception;
             }
             throw new \RuntimeException('archive_build_failed', 0, $exception);

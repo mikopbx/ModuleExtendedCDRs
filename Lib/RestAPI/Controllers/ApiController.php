@@ -23,11 +23,7 @@ class ApiController extends ModulesControllerBase
 {
 
     /**
-     * Пример передачи параметров (без urlencode):
-     * DateFrom=19.03.2025 00:00&DateTo=19.03.2025 23:00&PhoneNumbers[]=203&PhoneNumbers[]=201&ExcludeNumbers[]=74952292333&ExcludeNumbers[]=74952295555
-     *
-     * Пример локального запроса (без авторизации всегда)
-     * curl "http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/exportHistoryDetail?DateFrom=19.03.2025+00%3A00&DateTo=19.03.2025+23%3A00&PhoneNumbers%5B%5D=203&PhoneNumbers%5B%5D=201&ExcludeNumbers%5B%5D=74952292333&ExcludeNumbers%5B%5D=74952295555"
+     * Export detailed history. This private route requires normal API authentication.
      * @return void
      */
     public function exportHistoryDetail(){
@@ -101,9 +97,7 @@ class ApiController extends ModulesControllerBase
 
 
     /**
-     * curl 'http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory?reportNameID=CdrQueue&type=json&search=%7B%22dateRangeSelector%22%3A%2209%2F11%2F2025%20-%2008%2F12%2F2025%22%2C%22minBilSec%22%3A%226%22%2C%22minBilSecComp%22%3A%22%3E%3D%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22outgoing-calls%22%2C%22additionalFilter%22%3A%22%22%7D'
-     * curl 'http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory?reportNameID=CdrQueue&type=json&search=%7B%22dateRangeSelector%22%3A%2201%2F12%2F2025%20-%2002%2F12%2F2025%22%2C%22minBilSec%22%3A%226%22%2C%22minBilSecComp%22%3A%22%3E%3D%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22outgoing-calls%22%2C%22additionalFilter%22%3A%22%22%7D'
-     * {"dateRangeSelector":"01/11/2025 - 02/12/2025","minBilSec":"6","minBilSecComp":">=","globalSearch":"","typeCall":"outgoing-calls","additionalFilter":""}
+     * Export aggregated queue history for an authenticated request.
      * @return void
      */
     public function exportHistoryQueue(): void
@@ -193,7 +187,7 @@ class ApiController extends ModulesControllerBase
     }
 
     /**
-     * curl 'http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory?reportNameID=OutgoingEmployeeCalls&type=json&search=%7B%22dateRangeSelector%22%3A%2221%2F10%2F2024%20-%2021%2F10%2F2024%22%2C%22minBilSec%22%3A%220%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22outgoing-calls%22%2C%22additionalFilter%22%3A%22%22%7D'
+     * Export call history for an authenticated request.
      * @return void
      */
     public function exportHistory()
@@ -285,11 +279,18 @@ class ApiController extends ModulesControllerBase
                 fclose($fp);
             }
         } catch (\RuntimeException $exception) {
-            $reason = $exception->getMessage() === 'archive_has_no_valid_entries'
-                ? 'archive_has_no_valid_entries'
-                : 'archive_build_failed';
+            if ($exception->getMessage() === 'archive_has_no_valid_entries') {
+                $reason = 'archive_has_no_valid_entries';
+                $status = 404;
+            } elseif ($exception->getMessage() === 'archive_too_large') {
+                $reason = 'archive_too_large';
+                $status = 413;
+            } else {
+                $reason = 'archive_build_failed';
+                $status = 500;
+            }
             Util::sysLogMsg('ModuleExtendedCDRs', 'event=archive_rejected reason=' . $reason . ' endpoint=downloads');
-            $this->sendError($reason === 'archive_has_no_valid_entries' ? 404 : 500);
+            $this->sendError($status);
         } finally {
             if (is_string($archivePath) && is_file($archivePath)) {
                 unlink($archivePath);
@@ -298,7 +299,7 @@ class ApiController extends ModulesControllerBase
     }
 
     /**
-     * curl 'http://127.0.0.1/pbxcore/api/modules/ModuleExtendedCDRs/exportOutgoingEmployeeCalls?type=json&search=%7B%22dateRangeSelector%22%3A%2201%2F10%2F2024%20-%2031%2F10%2F2024%22%2C%22globalSearch%22%3A%22%22%2C%22typeCall%22%3A%22outgoing-calls%22%2C%22additionalFilter%22%3A%22204%20203%22%7D'
+     * Export employee call totals for an authenticated request.
      * @return void
      */
     public function exportOutgoingEmployeeCalls()
