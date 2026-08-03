@@ -35,6 +35,10 @@ use Modules\ModuleExtendedCDRs\Lib\QuarantineActivation;
 use Modules\ModuleExtendedCDRs\Lib\QuarantinePolicy;
 use Modules\ModuleExtendedCDRs\Lib\BatchLogContext;
 use Modules\ModuleExtendedCDRs\Lib\SyncPolicy;
+use Modules\ModuleExtendedCDRs\Lib\TemporaryFileGuard;
+use Modules\ModuleExtendedCDRs\Lib\WorkerFailureContext;
+use Modules\ModuleExtendedCDRs\Lib\WorkerProcessMetrics;
+use Modules\ModuleExtendedCDRs\Lib\WorkerRuntimePolicy;
 use Exception;
 use Modules\ModuleExtendedCDRs\Lib\MikoPBXVersion;
 use Modules\ModuleExtendedCDRs\Lib\Providers\CdrDbProvider;
@@ -68,6 +72,8 @@ class ConnectorDB extends WorkerBase
     private array $oversizedPending = [];
     private int $oversizedCacheTime = 0;
     private int $oversizedPruneTime = 0;
+    private int $workerStartedAt = 0;
+    private int $lastHealthLogAt = 0;
 
     /**
      * Белый список методов, разрешённых для вызова через onEvents/invoke.
@@ -105,15 +111,22 @@ class ConnectorDB extends WorkerBase
      */
     public function start($argv):void
     {
+        $this->workerStartedAt = time();
         $this->logger   = new Logger('ConnectorDB', 'ModuleExtendedCDRs');
         $this->mp3TagService = new Mp3TagService(dirname(__DIR__));
         $this->logger->writeInfo('Starting...');
         $this->ensureDailyStatsTableExists();
         $this->ensureOversizedTableExists();
         $this->updateSettings();
-        $beanstalk      = new BeanstalkClient(self::class);
-        $beanstalk->subscribe(self::class, [$this, 'onEvents']);
-        $beanstalk->subscribe($this->makePingTubeName(self::class), [$this, 'pingCallBack']);
+        $operationStartedAt = microtime(true);
+        try {
+            $beanstalk = new BeanstalkClient(self::class);
+            $beanstalk->subscribe(self::class, [$this, 'onEvents']);
+            $beanstalk->subscribe($this->makePingTubeName(self::class), [$this, 'pingCallBack']);
+        } catch (Throwable $exception) {
+            $this->logDependencyFailure('beanstalk_subscribe', $exception, $operationStartedAt);
+            return;
+        }
         while ($this->needRestart === false) {
             try {
                 $this->syncCdrData(true);
@@ -127,9 +140,35 @@ class ConnectorDB extends WorkerBase
                 );
                 $this->nextSyncDelay = SyncPolicy::ERROR_DELAY_SECONDS;
             }
-            $beanstalk->wait(max(1, $this->nextSyncDelay));
+            $operationStartedAt = microtime(true);
+            try {
+                $beanstalk->wait(max(1, $this->nextSyncDelay));
+            } catch (Throwable $exception) {
+                $this->logDependencyFailure('beanstalk_wait', $exception, $operationStartedAt);
+                return;
+            }
+            $this->logWorkerHealthIfDue();
             $this->logger->rotate();
         }
+    }
+
+    private function logDependencyFailure(string $operation, Throwable $exception, float $startedAt): void
+    {
+        $metrics = WorkerProcessMetrics::collect(getmypid(), $this->workerStartedAt ?: time());
+        $elapsedMs = (int) round((microtime(true) - $startedAt) * 1000);
+        $this->logger->writeError(WorkerFailureContext::make($operation, $exception, $metrics, $elapsedMs));
+    }
+
+    private function logWorkerHealthIfDue(): void
+    {
+        $now = time();
+        if (!WorkerRuntimePolicy::shouldLogHealth($now, $this->lastHealthLogAt)) {
+            return;
+        }
+        $this->lastHealthLogAt = $now;
+        $this->logger->writeInfo([
+            'event' => 'worker_health',
+        ] + WorkerProcessMetrics::collect(getmypid(), $this->workerStartedAt));
     }
 
 
@@ -277,24 +316,44 @@ class ConnectorDB extends WorkerBase
             'function' => $function,
             'args'     => $args
         ];
-        $client = new BeanstalkClient(self::class);
+        if ($retVal) {
+            $req['need-ret'] = true;
+        }
         $object = [];
+        $guard = new TemporaryFileGuard();
+        $operationStartedAt = microtime(true);
         try {
+            $client = new BeanstalkClient(self::class);
+            $pathToData = self::saveInTmpFile($req);
+            $guard->track($pathToData);
             if($retVal){
-                $req['need-ret'] = true;
-                $pathToData = self::saveInTmpFile($req);
                 $result = $client->request($pathToData, 20);
+                $guard->track((string) $result);
             }else{
-                $pathToData = self::saveInTmpFile($req);
                 $client->publish($pathToData);
+                $guard->forget($pathToData);
                 return [];
             }
             if(file_exists($result)){
                 $object = json_decode(file_get_contents($result), true, 512, JSON_THROW_ON_ERROR);
                 unlink($result);
+                $guard->forget($result);
             }
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $object = [];
+            try {
+                $logger = new Logger('ConnectorDB', 'ModuleExtendedCDRs');
+                $logger->writeError(WorkerFailureContext::make(
+                    'beanstalk_request',
+                    $e,
+                    WorkerProcessMetrics::collect(getmypid(), time()),
+                    (int) round((microtime(true) - $operationStartedAt) * 1000)
+                ));
+            } catch (Throwable $loggingError) {
+                // Diagnostics must never change the public invoke() contract.
+            }
+        } finally {
+            $guard->cleanup();
         }
         return $object;
     }
