@@ -36,6 +36,8 @@ use Modules\ModuleExtendedCDRs\Lib\QuarantinePolicy;
 use Modules\ModuleExtendedCDRs\Lib\BatchLogContext;
 use Modules\ModuleExtendedCDRs\Lib\SyncPolicy;
 use Modules\ModuleExtendedCDRs\Lib\TemporaryFileGuard;
+use Modules\ModuleExtendedCDRs\Lib\WorkerDependencyException;
+use Modules\ModuleExtendedCDRs\Lib\WorkerEventContext;
 use Modules\ModuleExtendedCDRs\Lib\WorkerFailureContext;
 use Modules\ModuleExtendedCDRs\Lib\WorkerProcessMetrics;
 use Modules\ModuleExtendedCDRs\Lib\WorkerRuntimePolicy;
@@ -121,6 +123,12 @@ class ConnectorDB extends WorkerBase
         $operationStartedAt = microtime(true);
         try {
             $beanstalk = new BeanstalkClient(self::class);
+        } catch (Throwable $exception) {
+            $this->logDependencyFailure('beanstalk_connect', $exception, $operationStartedAt);
+            return;
+        }
+        $operationStartedAt = microtime(true);
+        try {
             $beanstalk->subscribe(self::class, [$this, 'onEvents']);
             $beanstalk->subscribe($this->makePingTubeName(self::class), [$this, 'pingCallBack']);
         } catch (Throwable $exception) {
@@ -144,7 +152,13 @@ class ConnectorDB extends WorkerBase
             try {
                 $beanstalk->wait(max(1, $this->nextSyncDelay));
             } catch (Throwable $exception) {
-                $this->logDependencyFailure('beanstalk_wait', $exception, $operationStartedAt);
+                $operation = $exception instanceof WorkerDependencyException
+                    ? $exception->operation()
+                    : 'beanstalk_wait';
+                $cause = $exception->getPrevious() instanceof Throwable
+                    ? $exception->getPrevious()
+                    : $exception;
+                $this->logDependencyFailure($operation, $cause, $operationStartedAt);
                 return;
             }
             $this->logWorkerHealthIfDue();
@@ -227,9 +241,10 @@ class ConnectorDB extends WorkerBase
                 $data = json_decode(file_get_contents($pathToData), true, 512, JSON_THROW_ON_ERROR);
                 unlink($pathToData);
             }
-            $this->logger->writeInfo(['data'=> $data, 'pathToData' => $pathToData], 'onEvents');
         }catch (Throwable $exception){
-            $this->logger->writeError("Throwable:".$exception->getMessage(). ' Line: '.$exception->getLine());
+            $this->logger->writeError(WorkerEventContext::make($data, 'invalid_request') + [
+                'errorClass' => get_class($exception),
+            ]);
             return;
         }
         $action = $data['action']??'';
@@ -245,16 +260,27 @@ class ConnectorDB extends WorkerBase
                         $res_data = $this->$funcName(...$data['args']??[]);
                     }
                 }else{
-                    $this->logger->writeError($data);
+                    $this->logger->writeError(WorkerEventContext::make($data, 'rejected'));
                 }
                 if(isset($data['need-ret'])){
                     $res_data = self::saveInTmpFile($res_data);
-                    $tube->reply($res_data);
+                    $replyGuard = new TemporaryFileGuard();
+                    $replyGuard->track($res_data);
+                    try {
+                        $tube->reply($res_data);
+                        $replyGuard->forget($res_data);
+                    } catch (Throwable $exception) {
+                        throw new WorkerDependencyException('beanstalk_reply', $exception);
+                    }
                 }
-                $this->logger->writeInfo(['data'=> $data, 'result' => $res_data], 'invoke');
+                $this->logger->writeInfo(WorkerEventContext::make($data, 'completed'));
             }
+        }catch (WorkerDependencyException $exception){
+            throw $exception;
         }catch (Throwable $exception){
-            $this->logger->writeError($data, "Throwable:".$exception->getMessage(). ' Line: '.$exception->getLine());
+            $this->logger->writeError(WorkerEventContext::make($data, 'failed') + [
+                'errorClass' => get_class($exception),
+            ]);
             return;
         }
     }

@@ -14,10 +14,9 @@ function assertLease($expected, $actual, string $message): void
     }
 }
 
-$path = tempnam(sys_get_temp_dir(), 'extended-cdr-watchdog-');
-if ($path === false) {
-    throw new RuntimeException('Unable to create lease fixture');
-}
+$directory = sys_get_temp_dir() . '/extended-cdr-watchdog-' . bin2hex(random_bytes(6));
+mkdir($directory, 0700);
+$path = $directory . '/watchdog.lock';
 
 file_put_contents($path, '{"pid":999,"startedAt":1}');
 
@@ -38,8 +37,22 @@ try {
     assertLease(true, $third instanceof WorkerWatchdogLease, 'released lease can be reacquired');
     $third->release();
     $third->release();
+
+    $target = $directory . '/target';
+    $link = $directory . '/symlink.lock';
+    file_put_contents($target, 'must-not-change');
+    symlink($target, $link);
+    try {
+        WorkerWatchdogLease::tryAcquire($link, 404, 1700000003);
+        throw new RuntimeException('symlink lock path must be rejected');
+    } catch (RuntimeException $error) {
+        assertLease('must-not-change', file_get_contents($target), 'symlink target remains unchanged');
+    }
 } finally {
     @unlink($path);
+    @unlink($link ?? '');
+    @unlink($target ?? '');
+    @rmdir($directory);
 }
 
 echo "WorkerWatchdogLeaseTest: OK\n";

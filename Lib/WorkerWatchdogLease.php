@@ -20,13 +20,23 @@ final class WorkerWatchdogLease
     public static function tryAcquire(string $path, int $pid, int $startedAt): ?self
     {
         $directory = dirname($path);
-        if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
+        if (!is_dir($directory) && !mkdir($directory, 0700, true) && !is_dir($directory)) {
             throw new \RuntimeException("Unable to create watchdog lock directory: {$directory}");
+        }
+        if (is_link($path)) {
+            throw new \RuntimeException("Refusing symlink watchdog lock: {$path}");
         }
 
         $handle = fopen($path, 'c+');
         if ($handle === false) {
             throw new \RuntimeException("Unable to open watchdog lock: {$path}");
+        }
+        $pathStat = lstat($path);
+        $handleStat = fstat($handle);
+        if ($pathStat === false || $handleStat === false
+            || $pathStat['dev'] !== $handleStat['dev'] || $pathStat['ino'] !== $handleStat['ino']) {
+            fclose($handle);
+            throw new \RuntimeException("Watchdog lock path changed while opening: {$path}");
         }
         if (!flock($handle, LOCK_EX | LOCK_NB)) {
             fclose($handle);

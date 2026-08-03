@@ -23,6 +23,7 @@ use MikoPBX\Core\System\SystemMessages;
 use MikoPBX\Modules\PbxExtensionUtils;
 use Modules\ModuleExtendedCDRs\Lib\ExtendedCDRsConf;
 use Modules\ModuleExtendedCDRs\Lib\WorkerRuntimePolicy;
+use Modules\ModuleExtendedCDRs\Lib\WorkerLogRateLimiter;
 use Modules\ModuleExtendedCDRs\Lib\WorkerWatchdogLease;
 use Modules\ModuleExtendedCDRs\Lib\WorkerWatchdogRunner;
 require_once 'Globals.php';
@@ -34,18 +35,21 @@ if(!$moduleEnable){
 }
 
 $startedAt = time();
-$lockPath = '/tmp/ModuleExtendedCDRs/worker-watchdog.lock';
+$lockPath = '/var/run/php-workers/ModuleExtendedCDRs-watchdog.lock';
+$skipLogPath = '/var/run/php-workers/ModuleExtendedCDRs-watchdog-skip.log';
 $lease = null;
 $activePhase = 'acquire_lock';
 
 try {
     $lease = WorkerWatchdogLease::tryAcquire($lockPath, getmypid(), $startedAt);
     if ($lease === null) {
-        SystemMessages::sysLogMsg(
-            'ModuleExtendedCDRs_SAFE',
-            json_encode(['event' => 'worker_watchdog_skipped', 'reason' => 'lock_busy']),
-            LOG_NOTICE
-        );
+        if (WorkerLogRateLimiter::shouldLog($skipLogPath, time(), 300)) {
+            SystemMessages::sysLogMsg(
+                'ModuleExtendedCDRs_SAFE',
+                json_encode(['event' => 'worker_watchdog_skipped', 'reason' => 'lock_busy']),
+                LOG_NOTICE
+            );
+        }
         exit(0);
     }
 
