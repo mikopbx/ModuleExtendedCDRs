@@ -36,5 +36,8 @@ assertFailureContext(false, isset($context['message']), 'exception message is ex
 assertFailureContext(false, isset($context['recordingfile']), 'unknown metric is excluded');
 assertFailureContext(false, strpos(json_encode($context), '79990001122') !== false, 'phone number is absent');
 assertFailureContext(false, strpos(json_encode($context), 'recordings') !== false, 'path is absent');
+assertFailureContext('beanstalk_connect', WorkerFailureContext::invokeOperation(false, true), 'construction operation');
+assertFailureContext('beanstalk_request', WorkerFailureContext::invokeOperation(true, true), 'request operation');
+assertFailureContext('beanstalk_publish', WorkerFailureContext::invokeOperation(true, false), 'publish operation');
 
 echo "WorkerFailureContextTest: OK\n";

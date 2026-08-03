@@ -348,8 +348,10 @@ class ConnectorDB extends WorkerBase
         $object = [];
         $guard = new TemporaryFileGuard();
         $operationStartedAt = microtime(true);
+        $clientCreated = false;
         try {
             $client = new BeanstalkClient(self::class);
+            $clientCreated = true;
             $pathToData = self::saveInTmpFile($req);
             $guard->track($pathToData);
             if($retVal){
@@ -370,7 +372,7 @@ class ConnectorDB extends WorkerBase
             try {
                 $logger = new Logger('ConnectorDB', 'ModuleExtendedCDRs');
                 $logger->writeError(WorkerFailureContext::make(
-                    'beanstalk_request',
+                    WorkerFailureContext::invokeOperation($clientCreated, $retVal),
                     $e,
                     WorkerProcessMetrics::collect(getmypid(), time()),
                     (int) round((microtime(true) - $operationStartedAt) * 1000)

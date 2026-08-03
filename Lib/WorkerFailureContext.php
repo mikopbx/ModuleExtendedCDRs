@@ -17,6 +17,14 @@ final class WorkerFailureContext
         'tcpSocketCount',
     ];
 
+    public static function invokeOperation(bool $clientCreated, bool $expectsReply): string
+    {
+        if (!$clientCreated) {
+            return 'beanstalk_connect';
+        }
+        return $expectsReply ? 'beanstalk_request' : 'beanstalk_publish';
+    }
+
     /**
      * @return array<string, mixed>
      */
