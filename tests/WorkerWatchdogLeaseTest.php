@@ -48,11 +48,23 @@ try {
     } catch (RuntimeException $error) {
         assertLease('must-not-change', file_get_contents($target), 'symlink target remains unchanged');
     }
+
+    $unsafeDirectory = sys_get_temp_dir() . '/extended-cdr-unsafe-' . bin2hex(random_bytes(6));
+    mkdir($unsafeDirectory, 0777);
+    chmod($unsafeDirectory, 0777);
+    try {
+        WorkerWatchdogLease::tryAcquire($unsafeDirectory . '/watchdog.lock', 505, 1700000004);
+        throw new RuntimeException('group/world-writable lock directory must be rejected');
+    } catch (RuntimeException $error) {
+        assertLease(false, file_exists($unsafeDirectory . '/watchdog.lock'), 'unsafe directory gets no lock file');
+    }
 } finally {
     @unlink($path);
     @unlink($link ?? '');
     @unlink($target ?? '');
     @rmdir($directory);
+    @unlink(($unsafeDirectory ?? '') . '/watchdog.lock');
+    @rmdir($unsafeDirectory ?? '');
 }
 
 echo "WorkerWatchdogLeaseTest: OK\n";

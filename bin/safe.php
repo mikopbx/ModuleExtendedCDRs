@@ -35,8 +35,8 @@ if(!$moduleEnable){
 }
 
 $startedAt = time();
-$lockPath = '/var/run/php-workers/ModuleExtendedCDRs-watchdog.lock';
-$skipLogPath = '/var/run/php-workers/ModuleExtendedCDRs-watchdog-skip.log';
+$lockPath = '/var/run/ModuleExtendedCDRs/watchdog.lock';
+$skipLogPath = '/var/run/ModuleExtendedCDRs/watchdog-skip.log';
 $lease = null;
 $activePhase = 'acquire_lock';
 

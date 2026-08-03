@@ -23,6 +23,10 @@ final class WorkerWatchdogLease
         if (!is_dir($directory) && !mkdir($directory, 0700, true) && !is_dir($directory)) {
             throw new \RuntimeException("Unable to create watchdog lock directory: {$directory}");
         }
+        $directoryMode = fileperms($directory);
+        if (is_link($directory) || $directoryMode === false || (($directoryMode & 0022) !== 0)) {
+            throw new \RuntimeException("Refusing insecure watchdog lock directory: {$directory}");
+        }
         if (is_link($path)) {
             throw new \RuntimeException("Refusing symlink watchdog lock: {$path}");
         }
