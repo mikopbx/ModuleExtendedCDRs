@@ -15,7 +15,9 @@ use MikoPBX\Core\Workers\Cron\WorkerSafeScriptsCore;
 use MikoPBX\Modules\Config\ConfigClass;
 use MikoPBX\PBXCoreREST\Lib\PBXApiResult;
 use Modules\ModuleExtendedCDRs\bin\ConnectorDB;
+use Modules\ModuleExtendedCDRs\Lib\ModuleWatchdogCommand;
 use Modules\ModuleExtendedCDRs\Lib\RestAPI\Controllers\ApiController;
+use Modules\ModuleExtendedCDRs\Lib\WorkerRuntimePolicy;
 use Modules\ModuleExtendedCDRs\Models\ReportSettings;
 
 class ExtendedCDRsConf extends ConfigClass
@@ -131,7 +133,13 @@ class ExtendedCDRsConf extends ConfigClass
         $busyboxPath= Util::which('busybox');
         $tasks[]    = "*/1 * * * * $busyboxPath find /storage/usbdisk*/mikopbx/tmp/ModuleExtendedCDRs/ -mmin +5 -type f -delete> /dev/null 2>&1".PHP_EOL;
         $phpPath    = Util::which('php');
-        $tasks[]    = "*/1 * * * * $phpPath -f {$this->moduleDir}/bin/safe.php > /dev/null 2>&1".PHP_EOL;
+        $watchdogCommand = ModuleWatchdogCommand::build(
+            $busyboxPath,
+            $phpPath,
+            $this->moduleDir,
+            WorkerRuntimePolicy::outerTimeoutSeconds()
+        );
+        $tasks[]    = "*/1 * * * * $watchdogCommand > /dev/null 2>&1".PHP_EOL;
 
         $reportsData = ReportSettings::find('sendingScheduledReport=1');
         foreach ($reportsData as $settings) {

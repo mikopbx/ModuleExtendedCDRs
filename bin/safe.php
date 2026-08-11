@@ -22,27 +22,97 @@ use MikoPBX\Core\System\Processes;
 use MikoPBX\Core\System\SystemMessages;
 use MikoPBX\Modules\PbxExtensionUtils;
 use Modules\ModuleExtendedCDRs\Lib\ExtendedCDRsConf;
+use Modules\ModuleExtendedCDRs\Lib\WorkerRuntimePolicy;
+use Modules\ModuleExtendedCDRs\Lib\WorkerLogRateLimiter;
+use Modules\ModuleExtendedCDRs\Lib\WorkerWatchdogLease;
+use Modules\ModuleExtendedCDRs\Lib\WorkerWatchdogRunner;
 require_once 'Globals.php';
+require_once dirname(__DIR__) . '/vendor/autoload.php';
 
 $moduleEnable = PbxExtensionUtils::isEnabled('ModuleExtendedCDRs');
 if(!$moduleEnable){
     exit(1);
 }
-$conf = new ExtendedCDRsConf();
-$workers = $conf->getModuleWorkers();
-foreach ($workers as $workerData) {
-    $WorkerPID = Processes::getPidOfProcess($workerData['worker']);
-    print_r($WorkerPID.PHP_EOL);
-    if (empty($WorkerPID)) {
-        Processes::processPHPWorker($workerData['worker']);
-        SystemMessages::sysLogMsg('ModuleExtendedCDRs_SAFE', "Service {$workerData['worker']} started.", LOG_NOTICE);
-    }else{
-        // Проверка дубликата процесса.
-        $allButLast = array_slice(explode(' ', $WorkerPID), 0, -1);
-        if(!empty($allButLast)){
-            // Завершаем дубликаты процессов.
-            $bbPath = Util::which('busybox');
-            shell_exec("$bbPath kill -SIGUSR2 ". implode(" ", $allButLast));
+
+$startedAt = time();
+$lockPath = '/var/run/ModuleExtendedCDRs/watchdog.lock';
+$skipLogPath = '/var/run/ModuleExtendedCDRs/watchdog-skip.log';
+$lease = null;
+$activePhase = 'acquire_lock';
+
+try {
+    $lease = WorkerWatchdogLease::tryAcquire($lockPath, getmypid(), $startedAt);
+    if ($lease === null) {
+        if (WorkerLogRateLimiter::shouldLog($skipLogPath, time(), 300)) {
+            SystemMessages::sysLogMsg(
+                'ModuleExtendedCDRs_SAFE',
+                json_encode(['event' => 'worker_watchdog_skipped', 'reason' => 'lock_busy']),
+                LOG_NOTICE
+            );
         }
+        exit(0);
+    }
+
+    if (function_exists('pcntl_async_signals') && function_exists('pcntl_alarm')) {
+        pcntl_async_signals(true);
+        pcntl_signal(SIGALRM, static function () use (&$activePhase, $startedAt): void {
+            SystemMessages::sysLogMsg(
+                'ModuleExtendedCDRs_SAFE',
+                json_encode([
+                    'event' => 'worker_watchdog_timeout',
+                    'phase' => $activePhase,
+                    'elapsedMs' => (time() - $startedAt) * 1000,
+                ]),
+                LOG_ERR
+            );
+            exit(124);
+        });
+        pcntl_alarm(WorkerRuntimePolicy::watchdogDeadlineSeconds());
+    }
+
+    $activePhase = 'load_workers';
+    $conf = new ExtendedCDRsConf();
+    $workers = array_column($conf->getModuleWorkers(), 'worker');
+    $busyboxPath = Util::which('busybox');
+
+    $status = WorkerWatchdogRunner::run(
+        $workers,
+        static function (string $worker) use (&$activePhase): string {
+            $activePhase = 'find_worker';
+            return (string) Processes::getPidOfProcess($worker);
+        },
+        static function (string $worker) use (&$activePhase): void {
+            $activePhase = 'start_worker';
+            Processes::processPHPWorker($worker);
+        },
+        static function (array $duplicates) use (&$activePhase, $busyboxPath): void {
+            $activePhase = 'signal_duplicates';
+            $pids = implode(' ', array_map('intval', $duplicates));
+            shell_exec(escapeshellarg($busyboxPath) . ' kill -SIGUSR2 ' . $pids);
+        },
+        static function (array $event): void {
+            SystemMessages::sysLogMsg('ModuleExtendedCDRs_SAFE', json_encode($event), LOG_NOTICE);
+        }
+    );
+} catch (Throwable $error) {
+    SystemMessages::sysLogMsg(
+        'ModuleExtendedCDRs_SAFE',
+        json_encode([
+            'event' => 'worker_watchdog_failed',
+            'phase' => $activePhase,
+            'errorClass' => get_class($error),
+            'elapsedMs' => (time() - $startedAt) * 1000,
+        ]),
+        LOG_ERR
+    );
+    $status = 1;
+} finally {
+    if (function_exists('pcntl_alarm')) {
+        pcntl_alarm(0);
+    }
+    if ($lease instanceof WorkerWatchdogLease) {
+        $lease->release();
     }
 }
+
+exit($status ?? 1);
