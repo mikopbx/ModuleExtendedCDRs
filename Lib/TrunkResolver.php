@@ -4,10 +4,12 @@ namespace Modules\ModuleExtendedCDRs\Lib;
 
 final class TrunkResolver
 {
-    /** @var array<string,array{name:string,id:string}> */
+    /** @var array<string,array{name:string,id:string,host:string}> */
     private array $byId = [];
-    /** @var array<string,array<int,array{name:string,id:string}>> */
-    private array $byUsername = [];
+    /** @var array<string,int> */
+    private array $hostProviderCount = [];
+    /** @var array<string,array<string,array<int,array{name:string,id:string,host:string}>>> */
+    private array $byHostAndUsername = [];
 
     public function __construct(iterable $providers)
     {
@@ -18,11 +20,16 @@ final class TrunkResolver
             if ($id === '' || $name === '') {
                 continue;
             }
-            $candidate = ['name' => $name, 'id' => $id];
+            $host = self::normalizeHost((string)($provider['host'] ?? ''));
+            $candidate = ['name' => $name, 'id' => $id, 'host' => $host];
             $this->byId[$id] = $candidate;
+            if ($host === '') {
+                continue;
+            }
+            $this->hostProviderCount[$host] = ($this->hostProviderCount[$host] ?? 0) + 1;
             $username = self::normalizeNumber((string)($provider['username'] ?? ''));
             if ($username !== '') {
-                $this->byUsername[$username][] = $candidate;
+                $this->byHostAndUsername[$host][$username][] = $candidate;
             }
         }
     }
@@ -32,24 +39,17 @@ final class TrunkResolver
     {
         $technical = (string)($record['line'] ?? '');
         if (isset($this->byId[$technical])) {
-            return $this->resolved($this->byId[$technical], 'line_id');
-        }
-
-        if ($callType === 'incoming' || $callType === '2') {
-            $did = self::normalizeNumber((string)($record['did'] ?? ''));
-            $candidates = $did === '' ? [] : ($this->byUsername[$did] ?? []);
-            if (count($candidates) === 1) {
-                return $this->resolved($candidates[0], 'did_username');
+            $lineProvider = $this->byId[$technical];
+            $host = $lineProvider['host'];
+            $isIncoming = in_array($callType, ['incoming', '2', '3'], true);
+            if ($isIncoming && $host !== '' && ($this->hostProviderCount[$host] ?? 0) > 1) {
+                $did = self::normalizeNumber((string)($record['did'] ?? ''));
+                $candidates = $did === '' ? [] : ($this->byHostAndUsername[$host][$did] ?? []);
+                if (count($candidates) === 1) {
+                    return $this->resolved($candidates[0], 'did_username');
+                }
             }
-            if (count($candidates) > 1) {
-                return [
-                    'name' => $technical,
-                    'id' => $technical,
-                    'status' => 'ambiguous',
-                    'source' => 'did_username',
-                    'candidates' => array_column($candidates, 'id'),
-                ];
-            }
+            return $this->resolved($lineProvider, 'line_id');
         }
 
         return [
@@ -75,5 +75,10 @@ final class TrunkResolver
     private static function normalizeNumber(string $number): string
     {
         return preg_replace('/\D+/', '', $number) ?: '';
+    }
+
+    private static function normalizeHost(string $host): string
+    {
+        return strtolower(trim($host));
     }
 }
