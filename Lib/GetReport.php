@@ -308,6 +308,7 @@ class GetReport
                 'uniqid' => $provider->uniqid,
                 'username' => $provider->username,
                 'description' => $provider->description,
+                'host' => $provider->host,
             ];
         }
         $trunkResolver = new TrunkResolver($providerRows);
