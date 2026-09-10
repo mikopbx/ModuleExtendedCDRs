@@ -274,6 +274,8 @@ class GetReport
             ];
         }
 
+        // Apply the same employee/answer restriction to details and archive candidates.
+        $this->addEmployeeConversationConditions($parameters, $conversationEmployees);
         $selectedRecords = $this->selectCDRRecordsWithFilters($parameters);
         $view->data = $this->prepareCdrData($selectedRecords);
         return $view;
@@ -1276,11 +1278,20 @@ class GetReport
         if (filter_var($searchPhrase['onlyEmployeeConversations'] ?? false, FILTER_VALIDATE_BOOLEAN)
             && preg_match_all('/(?<=\s|^)\d+(?=\s|$)/', $additionalFilter, $matches)) {
             $conversationEmployees = array_values(array_unique($matches[0]));
-            $parameters['conditions'] .= " AND (src_num IN ({conversationEmployees:array}) OR dst_num IN ({conversationEmployees:array})) AND "
-                . CdrQueryBuilder::answeredLegCondition();
-            $parameters['bind']['conversationEmployees'] = $conversationEmployees;
+            $this->addEmployeeConversationConditions($parameters, $conversationEmployees);
         }
         return [$start, $end, $globalNumbers, $additionalNumbers, $ids, $conversationEmployees];
+    }
+
+    private function addEmployeeConversationConditions(array &$parameters, array $employees): void
+    {
+        if (empty($employees)) {
+            return;
+        }
+        $parameters['conditions'] = '(' . $parameters['conditions'] . ') AND '
+            . '(src_num IN ({conversationEmployees:array}) OR dst_num IN ({conversationEmployees:array})) AND '
+            . CdrQueryBuilder::answeredLegCondition();
+        $parameters['bind']['conversationEmployees'] = $employees;
     }
 
     /**
