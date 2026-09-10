@@ -753,6 +753,10 @@ const ModuleExtendedCDRs = {
 				return false;
 			}
 		});
+		$('#onlyEmployeeConversations').on('change', ModuleExtendedCDRs.employeeConversationChanged);
+		$('#employeeConversationHelp').popup({on: 'hover'});
+		$('#employeeConversationHelp').on('focus', function() { $(this).popup('show'); })
+			.on('blur', function() { $(this).popup('hide'); });
 		ModuleExtendedCDRs.updateSettings();
 		ModuleExtendedCDRs.applyFilter();
 
@@ -851,6 +855,8 @@ const ModuleExtendedCDRs = {
 		}else if(settings.additionalFilter !== undefined){
 			$('#additionalFilter').dropdown('set selected', settings.additionalFilter.split(' '));
 		}
+		$('#onlyEmployeeConversations').prop('checked', settings.onlyEmployeeConversations === true);
+		ModuleExtendedCDRs.updateEmployeeConversationControl();
 		// Re-enable onChange
 		$('#additionalFilter').dropdown('setting', 'onChange', ModuleExtendedCDRs.applyFilter);
 
@@ -1161,8 +1167,31 @@ const ModuleExtendedCDRs = {
 	/**
 	 * Applies the filter to the data table (with debounce to prevent double calls).
 	 */
+	hasSelectedConversationEmployee() {
+		const selected = String($('#additionalFilter').dropdown('get value') || '').split(/[,\s]+/);
+		return selected.some(value => /^\d+$/.test(value));
+	},
+
+	employeeConversationChanged() {
+		const $checkbox = $('#onlyEmployeeConversations');
+		if ($checkbox.is(':checked') && !ModuleExtendedCDRs.hasSelectedConversationEmployee()) {
+			$checkbox.prop('checked', false);
+			window.alert($checkbox.attr('data-warning'));
+			return;
+		}
+		ModuleExtendedCDRs.applyFilter();
+	},
+
+	updateEmployeeConversationControl() {
+		if (!ModuleExtendedCDRs.hasSelectedConversationEmployee()) {
+			$('#onlyEmployeeConversations').prop('checked', false);
+		}
+		$('#employeeConversationControl').toggle($('#currentReportNameID').val() !== 'CdrQueue');
+	},
+
 	applyFilter()
 	{
+		ModuleExtendedCDRs.updateEmployeeConversationControl();
 		// Debounce: cancel previous timer and set new one
 		if (ModuleExtendedCDRs.applyFilterTimer) {
 			clearTimeout(ModuleExtendedCDRs.applyFilterTimer);
@@ -1288,6 +1317,7 @@ const ModuleExtendedCDRs = {
 			globalSearch: ModuleExtendedCDRs.$globalSearch.val(),
 			typeCall: $('#typeCall a.item.active').attr('data-tab'),
 			additionalFilter: $('#additionalFilter').dropdown('get value').replace(/,/g,' '),
+			onlyEmployeeConversations: $('#onlyEmployeeConversations').is(':checked') && reportNameID !== 'CdrQueue',
 		};
 		if(disableGlobalSearch === true){
 			filter.globalSearch = '';

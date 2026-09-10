@@ -202,7 +202,7 @@ class GetReport
             return $view;
         }
 
-        [$start, $end, $numbers, $additionalNumbers, $ids] = $this->prepareConditionsForSearchPhrases($searchPhrase, $parameters);
+        [$start, $end, $numbers, $additionalNumbers, $ids, $conversationEmployees] = $this->prepareConditionsForSearchPhrases($searchPhrase, $parameters);
         // If we couldn't understand the search phrase, return empty result
         if (empty($parameters['conditions'])) {
             $view->conditions = 'empty';
@@ -215,7 +215,7 @@ class GetReport
         $view->additionalFilter = $additionalFilter;
         $view->baseNumberFilter = array_merge($numbers, $additionalNumbers, $additionalFilter);
 
-        $recordsFilteredReq = ConnectorDB::invoke('getCountCdr', [$start, $end, $numbers, $additionalNumbers, $additionalFilter, $minBilSec, $ids]);
+        $recordsFilteredReq = ConnectorDB::invoke('getCountCdr', [$start, $end, $numbers, $additionalNumbers, $additionalFilter, $minBilSec, $ids, $conversationEmployees]);
         $view->recordsFiltered = $recordsFilteredReq['cCalls'] ?? 0;
         $view->recordsTotal = $recordsFilteredReq['cCalls'] ?? 0;
         $view->recordsInner = $recordsFilteredReq['cINNER'] ?? 0;
@@ -1271,7 +1271,16 @@ class GetReport
             $parameters['conditions'] .= '(srcIndex IN ({additionslNumbers:array}) OR dstIndex IN ({additionslNumbers:array}))';
             $parameters['bind']['additionslNumbers'] = array_unique($additionalNumbers);
         }
-        return [$start, $end, $globalNumbers, $additionalNumbers, $ids];
+        // Only explicitly selected employees activate this option; groups and queues keep their semantics.
+        $conversationEmployees = [];
+        if (filter_var($searchPhrase['onlyEmployeeConversations'] ?? false, FILTER_VALIDATE_BOOLEAN)
+            && preg_match_all('/(?<=\s|^)\d+(?=\s|$)/', $additionalFilter, $matches)) {
+            $conversationEmployees = array_values(array_unique($matches[0]));
+            $parameters['conditions'] .= " AND (src_num IN ({conversationEmployees:array}) OR dst_num IN ({conversationEmployees:array})) AND "
+                . CdrQueryBuilder::answeredLegCondition();
+            $parameters['bind']['conversationEmployees'] = $conversationEmployees;
+        }
+        return [$start, $end, $globalNumbers, $additionalNumbers, $ids, $conversationEmployees];
     }
 
     /**

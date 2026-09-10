@@ -62,4 +62,8 @@ return [
     'repModuleExtendedCDRs_Form_Time' => 'Time',
     'repModuleExtendedCDRs_Form_TimeError' => 'Time must be specified in the format 09:35',
     'repModuleExtendedCDRs_Form_EmailError' => 'Incorrect email address',
+    'repModuleExtendedCDRs_OnlyEmployeeConversations' => 'Only with employee participation in a conversation',
+    'repModuleExtendedCDRs_OnlyEmployeeConversationsHelp' => 'Show only calls where at least one selected employee participated in a conversation. Calls not answered by the selected employees are excluded from the history, report and recording export. Select an individual employee; this option does not apply to departments or queues.',
+    'repModuleExtendedCDRs_OnlyConversationsLabel' => 'Conversations only',
+    'repModuleExtendedCDRs_SelectConversationEmployee' => 'Select at least one employee in the filter first. Selecting a department or queue is not enough.',
 ];

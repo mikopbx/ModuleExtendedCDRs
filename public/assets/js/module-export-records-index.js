@@ -716,6 +716,15 @@ var ModuleExtendedCDRs = {
         return false;
       }
     });
+    $('#onlyEmployeeConversations').on('change', ModuleExtendedCDRs.employeeConversationChanged);
+    $('#employeeConversationHelp').popup({
+      on: 'hover'
+    });
+    $('#employeeConversationHelp').on('focus', function () {
+      $(this).popup('show');
+    }).on('blur', function () {
+      $(this).popup('hide');
+    });
     ModuleExtendedCDRs.updateSettings();
     ModuleExtendedCDRs.applyFilter();
 
@@ -811,6 +820,8 @@ var ModuleExtendedCDRs = {
     } else if (settings.additionalFilter !== undefined) {
       $('#additionalFilter').dropdown('set selected', settings.additionalFilter.split(' '));
     }
+    $('#onlyEmployeeConversations').prop('checked', settings.onlyEmployeeConversations === true);
+    ModuleExtendedCDRs.updateEmployeeConversationControl();
     // Re-enable onChange
     $('#additionalFilter').dropdown('setting', 'onChange', ModuleExtendedCDRs.applyFilter);
     if (settings.globalSearch !== undefined) {
@@ -1050,7 +1061,29 @@ var ModuleExtendedCDRs = {
   /**
    * Applies the filter to the data table (with debounce to prevent double calls).
    */
+  hasSelectedConversationEmployee: function hasSelectedConversationEmployee() {
+    var selected = String($('#additionalFilter').dropdown('get value') || '').split(/[,\s]+/);
+    return selected.some(function (value) {
+      return /^\d+$/.test(value);
+    });
+  },
+  employeeConversationChanged: function employeeConversationChanged() {
+    var $checkbox = $('#onlyEmployeeConversations');
+    if ($checkbox.is(':checked') && !ModuleExtendedCDRs.hasSelectedConversationEmployee()) {
+      $checkbox.prop('checked', false);
+      window.alert($checkbox.attr('data-warning'));
+      return;
+    }
+    ModuleExtendedCDRs.applyFilter();
+  },
+  updateEmployeeConversationControl: function updateEmployeeConversationControl() {
+    if (!ModuleExtendedCDRs.hasSelectedConversationEmployee()) {
+      $('#onlyEmployeeConversations').prop('checked', false);
+    }
+    $('#employeeConversationControl').toggle($('#currentReportNameID').val() !== 'CdrQueue');
+  },
   applyFilter: function applyFilter() {
+    ModuleExtendedCDRs.updateEmployeeConversationControl();
     // Debounce: cancel previous timer and set new one
     if (ModuleExtendedCDRs.applyFilterTimer) {
       clearTimeout(ModuleExtendedCDRs.applyFilterTimer);
@@ -1170,7 +1203,8 @@ var ModuleExtendedCDRs = {
       minBilSecComp: minBilSecComp,
       globalSearch: ModuleExtendedCDRs.$globalSearch.val(),
       typeCall: $('#typeCall a.item.active').attr('data-tab'),
-      additionalFilter: $('#additionalFilter').dropdown('get value').replace(/,/g, ' ')
+      additionalFilter: $('#additionalFilter').dropdown('get value').replace(/,/g, ' '),
+      onlyEmployeeConversations: $('#onlyEmployeeConversations').is(':checked') && reportNameID !== 'CdrQueue'
     };
     if (disableGlobalSearch === true) {
       filter.globalSearch = '';

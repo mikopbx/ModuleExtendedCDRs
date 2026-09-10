@@ -137,6 +137,7 @@
              </div>
          </div>
           <div class="ui row" style="padding-top: 10px; padding-left:9px; display: flex; justify-content: space-between; align-items: center;">
+             <div style="display: flex; align-items: center; min-width: 0;">
              <div id='additionalFilter' class="ui multiple dropdown">
                <input type="hidden" name="filters" value="{{additionalFilterString}}">
                <i class="filter icon"></i>
@@ -179,6 +180,7 @@
                </div>
 
              </div>
+             </div>
              <div id="minBillSecContainer" style="margin-right: 18px; display: flex; align-items: center; white-space: nowrap;">
                <label style="margin-right: 10px; line-height: 32px; font-weight: 600;">{{ t._('repModuleExtendedCDRs_Form_minBillSec') }}:</label>
                <div id="currentMinBillSecComp" class="ui basic compact button dropdown" data-value=">" style="height: 32px; min-width: 40px; padding: 8px 10px; line-height: 16px;">
@@ -197,6 +199,17 @@
                     {{ t._('repModuleExtendedCDRs_Form_minBillSec_s') }}
                   </div>
                 </div>
+               <div id="employeeConversationControl" style="display: flex; align-items: center; gap: 6px; margin-left: 10px; flex-shrink: 0;">
+                 <label for="onlyEmployeeConversations" style="margin: 0; font-weight: 600; cursor: pointer;">{{ t._('repModuleExtendedCDRs_OnlyConversationsLabel') }}</label>
+                 <input type="checkbox" id="onlyEmployeeConversations"
+                        data-warning="{{ t._('repModuleExtendedCDRs_SelectConversationEmployee') }}"
+                        aria-label="{{ t._('repModuleExtendedCDRs_OnlyEmployeeConversations') }}"
+                        aria-describedby="employeeConversationHelp" style="margin: 0; cursor: pointer;">
+                 <i id="employeeConversationHelp" class="info circle icon" tabindex="0"
+                    aria-label="{{ t._('repModuleExtendedCDRs_OnlyEmployeeConversationsHelp') }}"
+                    data-content="{{ t._('repModuleExtendedCDRs_OnlyEmployeeConversationsHelp') }}"
+                    style="margin: 0; cursor: help;"></i>
+               </div>
              </div>
          </div>
      </div>

@@ -1140,10 +1140,10 @@ class ConnectorDB extends WorkerBase
      * @param array  $ids
      * @return array
      */
-    public function getCountCdr(string $start, string $end, array $numbers, array $additionalNumbers, array $additionalFilter, int $minBilSec = 0, array $ids = []): array
+    public function getCountCdr(string $start, string $end, array $numbers, array $additionalNumbers, array $additionalFilter, int $minBilSec = 0, array $ids = [], array $conversationEmployees = []): array
     {
         // Проверяем возможность использования lazy-кэша
-        if ($this->canUseDailyStatsCache($numbers, $additionalNumbers, $additionalFilter, $minBilSec, $ids)) {
+        if (empty($conversationEmployees) && $this->canUseDailyStatsCache($numbers, $additionalNumbers, $additionalFilter, $minBilSec, $ids)) {
             return $this->getCountCdrCached($start, $end);
         }
 
@@ -1152,6 +1152,7 @@ class ConnectorDB extends WorkerBase
             ->whereDateRange($start, $end)
             ->whereNumbers($numbers, 'Index')
             ->whereNumbers($additionalNumbers, 'IndexAdd')
+            ->whereNumbers(array_map([self::class, 'getPhoneIndex'], $conversationEmployees), 'Conversation', true)
             ->whereFilteredExtensions($additionalFilter)
             ->whereLinkedIds($ids)
             ->whereMinBillSec($minBilSec);
