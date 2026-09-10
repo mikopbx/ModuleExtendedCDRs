@@ -15,14 +15,12 @@ use MikoPBX\PBXCoreREST\Controllers\Modules\ModulesControllerBase;
 use Modules\ModuleExtendedCDRs\bin\ConnectorDB;
 use Modules\ModuleExtendedCDRs\Lib\DownloadHeaderPolicy;
 use Modules\ModuleExtendedCDRs\Lib\GetReport;
-use Modules\ModuleExtendedCDRs\Lib\RecordingArchiveBuilder;
 use Modules\ModuleExtendedCDRs\Lib\RecordingPathPolicy;
 use Modules\ModuleExtendedCDRs\Lib\ReportSearchPolicy;
 use Modules\ModuleExtendedCDRs\Models\ReportSettings;
 
 class ApiController extends ModulesControllerBase
 {
-    private const MAX_ARCHIVE_CANDIDATES = 5000;
 
     /**
      * Export detailed history. This private route requires normal API authentication.
@@ -224,98 +222,108 @@ class ApiController extends ModulesControllerBase
         $this->response->sendRaw();
     }
 
-    /**
-     * Скачивание tar архива.
-     * Returns a tar archive containing validated call recordings.
-     * @return void
-     */
-    public function downloads():void
+    /** Legacy preparation URL: returns the same asynchronous job as the new button. */
+    public function downloads(): void { $this->archivePrepare(); }
+
+    public function archivePrepare(): void
     {
-        $searchPhrase   = $this->request->get('search');
-        if (!is_string($searchPhrase) || !ReportSearchPolicy::isValid($searchPhrase)) {
-            $this->sendError(400);
-            return;
+        $search=$this->request->getPost('search') ?? $this->request->get('search');
+        if (!is_string($search) || strlen($search)>32768 || !ReportSearchPolicy::isValid($search)) {
+            $this->sendError(400); return;
         }
-        $gr = new GetReport();
-        $view = $gr->history($searchPhrase);
-
-        $records = [];
-        $candidateLimitReached = false;
-        foreach ($view->data as $baseItem) {
-            foreach (($baseItem['4'] ?? []) as $item) {
-                if (!is_array($item) || !isset($item['recordingfile'])) {
-                    continue;
-                }
-                if (count($records) >= self::MAX_ARCHIVE_CANDIDATES) {
-                    $candidateLimitReached = true;
-                    break 2;
-                }
-                $records[] = [
-                    'path' => (string) $item['recordingfile'],
-                    'name' => (string) ($item['prettyFilename'] ?? 'recording'),
-                ];
-            }
-        }
-
-        if ($candidateLimitReached) {
-            Util::sysLogMsg(
-                'ModuleExtendedCDRs',
-                'event=archive_rejected reason=archive_too_large endpoint=downloads'
-            );
-            $this->sendError(413);
-            return;
-        }
-
-        $archivePath = null;
         try {
-            $di = $this->getDI();
-            $config = $di->getShared('config');
-            $tempRoot = $config->path('core.tempDir') . '/ModuleExtendedCDRs/archives';
-            $policy = new RecordingPathPolicy(Directories::getDir(Directories::AST_MONITOR_DIR));
-            $archive = (new RecordingArchiveBuilder($policy, $tempRoot))->build($records);
-            $archivePath = $archive->path();
+            $input=json_decode($search,true);
+            $input['dateRangeSelector']=(new GetReport())->getDateRanges($input['dateRangeSelector']);
+            ksort($input);
+            $acl=$this->archiveAcl();
+            $owner=$this->archiveOwner($acl);
+            $job=\Modules\ModuleExtendedCDRs\Lib\RecordingArchiveService::jobs()->request($owner,
+                ['search'=>json_encode($input,JSON_UNESCAPED_SLASHES),'acl'=>$acl],
+                \Modules\ModuleExtendedCDRs\Lib\RecordingArchiveService::revision(),
+                [\Modules\ModuleExtendedCDRs\Lib\RecordingArchiveService::class,'launch']);
+            $this->archiveJson($job,$owner);
+        } catch (\Throwable $e) { $this->archiveFailure($e); }
+    }
 
-            Util::sysLogMsg(
-                'ModuleExtendedCDRs',
-                'event=archive_built accepted=' . $archive->acceptedCount() . ' skipped=' . $archive->skippedCount()
-            );
+    public function archiveStatus(): void
+    {
+        try {
+            $owner=$this->archiveOwner($this->archiveAcl());
+            $job=\Modules\ModuleExtendedCDRs\Lib\RecordingArchiveService::jobs()->status((string)$this->request->get('id'),$owner);
+            $this->archiveJson($job,$owner);
+        } catch (\Throwable $e) { $this->archiveFailure($e); }
+    }
 
-            $fp = fopen($archivePath, 'rb');
-            if ($fp === false) {
-                throw new \RuntimeException('archive_build_failed');
-            }
-            try {
-                $size = filesize($archivePath);
-                $this->response->setHeader('Content-Type', 'application/x-tar');
-                $this->response->setHeader('Content-Disposition', DownloadHeaderPolicy::attachment('download-' . time() . '.tar'));
-                $this->response->setHeader('Content-Transfer-Encoding', 'binary');
-                $this->response->setHeader('X-Content-Type-Options', 'nosniff');
-                if ($size !== false) {
-                    $this->response->setContentLength($size);
-                }
-                $this->response->sendHeaders();
-                fpassthru($fp);
-            } finally {
-                fclose($fp);
-            }
-        } catch (\RuntimeException $exception) {
-            if ($exception->getMessage() === 'archive_has_no_valid_entries') {
-                $reason = 'archive_has_no_valid_entries';
-                $status = 404;
-            } elseif ($exception->getMessage() === 'archive_too_large') {
-                $reason = 'archive_too_large';
-                $status = 413;
-            } else {
-                $reason = 'archive_build_failed';
-                $status = 500;
-            }
-            Util::sysLogMsg('ModuleExtendedCDRs', 'event=archive_rejected reason=' . $reason . ' endpoint=downloads');
-            $this->sendError($status);
-        } finally {
-            if (is_string($archivePath) && is_file($archivePath)) {
-                unlink($archivePath);
-            }
+    /** Native browser POST. No general API access: a two-minute job-specific capability is mandatory. */
+    public function archiveFile(): void
+    {
+        try {
+            $id=(string)$this->request->getPost('id');
+            $ticket=(string)$this->request->getPost('ticket');
+            $fp=\Modules\ModuleExtendedCDRs\Lib\RecordingArchiveService::jobs()->openDownload($id,$ticket);
+        } catch (\Throwable $e) { $this->sendError(403); return; }
+        try {
+            $this->response->setHeader('Content-Type','application/x-tar');
+            $this->response->setHeader('Content-Disposition',DownloadHeaderPolicy::attachment('recordings.tar'));
+            $this->response->setHeader('Cache-Control','private, no-store');
+            $this->response->setHeader('X-Content-Type-Options','nosniff');
+            $this->response->setHeader('X-Accel-Buffering','no');
+            $stat=fstat($fp);
+            $this->response->setContentLength($stat['size']);
+            $this->response->sendHeaders();
+            fpassthru($fp);
+        } finally { fclose($fp); }
+    }
+
+    private function archiveAcl(): array
+    {
+        $acl=['conditions'=>'1=1','bind'=>[]];
+        $jwt=method_exists($this->request,'getJwtPayload') ? ($this->request->getJwtPayload()??[]) : [];
+        $context=[];
+        if ($jwt) {
+            $context=['auth_type'=>'bearer_token','user_name'=>$jwt['userId']??null,
+                'session_id'=>$jwt['userId']??null,'role'=>$jwt['role']??null];
         }
+        \MikoPBX\Common\Providers\PBXConfModulesProvider::hookModulesMethod(
+            \MikoPBX\Modules\Config\CDRConfigInterface::APPLY_ACL_FILTERS_TO_CDR_QUERY,[&$acl,$context]);
+        return ['conditions'=>$acl['conditions'],'bind'=>$acl['bind']??[]];
+    }
+
+    private function archiveOwner(array $acl): string
+    {
+        $jwt=method_exists($this->request,'getJwtPayload') ? $this->request->getJwtPayload() : null;
+        if (is_array($jwt) && isset($jwt['userId'])) {
+            $identity=json_encode([$jwt['userId'],$jwt['role']??'']);
+        } else {
+            $identity=$this->request->getHeader('Authorization');
+            if ($identity==='') $identity=$this->request->getHeader('Cookie');
+            if ($identity==='' && $this->request->getClientAddress()==='127.0.0.1') $identity='local-core';
+            if ($identity==='') throw new \RuntimeException('archive_not_found');
+        }
+        return hash('sha256',$identity.json_encode($acl));
+    }
+
+    private function archiveJson(array $job,string $owner): void
+    {
+        if ($job['state']==='ready') {
+            $job['ticket']=\Modules\ModuleExtendedCDRs\Lib\RecordingArchiveService::jobs()->ticket($job['id'],$owner);
+        }
+        $this->response->setHeader('Content-Type','application/json');
+        $this->response->setHeader('Cache-Control','no-store');
+        $this->echoResponse($job);
+        $this->response->sendRaw();
+    }
+
+    private function archiveFailure(\Throwable $e): void
+    {
+        $code=$e->getMessage();
+        $known=['archive_not_found','archive_expired','archive_queue_full','archive_start_failed'];
+        if (!in_array($code,$known,true)) $code='archive_build_failed';
+        $this->response->setStatusCode(in_array($code,['archive_not_found','archive_expired'],true)?404:503);
+        $this->response->setHeader('Content-Type','application/json');
+        $this->response->setHeader('Cache-Control','no-store');
+        $this->echoResponse(['error'=>$code]);
+        $this->response->sendRaw();
     }
 
     /**

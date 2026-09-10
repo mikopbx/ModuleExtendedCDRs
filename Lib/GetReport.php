@@ -39,6 +39,14 @@ require_once(dirname(__DIR__) . '/vendor/autoload.php');
 
 class GetReport
 {
+    private ?array $archiveAcl = null;
+
+    /** Only server-captured ACL constraints may be passed by the archive worker. */
+    public function __construct(?array $archiveAcl = null)
+    {
+        $this->archiveAcl = $archiveAcl;
+    }
+
 
     public function historyQueue(string $searchPhrase = '', ?int $offset = null, ?int $limit = null)
     {
@@ -181,7 +189,7 @@ class GetReport
      * @param int|null $limit
      * @return stdClass
      */
-    public function history(string $searchPhrase = '', ?int $offset = null, ?int $limit = null): stdClass
+    public function history(string $searchPhrase = '', ?int $offset = null, ?int $limit = null, bool $includeStatistics = true): stdClass
     {
         $tmpSearchPhrase = json_decode($searchPhrase, true);
         $minBilSec  = (int)($tmpSearchPhrase['minBilSec']??0);
@@ -215,7 +223,9 @@ class GetReport
         $view->additionalFilter = $additionalFilter;
         $view->baseNumberFilter = array_merge($numbers, $additionalNumbers, $additionalFilter);
 
-        $recordsFilteredReq = ConnectorDB::invoke('getCountCdr', [$start, $end, $numbers, $additionalNumbers, $additionalFilter, $minBilSec, $ids, $conversationEmployees]);
+        $recordsFilteredReq = $includeStatistics
+            ? ConnectorDB::invoke('getCountCdr', [$start, $end, $numbers, $additionalNumbers, $additionalFilter, $minBilSec, $ids, $conversationEmployees])
+            : [];
         $view->recordsFiltered = $recordsFilteredReq['cCalls'] ?? 0;
         $view->recordsTotal = $recordsFilteredReq['cCalls'] ?? 0;
         $view->recordsInner = $recordsFilteredReq['cINNER'] ?? 0;
@@ -245,6 +255,9 @@ class GetReport
             $parameters['bind']['queueIds'] = $ids;
         }
         $selectedLinkedIds = $this->selectCDRRecordsWithFilters($parameters);
+        if (!$includeStatistics && count($selectedLinkedIds) >= 5001) {
+            throw new \RuntimeException('archive_too_large');
+        }
         $arrIDS = [];
         foreach ($selectedLinkedIds as $item) {
             $arrIDS[] = $item['linkedid'];
@@ -1302,7 +1315,10 @@ class GetReport
      */
     private function selectCDRRecordsWithFilters(array $parameters): array
     {
-        if (php_sapi_name() !== 'cli') {
+        if ($this->archiveAcl !== null) {
+            $parameters['conditions'] = '(' . ($parameters['conditions'] ?? '1=1') . ') AND (' . $this->archiveAcl['conditions'] . ')';
+            $parameters['bind'] = array_merge($parameters['bind'] ?? [], $this->archiveAcl['bind'] ?? []);
+        } elseif (php_sapi_name() !== 'cli') {
             // Apply ACL filters to CDR query using hook method
             PBXConfModulesProvider::hookModulesMethod(CDRConfigInterface::APPLY_ACL_FILTERS_TO_CDR_QUERY, [&$parameters]);
         }

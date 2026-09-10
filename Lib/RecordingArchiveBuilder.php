@@ -37,7 +37,7 @@ final class RecordingArchiveBuilder
     /**
      * @param array<int,array{path:string,name:string}> $records
      */
-    public function build(array $records): RecordingArchiveResult
+    public function build(array $records, ?callable $progress = null): RecordingArchiveResult
     {
         $this->ensureTempRoot();
         $archivePath = $this->tempRoot . DIRECTORY_SEPARATOR . bin2hex(random_bytes(16)) . '.tar';
@@ -51,6 +51,7 @@ final class RecordingArchiveBuilder
             $archive = new \PharData($archivePath);
             foreach ($records as $record) {
                 $inspected++;
+                if ($progress !== null) $progress($inspected - 1, count($records));
                 if ($inspected > $this->maxCandidates) {
                     throw new \RuntimeException('archive_too_large');
                 }
@@ -87,6 +88,7 @@ final class RecordingArchiveBuilder
             }
 
             unset($archive);
+            if ($progress !== null) $progress($inspected, count($records));
             if ($accepted === 0) {
                 @unlink($archivePath);
                 throw new \RuntimeException('archive_has_no_valid_entries');

@@ -635,9 +635,8 @@ var ModuleExtendedCDRs = {
       ModuleExtendedCDRs.startCreateExcelPDF('pdf');
     });
     $('#downloadRecords').on('click', function (e) {
-      var encodedSearch = encodeURIComponent(ModuleExtendedCDRs.getSearchText());
-      var url = "".concat(window.location.origin, "/pbxcore/api/modules/").concat(className, "/downloads?search=").concat(encodedSearch);
-      ModuleExtendedCDRs.authenticatedDownload(url, 'recordings.tar');
+      e.preventDefault();
+      ModuleExtendedCDRs.startRecordingArchive();
     });
     $('#saveSearchSettings').on('click', function (e) {
       ModuleExtendedCDRs.saveSearchSettings();
@@ -1340,6 +1339,120 @@ var ModuleExtendedCDRs = {
       console.error('Authenticated download failed', error);
     });
   },
+  archiveRequest: null,
+  archiveText: function archiveText(key) {
+    return globalTranslate['repModuleExtendedCDRs_Archive' + key] || {
+      Preparing: 'Preparing recording archive…',
+      Queued: 'Waiting to prepare archive…',
+      Progress: 'Preparing archive: {done} of {total} recordings',
+      Started: 'Archive handed to the browser for download.',
+      Error: 'Could not prepare the archive. Please try again.',
+      Empty: 'No available recordings match the selected filters.',
+      Large: 'Too many recordings. Select a shorter period.',
+      Expired: 'Archive expired. Click download to prepare it again.',
+      Auth: 'Session expired or access denied. Refresh the page.'
+    }[key];
+  },
+  archiveMessage: function archiveMessage(text) {
+    var failed = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : false;
+    $('#recordingArchiveStatus').show().toggleClass('negative', failed).text(text);
+  },
+  archiveApi: function archiveApi(action, search) {
+    var headers = {};
+    if (typeof TokenManager !== 'undefined' && TokenManager.accessToken) {
+      headers.Authorization = "Bearer ".concat(TokenManager.accessToken);
+    }
+    var options = {
+      headers: headers,
+      credentials: 'same-origin',
+      cache: 'no-store'
+    };
+    if (search !== undefined) {
+      options.method = 'POST';
+      headers['Content-Type'] = 'application/x-www-form-urlencoded';
+      options.body = 'search=' + encodeURIComponent(search);
+    }
+    return fetch("".concat(window.location.origin, "/pbxcore/api/modules/").concat(className, "/").concat(action), options).then(function (response) {
+      if (response.status === 401 || response.status === 403) throw new Error('archive_auth');
+      return response.json().then(function (data) {
+        if (!response.ok) throw new Error(data.error || 'archive_build_failed');
+        return data;
+      });
+    });
+  },
+  startRecordingArchive: function startRecordingArchive() {
+    var _this = this;
+    if (this.archiveRequest) return this.archiveRequest;
+    var $button = $('#downloadRecords');
+    $button.prop('disabled', true).addClass('loading').attr('aria-busy', 'true');
+    this.archiveMessage(this.archiveText('Preparing'));
+    var started = Date.now();
+    var _poll = function poll(job) {
+      if (job.state === 'ready') {
+        _this.transferRecordingArchive(job);
+        _this.archiveMessage(_this.archiveText('Started'));
+        // Keep a cached response from turning a double click into two native transfers.
+        return new Promise(function (resolve) {
+          return setTimeout(resolve, 1000);
+        });
+      }
+      if (job.state === 'failed') throw new Error(job.error || 'archive_build_failed');
+      if (Date.now() - started > 245 * 60 * 1000) throw new Error('archive_worker_stopped');
+      _this.archiveMessage(job.state === 'queued' ? _this.archiveText('Queued') : job.total > 0 ? _this.archiveText('Progress').replace('{done}', job.completed).replace('{total}', job.total) : _this.archiveText('Preparing'));
+      return new Promise(function (resolve) {
+        return setTimeout(resolve, 1500);
+      }).then(function () {
+        return _this.archiveApi('archiveStatus?id=' + encodeURIComponent(job.id));
+      }).then(_poll);
+    };
+    var reset = function reset() {
+      _this.archiveRequest = null;
+      $button.prop('disabled', false).removeClass('loading').attr('aria-busy', 'false');
+    };
+    // Reserve synchronously, before any request or repeated click can run.
+    this.archiveRequest = Promise.resolve().then(function () {
+      return _this.archiveApi('archiveJobs', _this.getSearchText());
+    }).then(_poll)["catch"](function (error) {
+      var key = {
+        archive_has_no_valid_entries: 'Empty',
+        archive_too_large: 'Large',
+        archive_expired: 'Expired',
+        archive_auth: 'Auth'
+      }[error.message] || 'Error';
+      _this.archiveMessage(_this.archiveText(key), true);
+    }).then(reset, reset);
+    return this.archiveRequest;
+  },
+  transferRecordingArchive: function transferRecordingArchive(job) {
+    var _this2 = this;
+    var frame = document.getElementById('recordingArchiveDownload');
+    if (!frame) {
+      frame = document.createElement('iframe');
+      frame.id = frame.name = 'recordingArchiveDownload';
+      frame.hidden = true;
+      frame.onload = function () {
+        if (frame.contentDocument && frame.contentDocument.body && frame.contentDocument.body.textContent.trim()) {
+          _this2.archiveMessage(_this2.archiveText('Error'), true);
+        }
+      };
+      document.body.appendChild(frame);
+    }
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = "".concat(window.location.origin, "/pbxcore/api/modules/").concat(className, "/archiveFile");
+    form.target = frame.name;
+    form.hidden = true;
+    ['id', 'ticket'].forEach(function (name) {
+      var input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = name;
+      input.value = job[name];
+      form.appendChild(input);
+    });
+    document.body.appendChild(form);
+    form.submit();
+    form.remove();
+  },
   getMaxWidth: function getMaxWidth(data, key) {
     // Получаем максимальную длину содержимого в столбце
     var maxLength = key.length; // начинаем с длины заголовка
@@ -1350,21 +1463,7 @@ var ModuleExtendedCDRs = {
     return maxLength;
   },
   startDownload: function startDownload() {
-    var startTime = ModuleExtendedCDRs.$dateRangeSelector.attr('data-start');
-    var endTime = ModuleExtendedCDRs.$dateRangeSelector.attr('data-end');
-    if (startTime === undefined) {
-      startTime = moment().format('YYYY-MM-DD');
-      endTime = moment().endOf('day').format('YYYY-MM-DD HH:mm:ss');
-    }
-    var typeRec = 'inner';
-    if ($('#allRecord').checkbox('is checked')) {
-      typeRec = 'all';
-    } else if ($('#outRecord').checkbox('is checked')) {
-      typeRec = 'out';
-    }
-    var numbers = ModuleExtendedCDRs.$globalSearch.val();
-    var url = '/pbxcore/api/modules/' + className + '/downloads?start=' + startTime + '&end=' + endTime + "&numbers=" + encodeURIComponent(numbers) + "&type=" + typeRec;
-    ModuleExtendedCDRs.authenticatedDownload(url, 'recordings.tar');
+    return ModuleExtendedCDRs.startRecordingArchive();
   },
   startDownloadHistory: function startDownloadHistory() {
     var startTime = ModuleExtendedCDRs.$dateRangeSelector.attr('data-start');

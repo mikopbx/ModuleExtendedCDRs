@@ -665,9 +665,8 @@ const ModuleExtendedCDRs = {
 			ModuleExtendedCDRs.startCreateExcelPDF('pdf');
 		});
 		$('#downloadRecords').on('click', function (e) {
-			const encodedSearch = encodeURIComponent(ModuleExtendedCDRs.getSearchText());
-			const url = `${window.location.origin}/pbxcore/api/modules/${className}/downloads?search=${encodedSearch}`;
-			ModuleExtendedCDRs.authenticatedDownload(url, 'recordings.tar');
+			e.preventDefault();
+			ModuleExtendedCDRs.startRecordingArchive();
 		});
 		$('#saveSearchSettings').on('click', function (e) {
 			ModuleExtendedCDRs.saveSearchSettings();
@@ -1457,6 +1456,108 @@ const ModuleExtendedCDRs = {
 		});
 	},
 
+	archiveRequest: null,
+
+	archiveText(key) {
+		return globalTranslate['repModuleExtendedCDRs_Archive' + key] || {
+			Preparing: 'Preparing recording archive…',
+			Queued: 'Waiting to prepare archive…',
+			Progress: 'Preparing archive: {done} of {total} recordings',
+			Started: 'Archive handed to the browser for download.',
+			Error: 'Could not prepare the archive. Please try again.',
+			Empty: 'No available recordings match the selected filters.',
+			Large: 'Too many recordings. Select a shorter period.',
+			Expired: 'Archive expired. Click download to prepare it again.',
+			Auth: 'Session expired or access denied. Refresh the page.',
+		}[key];
+	},
+
+	archiveMessage(text, failed = false) {
+		$('#recordingArchiveStatus').show().toggleClass('negative', failed).text(text);
+	},
+
+	archiveApi(action, search) {
+		const headers = {};
+		if (typeof TokenManager !== 'undefined' && TokenManager.accessToken) {
+			headers.Authorization = `Bearer ${TokenManager.accessToken}`;
+		}
+		const options = {headers, credentials: 'same-origin', cache: 'no-store'};
+		if (search !== undefined) {
+			options.method = 'POST';
+			headers['Content-Type'] = 'application/x-www-form-urlencoded';
+			options.body = 'search=' + encodeURIComponent(search);
+		}
+		return fetch(`${window.location.origin}/pbxcore/api/modules/${className}/${action}`, options)
+			.then(response => {
+				if (response.status === 401 || response.status === 403) throw new Error('archive_auth');
+				return response.json().then(data => {
+					if (!response.ok) throw new Error(data.error || 'archive_build_failed');
+					return data;
+				});
+			});
+	},
+
+	startRecordingArchive() {
+		if (this.archiveRequest) return this.archiveRequest;
+		const $button = $('#downloadRecords');
+		$button.prop('disabled', true).addClass('loading').attr('aria-busy', 'true');
+		this.archiveMessage(this.archiveText('Preparing'));
+		const started = Date.now();
+		const poll = job => {
+			if (job.state === 'ready') {
+				this.transferRecordingArchive(job);
+				this.archiveMessage(this.archiveText('Started'));
+				// Keep a cached response from turning a double click into two native transfers.
+				return new Promise(resolve => setTimeout(resolve, 1000));
+			}
+			if (job.state === 'failed') throw new Error(job.error || 'archive_build_failed');
+			if (Date.now() - started > 245 * 60 * 1000) throw new Error('archive_worker_stopped');
+			this.archiveMessage(job.state === 'queued' ? this.archiveText('Queued') :
+				(job.total > 0 ? this.archiveText('Progress').replace('{done}', job.completed).replace('{total}', job.total) : this.archiveText('Preparing')));
+			return new Promise(resolve => setTimeout(resolve, 1500))
+				.then(() => this.archiveApi('archiveStatus?id=' + encodeURIComponent(job.id))).then(poll);
+		};
+		const reset = () => {
+			this.archiveRequest = null;
+			$button.prop('disabled', false).removeClass('loading').attr('aria-busy', 'false');
+		};
+		// Reserve synchronously, before any request or repeated click can run.
+		this.archiveRequest = Promise.resolve().then(() => this.archiveApi('archiveJobs', this.getSearchText()))
+			.then(poll).catch(error => {
+				const key = {archive_has_no_valid_entries: 'Empty', archive_too_large: 'Large', archive_expired: 'Expired', archive_auth: 'Auth'}[error.message] || 'Error';
+				this.archiveMessage(this.archiveText(key), true);
+			}).then(reset, reset);
+		return this.archiveRequest;
+	},
+
+	transferRecordingArchive(job) {
+		let frame = document.getElementById('recordingArchiveDownload');
+		if (!frame) {
+			frame = document.createElement('iframe');
+			frame.id = frame.name = 'recordingArchiveDownload';
+			frame.hidden = true;
+			frame.onload = () => {
+				if (frame.contentDocument && frame.contentDocument.body && frame.contentDocument.body.textContent.trim()) {
+					this.archiveMessage(this.archiveText('Error'), true);
+				}
+			};
+			document.body.appendChild(frame);
+		}
+		const form = document.createElement('form');
+		form.method = 'POST';
+		form.action = `${window.location.origin}/pbxcore/api/modules/${className}/archiveFile`;
+		form.target = frame.name;
+		form.hidden = true;
+		['id', 'ticket'].forEach(name => {
+			const input = document.createElement('input');
+			input.type = 'hidden'; input.name = name; input.value = job[name];
+			form.appendChild(input);
+		});
+		document.body.appendChild(form);
+		form.submit();
+		form.remove();
+	},
+
 	getMaxWidth(data, key) {
 		// Получаем максимальную длину содержимого в столбце
 		let maxLength = key.length; // начинаем с длины заголовка
@@ -1468,21 +1569,7 @@ const ModuleExtendedCDRs = {
 	},
 
 	startDownload(){
-		let startTime = ModuleExtendedCDRs.$dateRangeSelector.attr('data-start');
-		let endTime   = ModuleExtendedCDRs.$dateRangeSelector.attr('data-end');
-		if(startTime === undefined){
-			startTime = moment().format('YYYY-MM-DD');
-			endTime   =  moment().endOf('day').format('YYYY-MM-DD HH:mm:ss')
-		}
-		let typeRec = 'inner';
-		if($('#allRecord').checkbox('is checked')){
-			typeRec = 'all';
-		}else if($('#outRecord').checkbox('is checked')){
-			typeRec = 'out';
-		}
-		let numbers = ModuleExtendedCDRs.$globalSearch.val();
-		const url = '/pbxcore/api/modules/'+className+'/downloads?start='+startTime+'&end='+endTime+"&numbers="+encodeURIComponent(numbers)+"&type="+typeRec;
-		ModuleExtendedCDRs.authenticatedDownload(url, 'recordings.tar');
+		return ModuleExtendedCDRs.startRecordingArchive();
 	},
 
 	startDownloadHistory(){

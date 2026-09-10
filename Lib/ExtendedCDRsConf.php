@@ -115,8 +115,12 @@ class ExtendedCDRsConf extends ConfigClass
     public function getPBXCoreRESTAdditionalRoutes(): array
     {
         // Route element 5 is noAuth in MikoPBX Core. All CDR metadata and
-        // recording endpoints intentionally require authentication.
+        // recording endpoints require authentication, except the scoped ticket-only transfer action.
         return [
+            [ApiController::class, 'archivePrepare', '/pbxcore/api/modules/ModuleExtendedCDRs/archiveJobs', 'post', '/', false],
+            [ApiController::class, 'archiveStatus', '/pbxcore/api/modules/ModuleExtendedCDRs/archiveStatus', 'get', '/', false],
+            // Native downloads cannot send Bearer headers. This action validates a scoped, expiring ticket.
+            [ApiController::class, 'archiveFile', '/pbxcore/api/modules/ModuleExtendedCDRs/archiveFile', 'post', '/', true],
             [ApiController::class, 'downloads',                     '/pbxcore/api/modules/ModuleExtendedCDRs/downloads', 'get', '/', false],
             [ApiController::class, 'exportHistory',                 '/pbxcore/api/modules/ModuleExtendedCDRs/exportHistory', 'get', '/', false],
             [ApiController::class, 'exportHistoryDetail',           '/pbxcore/api/modules/ModuleExtendedCDRs/exportHistoryDetail', 'get', '/', false],
@@ -133,6 +137,7 @@ class ExtendedCDRsConf extends ConfigClass
         $busyboxPath= Util::which('busybox');
         $tasks[]    = "*/1 * * * * $busyboxPath find /storage/usbdisk*/mikopbx/tmp/ModuleExtendedCDRs/ -mmin +5 -type f -delete> /dev/null 2>&1".PHP_EOL;
         $phpPath    = Util::which('php');
+        $tasks[] = '*/5 * * * * '.escapeshellarg($phpPath).' '.escapeshellarg($this->moduleDir.'/bin/recording-archive.php').' cleanup > /dev/null 2>&1'.PHP_EOL;
         $watchdogCommand = ModuleWatchdogCommand::build(
             $busyboxPath,
             $phpPath,

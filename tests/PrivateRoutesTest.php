@@ -14,7 +14,7 @@ $controller = file_get_contents(dirname(__DIR__) . '/Lib/RestAPI/Controllers/Api
 assertPrivateRoute(is_string($conf), 'Cannot read route configuration');
 assertPrivateRoute(is_string($controller), 'Cannot read API controller');
 
-$actions = ['downloads', 'exportHistory', 'exportHistoryDetail', 'recordsAction', 'exportOutgoingEmployeeCalls'];
+$actions = ['archivePrepare', 'archiveStatus', 'downloads', 'exportHistory', 'exportHistoryDetail', 'recordsAction', 'exportOutgoingEmployeeCalls'];
 foreach ($actions as $action) {
     $pattern = '/\[ApiController::class,\s*\'' . preg_quote($action, '/')
         . '\'[^\]]*,\s*false\s*\]/';

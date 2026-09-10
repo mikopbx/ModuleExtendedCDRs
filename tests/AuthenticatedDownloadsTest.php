@@ -32,8 +32,11 @@ foreach ([
 }
 
 assertAuthenticatedDownload(
-    substr_count($source, 'ModuleExtendedCDRs.authenticatedDownload(') >= 3,
-    'XLS/PDF and recording archive downloads must use authenticated transport'
+    strpos($source, 'ModuleExtendedCDRs.authenticatedDownload(url, `report.${type}`)') !== false
+        && strpos($source, "this.archiveApi('archiveJobs'") !== false
+        && strpos($source, "this.archiveApi('archiveStatus?id='") !== false
+        && strpos($source, "['id', 'ticket']") !== false,
+    'Reports use authenticated transport; archives use authenticated preparation/status and scoped transfer tickets'
 );
 assertAuthenticatedDownload(
     strpos($compiled, 'Authenticated download failed') !== false
