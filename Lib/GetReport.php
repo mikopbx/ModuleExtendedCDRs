@@ -20,6 +20,7 @@
 namespace Modules\ModuleExtendedCDRs\Lib;
 
 use MikoPBX\Common\Models\Extensions;
+use MikoPBX\Common\Models\IncomingRoutingTable;
 use MikoPBX\Common\Providers\PBXConfModulesProvider;
 use MikoPBX\Modules\Config\CDRConfigInterface;
 use Modules\ModuleUsersGroups\Models\GroupMembers;
@@ -326,8 +327,18 @@ class GetReport
                 'host' => $provider->host,
             ];
         }
-        $trunkResolver = new TrunkResolver($providerRows);
-        unset($providers);
+        // Incoming routes map a DID to a provider explicitly, extending the pool of "logins".
+        // This lets DID refinement work for IP-authorized providers that carry no SIP username.
+        $routes = IncomingRoutingTable::find("provider IS NOT NULL AND provider != ''");
+        $routeRows = [];
+        foreach ($routes as $route) {
+            $routeRows[] = [
+                'provider' => $route->provider,
+                'number' => $route->number,
+            ];
+        }
+        $trunkResolver = new TrunkResolver($providerRows, $routeRows);
+        unset($providers, $routes);
 
         $statsCall = [
             CallHistory::CALL_STATE_OK => Util::translate('repModuleExtendedCDRs_cdr_CALL_STATE_OK', false),
