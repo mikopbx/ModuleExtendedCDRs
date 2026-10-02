@@ -915,7 +915,13 @@ class ConnectorDB extends WorkerBase
 
     /**
      * Определяет recall/transfer состояния после batch save.
-     * Обрабатывает только записи со stateCall=OK и непустым номером.
+     *
+     * Recall: если за текущим звонком стоит перезвон (клиент перезвонил сам или
+     * сотрудник перезвонил клиенту), статус правится на САМОМ предшествующем
+     * пропущенном вызове — он становится "Перезвонил клиент"/"Перезвонил сотрудник".
+     *
+     * Transfer: статус текущей записи, если в том же linkedid был успешный звонок ранее.
+     *
      * @param array $records
      * @return void
      */
@@ -927,52 +933,12 @@ class ConnectorDB extends WorkerBase
         $db = $this->di->getShared(CdrDbProvider::SERVICE_NAME);
 
         foreach ($records as $dbData) {
+            // Помечаем предшествующий пропущенный вызов как "перезвонил клиент/сотрудник".
+            $this->resolveMissedByCallback($db, $dbData);
+
+            // Transfer-состояние относится к самой текущей записи и считается только из OK.
             if ($dbData->stateCall !== CallHistory::CALL_STATE_OK) {
                 continue;
-            }
-            $number = '';
-            if ($dbData->typeCall === CallHistory::CALL_TYPE_OUTGOING) {
-                $number = $dbData->dst_num;
-            } elseif ($dbData->typeCall === CallHistory::CALL_TYPE_INCOMING) {
-                $number = $dbData->src_num;
-            }
-            if (empty($number)) {
-                continue;
-            }
-
-            try {
-                $dateTime = new DateTime($dbData->start);
-            } catch (Exception $e) {
-                continue;
-            }
-            $dateTime->modify('-60 minutes');
-            $oldStart = $dateTime->format('Y-m-d H:i:s');
-            $phoneIndex = self::getPhoneIndex($number);
-
-            // Проверяем recall: был ли пропущенный звонок от/к этому номеру за последний час
-            $sql = "SELECT typeCall FROM cdr_general
-                    WHERE (dstIndex = :phoneIndex OR srcIndex = :phoneIndex)
-                      AND start BETWEEN :oldStart AND :currentStart
-                      AND linkedid <> :linkedid
-                    ORDER BY start DESC LIMIT 1";
-            $result = $db->query($sql, [
-                'phoneIndex'   => $phoneIndex,
-                'oldStart'     => $oldStart,
-                'currentStart' => $dbData->start,
-                'linkedid'     => $dbData->linkedid,
-            ]);
-            $result->setFetchMode(Enum::FETCH_ASSOC);
-            $oldCdr = $result->fetch();
-
-            if ($oldCdr) {
-                $oldTypeCall = intval($oldCdr['typeCall']);
-                if ($oldTypeCall === CallHistory::CALL_TYPE_MISSED
-                    && $dbData->typeCall === CallHistory::CALL_TYPE_INCOMING) {
-                    $dbData->stateCall = CallHistory::CALL_STATE_RECALL_CLIENT;
-                } elseif ($oldTypeCall === CallHistory::CALL_TYPE_MISSED
-                    && $dbData->typeCall === CallHistory::CALL_TYPE_OUTGOING) {
-                    $dbData->stateCall = CallHistory::CALL_STATE_RECALL_USER;
-                }
             }
 
             // Проверяем transfer: был ли успешный звонок ранее в том же linkedid
@@ -1001,6 +967,79 @@ class ConnectorDB extends WorkerBase
                     throw new \RuntimeException('state_save_failed: database adapter rejected update');
                 }
             }
+        }
+    }
+
+    /**
+     * Если текущий звонок является перезвоном после пропущенного, правит статус
+     * самого пропущенного вызова (все его плечи по linkedid):
+     *  - входящий дозвон клиента -> CALL_STATE_RECALL_CLIENT;
+     *  - исходящий звонок сотрудника клиенту -> CALL_STATE_RECALL_USER.
+     * Берётся самый свежий ещё не закрытый пропущенный вызов этого номера за последний час.
+     *
+     * @param mixed       $db
+     * @param CallHistory $dbData
+     * @return void
+     */
+    private function resolveMissedByCallback($db, CallHistory $dbData):void
+    {
+        if ($dbData->typeCall === CallHistory::CALL_TYPE_INCOMING) {
+            $number   = $dbData->src_num;
+            $newState = CallHistory::CALL_STATE_RECALL_CLIENT;
+        } elseif ($dbData->typeCall === CallHistory::CALL_TYPE_OUTGOING) {
+            $number   = $dbData->dst_num;
+            $newState = CallHistory::CALL_STATE_RECALL_USER;
+        } else {
+            // Сам пропущенный/внутренний звонок перезвоном не является.
+            return;
+        }
+        if (empty($number)) {
+            return;
+        }
+
+        try {
+            $dateTime = new DateTime($dbData->start);
+        } catch (Exception $e) {
+            return;
+        }
+        $dateTime->modify('-60 minutes');
+        $oldStart = $dateTime->format('Y-m-d H:i:s');
+        $phoneIndex = self::getPhoneIndex($number);
+
+        // Самый свежий пропущенный вызов этого номера, который ещё не был закрыт перезвоном.
+        $sql = "SELECT linkedid FROM cdr_general
+                WHERE (srcIndex = :phoneIndex OR dstIndex = :phoneIndex)
+                  AND typeCall = :missedType
+                  AND stateCall = :missedState
+                  AND start BETWEEN :oldStart AND :currentStart
+                  AND linkedid <> :linkedid
+                ORDER BY start DESC LIMIT 1";
+        $result = $db->query($sql, [
+            'phoneIndex'   => $phoneIndex,
+            'missedType'   => CallHistory::CALL_TYPE_MISSED,
+            'missedState'  => CallHistory::CALL_STATE_MISSED,
+            'oldStart'     => $oldStart,
+            'currentStart' => $dbData->start,
+            'linkedid'     => $dbData->linkedid,
+        ]);
+        $result->setFetchMode(Enum::FETCH_ASSOC);
+        $missed = $result->fetch();
+        if (!$missed) {
+            return;
+        }
+
+        // Правим статус у всех плеч пропущенного вызова (один linkedid).
+        $saved = $db->execute(
+            'UPDATE cdr_general SET stateCall = :stateCall
+             WHERE linkedid = :linkedid AND stateCall = :missedState',
+            [
+                'stateCall'   => $newState,
+                'linkedid'    => $missed['linkedid'],
+                'missedState' => CallHistory::CALL_STATE_MISSED,
+            ]
+        );
+        if ($saved !== true) {
+            throw new \RuntimeException('recall_state_save_failed: database adapter rejected update');
         }
     }
 
