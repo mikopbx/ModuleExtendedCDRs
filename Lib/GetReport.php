@@ -20,6 +20,7 @@
 namespace Modules\ModuleExtendedCDRs\Lib;
 
 use MikoPBX\Common\Models\Extensions;
+use MikoPBX\Common\Models\IncomingRoutingTable;
 use MikoPBX\Common\Providers\PBXConfModulesProvider;
 use MikoPBX\Modules\Config\CDRConfigInterface;
 use Modules\ModuleUsersGroups\Models\GroupMembers;
@@ -39,6 +40,14 @@ require_once(dirname(__DIR__) . '/vendor/autoload.php');
 
 class GetReport
 {
+    private ?array $archiveAcl = null;
+
+    /** Only server-captured ACL constraints may be passed by the archive worker. */
+    public function __construct(?array $archiveAcl = null)
+    {
+        $this->archiveAcl = $archiveAcl;
+    }
+
 
     public function historyQueue(string $searchPhrase = '', ?int $offset = null, ?int $limit = null)
     {
@@ -181,7 +190,7 @@ class GetReport
      * @param int|null $limit
      * @return stdClass
      */
-    public function history(string $searchPhrase = '', ?int $offset = null, ?int $limit = null): stdClass
+    public function history(string $searchPhrase = '', ?int $offset = null, ?int $limit = null, bool $includeStatistics = true): stdClass
     {
         $tmpSearchPhrase = json_decode($searchPhrase, true);
         $minBilSec  = (int)($tmpSearchPhrase['minBilSec']??0);
@@ -202,7 +211,7 @@ class GetReport
             return $view;
         }
 
-        [$start, $end, $numbers, $additionalNumbers, $ids] = $this->prepareConditionsForSearchPhrases($searchPhrase, $parameters);
+        [$start, $end, $numbers, $additionalNumbers, $ids, $conversationEmployees] = $this->prepareConditionsForSearchPhrases($searchPhrase, $parameters);
         // If we couldn't understand the search phrase, return empty result
         if (empty($parameters['conditions'])) {
             $view->conditions = 'empty';
@@ -215,7 +224,9 @@ class GetReport
         $view->additionalFilter = $additionalFilter;
         $view->baseNumberFilter = array_merge($numbers, $additionalNumbers, $additionalFilter);
 
-        $recordsFilteredReq = ConnectorDB::invoke('getCountCdr', [$start, $end, $numbers, $additionalNumbers, $additionalFilter, $minBilSec, $ids]);
+        $recordsFilteredReq = $includeStatistics
+            ? ConnectorDB::invoke('getCountCdr', [$start, $end, $numbers, $additionalNumbers, $additionalFilter, $minBilSec, $ids, $conversationEmployees])
+            : [];
         $view->recordsFiltered = $recordsFilteredReq['cCalls'] ?? 0;
         $view->recordsTotal = $recordsFilteredReq['cCalls'] ?? 0;
         $view->recordsInner = $recordsFilteredReq['cINNER'] ?? 0;
@@ -245,6 +256,9 @@ class GetReport
             $parameters['bind']['queueIds'] = $ids;
         }
         $selectedLinkedIds = $this->selectCDRRecordsWithFilters($parameters);
+        if (!$includeStatistics && count($selectedLinkedIds) >= 5001) {
+            throw new \RuntimeException('archive_too_large');
+        }
         $arrIDS = [];
         foreach ($selectedLinkedIds as $item) {
             $arrIDS[] = $item['linkedid'];
@@ -274,6 +288,8 @@ class GetReport
             ];
         }
 
+        // Apply the same employee/answer restriction to details and archive candidates.
+        $this->addEmployeeConversationConditions($parameters, $conversationEmployees);
         $selectedRecords = $this->selectCDRRecordsWithFilters($parameters);
         $view->data = $this->prepareCdrData($selectedRecords);
         return $view;
@@ -311,8 +327,18 @@ class GetReport
                 'host' => $provider->host,
             ];
         }
-        $trunkResolver = new TrunkResolver($providerRows);
-        unset($providers);
+        // Incoming routes map a DID to a provider explicitly, extending the pool of "logins".
+        // This lets DID refinement work for IP-authorized providers that carry no SIP username.
+        $routes = IncomingRoutingTable::find("provider IS NOT NULL AND provider != ''");
+        $routeRows = [];
+        foreach ($routes as $route) {
+            $routeRows[] = [
+                'provider' => $route->provider,
+                'number' => $route->number,
+            ];
+        }
+        $trunkResolver = new TrunkResolver($providerRows, $routeRows);
+        unset($providers, $routes);
 
         $statsCall = [
             CallHistory::CALL_STATE_OK => Util::translate('repModuleExtendedCDRs_cdr_CALL_STATE_OK', false),
@@ -1271,7 +1297,25 @@ class GetReport
             $parameters['conditions'] .= '(srcIndex IN ({additionslNumbers:array}) OR dstIndex IN ({additionslNumbers:array}))';
             $parameters['bind']['additionslNumbers'] = array_unique($additionalNumbers);
         }
-        return [$start, $end, $globalNumbers, $additionalNumbers, $ids];
+        // Only explicitly selected employees activate this option; groups and queues keep their semantics.
+        $conversationEmployees = [];
+        if (filter_var($searchPhrase['onlyEmployeeConversations'] ?? false, FILTER_VALIDATE_BOOLEAN)
+            && preg_match_all('/(?<=\s|^)\d+(?=\s|$)/', $additionalFilter, $matches)) {
+            $conversationEmployees = array_values(array_unique($matches[0]));
+            $this->addEmployeeConversationConditions($parameters, $conversationEmployees);
+        }
+        return [$start, $end, $globalNumbers, $additionalNumbers, $ids, $conversationEmployees];
+    }
+
+    private function addEmployeeConversationConditions(array &$parameters, array $employees): void
+    {
+        if (empty($employees)) {
+            return;
+        }
+        $parameters['conditions'] = '(' . $parameters['conditions'] . ') AND '
+            . '(src_num IN ({conversationEmployees:array}) OR dst_num IN ({conversationEmployees:array})) AND '
+            . CdrQueryBuilder::answeredLegCondition();
+        $parameters['bind']['conversationEmployees'] = $employees;
     }
 
     /**
@@ -1282,7 +1326,10 @@ class GetReport
      */
     private function selectCDRRecordsWithFilters(array $parameters): array
     {
-        if (php_sapi_name() !== 'cli') {
+        if ($this->archiveAcl !== null) {
+            $parameters['conditions'] = '(' . ($parameters['conditions'] ?? '1=1') . ') AND (' . $this->archiveAcl['conditions'] . ')';
+            $parameters['bind'] = array_merge($parameters['bind'] ?? [], $this->archiveAcl['bind'] ?? []);
+        } elseif (php_sapi_name() !== 'cli') {
             // Apply ACL filters to CDR query using hook method
             PBXConfModulesProvider::hookModulesMethod(CDRConfigInterface::APPLY_ACL_FILTERS_TO_CDR_QUERY, [&$parameters]);
         }

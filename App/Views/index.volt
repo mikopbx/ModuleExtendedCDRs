@@ -129,7 +129,7 @@
                     <input style="height: 40px; width: 200px; min-width: 150px;" type="search" id="globalsearch" placeholder="{{ t._('repModuleExtendedCDRs_FindCallsPlaceholder') }}" aria-controls="KeysTable">
                     <button style="height: 40px;" id="createExcelButton" class="ui icon basic button"> <i class="green file excel outline icon"></i></button>
                     <button style="height: 40px;" id="createPdfButton" class="ui icon basic button"> <i class="red file pdf outline icon"></i></button>
-                    <button style="height: 40px;" id="downloadRecords" class="ui icon basic button"> <i class="download icon"></i></button>
+                    <button style="height: 40px;" type="button" title="{{ t._('repModuleExtendedCDRs_ArchiveDownload') }}" aria-label="{{ t._('repModuleExtendedCDRs_ArchiveDownload') }}" id="downloadRecords" class="ui icon basic button"> <i class="download icon"></i></button>
                     <button style="height: 40px;" type="button" id="saveSearchSettings" class="ui icon basic button">
                          <i class="blue save outline icon"></i>
                     </button>
@@ -137,6 +137,7 @@
              </div>
          </div>
           <div class="ui row" style="padding-top: 10px; padding-left:9px; display: flex; justify-content: space-between; align-items: center;">
+             <div style="display: flex; align-items: center; min-width: 0;">
              <div id='additionalFilter' class="ui multiple dropdown">
                <input type="hidden" name="filters" value="{{additionalFilterString}}">
                <i class="filter icon"></i>
@@ -179,6 +180,7 @@
                </div>
 
              </div>
+             </div>
              <div id="minBillSecContainer" style="margin-right: 18px; display: flex; align-items: center; white-space: nowrap;">
                <label style="margin-right: 10px; line-height: 32px; font-weight: 600;">{{ t._('repModuleExtendedCDRs_Form_minBillSec') }}:</label>
                <div id="currentMinBillSecComp" class="ui basic compact button dropdown" data-value=">" style="height: 32px; min-width: 40px; padding: 8px 10px; line-height: 16px;">
@@ -197,6 +199,17 @@
                     {{ t._('repModuleExtendedCDRs_Form_minBillSec_s') }}
                   </div>
                 </div>
+               <div id="employeeConversationControl" style="display: flex; align-items: center; gap: 6px; margin-left: 10px; flex-shrink: 0;">
+                 <label for="onlyEmployeeConversations" style="margin: 0; font-weight: 600; cursor: pointer;">{{ t._('repModuleExtendedCDRs_OnlyConversationsLabel') }}</label>
+                 <input type="checkbox" id="onlyEmployeeConversations"
+                        data-warning="{{ t._('repModuleExtendedCDRs_SelectConversationEmployee') }}"
+                        aria-label="{{ t._('repModuleExtendedCDRs_OnlyEmployeeConversations') }}"
+                        aria-describedby="employeeConversationHelp" style="margin: 0; cursor: pointer;">
+                 <i id="employeeConversationHelp" class="info circle icon" tabindex="0"
+                    aria-label="{{ t._('repModuleExtendedCDRs_OnlyEmployeeConversationsHelp') }}"
+                    data-content="{{ t._('repModuleExtendedCDRs_OnlyEmployeeConversationsHelp') }}"
+                    style="margin: 0; cursor: help;"></i>
+               </div>
              </div>
          </div>
      </div>
@@ -273,3 +286,4 @@
  <div class="ui bottom aattached active tab" data-tab="incoming-calls"></div>
  <div class="ui bottom aattached active tab" data-tab="missed-calls"></div>
  <div class="ui bottom aattached active tab" data-tab="outgoing-calls"></div>
+<div id="recordingArchiveStatus" class="ui message" role="status" aria-live="polite" style="display:none; position:fixed; bottom:20px; right:20px; max-width:360px; z-index:1100;"></div>

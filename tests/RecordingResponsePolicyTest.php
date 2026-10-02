@@ -29,7 +29,7 @@ if (!is_string($controller)) {
     throw new RuntimeException('Cannot read ApiController');
 }
 
-foreach (['RecordingPathPolicy', 'RecordingArchiveBuilder', 'Directories::AST_MONITOR_DIR'] as $needle) {
+foreach (['RecordingPathPolicy', 'RecordingArchiveService', 'Directories::AST_MONITOR_DIR'] as $needle) {
     assertResponsePolicySame(true, strpos($controller, $needle) !== false, 'controller uses ' . $needle);
 }
 
@@ -41,8 +41,10 @@ foreach (['shell_exec(', 'system('] as $forbidden) {
 
 assertResponsePolicySame(true, strpos($controller, 'finally') !== false, 'stream cleanup uses finally');
 assertResponsePolicySame(true, strpos($controller, 'X-Content-Type-Options') !== false, 'nosniff response');
-assertResponsePolicySame(true, strpos($controller, "'archive_too_large'") !== false, 'archive quota is mapped');
-assertResponsePolicySame(true, strpos($controller, '$status = 413') !== false, 'archive quota returns 413');
-assertResponsePolicySame(true, strpos($controller, 'MAX_ARCHIVE_CANDIDATES') !== false, 'candidate collection is bounded');
+$worker = file_get_contents(dirname(__DIR__) . '/Lib/RecordingArchiveService.php');
+$jobs = file_get_contents(dirname(__DIR__) . '/Lib/RecordingArchiveJobs.php');
+assertResponsePolicySame(true, strpos($worker, 'RecordingArchiveBuilder') !== false, 'worker retains archive path and quota policy');
+assertResponsePolicySame(true, strpos($jobs, "'archive_too_large'") !== false, 'job exposes archive quota failure');
+assertResponsePolicySame(true, strpos($worker, 'count($records)>=5000') !== false, 'candidate collection is bounded');
 
 echo "RecordingResponsePolicyTest: OK\n";

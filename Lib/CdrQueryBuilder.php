@@ -46,7 +46,7 @@ class CdrQueryBuilder
      * @param string $prefix
      * @return self
      */
-    public function whereNumbers(array $numbers, string $prefix = 'Index'): self
+    public function whereNumbers(array $numbers, string $prefix = 'Index', bool $onlyConversations = false): self
     {
         if (empty($numbers)) {
             return $this;
@@ -58,7 +58,17 @@ class CdrQueryBuilder
             return ":$prefix$value";
         }, $numbers));
         $this->conditions[] = "(cdr_general.dstIndex IN ($placeholders) OR cdr_general.srcIndex IN ($placeholders))";
+        if ($onlyConversations) {
+            $this->conditions[] = self::answeredLegCondition('cdr_general.');
+        }
         return $this;
+    }
+
+    /** The same leg must represent a real conversation, not an IVR or ringing attempt. */
+    public static function answeredLegCondition(string $prefix = ''): string
+    {
+        return "({$prefix}billsec > 0 AND {$prefix}disposition IN ('ANSWER', 'ANSWERED')"
+            . " AND ({$prefix}is_app IS NULL OR {$prefix}is_app <> '1'))";
     }
 
     /**
