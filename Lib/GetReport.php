@@ -219,7 +219,8 @@ class GetReport
         }
         $additionalFilter = [];
         if (php_sapi_name() !== 'cli') {
-            PBXConfModulesProvider::hookModulesMethod(CDRConfigInterface::APPLY_ACL_FILTERS_TO_CDR_QUERY, [&$additionalFilter]);
+            $aclContext = AclContext::fromWebSession();
+            PBXConfModulesProvider::hookModulesMethod(CDRConfigInterface::APPLY_ACL_FILTERS_TO_CDR_QUERY, [&$additionalFilter, $aclContext]);
         }
         $view->additionalFilter = $additionalFilter;
         $view->baseNumberFilter = array_merge($numbers, $additionalNumbers, $additionalFilter);
@@ -1331,7 +1332,8 @@ class GetReport
             $parameters['bind'] = array_merge($parameters['bind'] ?? [], $this->archiveAcl['bind'] ?? []);
         } elseif (php_sapi_name() !== 'cli') {
             // Apply ACL filters to CDR query using hook method
-            PBXConfModulesProvider::hookModulesMethod(CDRConfigInterface::APPLY_ACL_FILTERS_TO_CDR_QUERY, [&$parameters]);
+            $aclContext = AclContext::fromWebSession();
+            PBXConfModulesProvider::hookModulesMethod(CDRConfigInterface::APPLY_ACL_FILTERS_TO_CDR_QUERY, [&$parameters, $aclContext]);
         }
         if(isset($parameters['conditions']) && strpos($parameters['conditions'],  'AND') === 0){
             $parameters['conditions'] = "1=1 ".$parameters['conditions'];

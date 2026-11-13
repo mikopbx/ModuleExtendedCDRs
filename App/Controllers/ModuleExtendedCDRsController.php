@@ -18,6 +18,7 @@ use MikoPBX\Modules\Config\CDRConfigInterface;
 use MikoPBX\Modules\PbxExtensionUtils;
 use Modules\ModuleExtendedCDRs\App\Forms\ModuleExtendedCDRsForm;
 use Modules\ModuleExtendedCDRs\bin\ConnectorDB;
+use Modules\ModuleExtendedCDRs\Lib\AclContext;
 use Modules\ModuleExtendedCDRs\Lib\CacheManager;
 use Modules\ModuleExtendedCDRs\Lib\GetReport;
 use Modules\ModuleExtendedCDRs\Lib\HistoryParser;
@@ -158,7 +159,7 @@ class ModuleExtendedCDRsController extends BaseController
             $this->view->groups = UsersGroups::find(['columns' => ['id', 'name']])->toArray();
         }
         $filterNumbers = [];
-        PBXConfModulesProvider::hookModulesMethod(CDRConfigInterface::APPLY_ACL_FILTERS_TO_CDR_QUERY, [&$filterNumbers]);
+        PBXConfModulesProvider::hookModulesMethod(CDRConfigInterface::APPLY_ACL_FILTERS_TO_CDR_QUERY, [&$filterNumbers, AclContext::fromWebSession()]);
         $filteredExtensions = $filterNumbers['bind']['filteredExtensions']??[];
         if(!empty($filteredExtensions)){
             $filterUsers = [
